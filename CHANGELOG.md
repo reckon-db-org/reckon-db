@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-01-03
+
+### Changed
+
+- **Stable Release**: First stable release of reckon-db under reckon-db-org
+- All APIs considered stable and ready for production use
+- Updated Dockerfile with correct package names (reckon_db)
+- Fixed guide asset paths for hexdocs compatibility
+
 ## [0.4.6] - 2025-12-26
 
 ### Fixed
