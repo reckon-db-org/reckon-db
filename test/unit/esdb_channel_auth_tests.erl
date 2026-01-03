@@ -8,7 +8,7 @@
 -module(esdb_channel_auth_tests).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("reckon_db_gater/include/esdb_capability_types.hrl").
+-include_lib("reckon_gater/include/esdb_capability_types.hrl").
 
 %%====================================================================
 %% Test Fixtures

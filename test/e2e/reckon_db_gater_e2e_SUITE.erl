@@ -18,7 +18,7 @@
 -include_lib("stdlib/include/assert.hrl").
 
 %% Include gater first to avoid DEFAULT_TIMEOUT conflict
--include_lib("reckon_db_gater/include/esdb_gater.hrl").
+-include_lib("reckon_gater/include/esdb_gater.hrl").
 -include("reckon_db.hrl").
 
 %% CT callbacks
@@ -158,20 +158,20 @@ init_per_suite(Config) ->
         {error, {already_started, _}} -> ok
     end,
 
-    %% Start pg scope for reckon_db_gater
-    case pg:start(reckon_db_gater_pg) of
+    %% Start pg scope for reckon_gater
+    case pg:start(reckon_gater_pg) of
         {ok, _} -> ok;
         {error, {already_started, _}} -> ok
     end,
 
-    %% Start reckon_db_gater application (worker registry)
-    {ok, _} = application:ensure_all_started(reckon_db_gater),
+    %% Start reckon_gater application (worker registry)
+    {ok, _} = application:ensure_all_started(reckon_gater),
 
     [{ra_data_dir, RaDataDir} | Config].
 
 end_per_suite(Config) ->
     %% Stop applications
-    application:stop(reckon_db_gater),
+    application:stop(reckon_gater),
 
     %% Clean up Ra data directory
     RaDataDir = proplists:get_value(ra_data_dir, Config, "/tmp/reckon_db_e2e_test_ra"),

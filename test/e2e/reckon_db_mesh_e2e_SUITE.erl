@@ -52,11 +52,11 @@ groups() ->
 init_per_suite(Config) ->
     %% Start required applications
     application:ensure_all_started(telemetry),
-    application:ensure_all_started(reckon_db_gater),
+    application:ensure_all_started(reckon_gater),
     Config.
 
 end_per_suite(_Config) ->
-    application:stop(reckon_db_gater),
+    application:stop(reckon_gater),
     application:stop(telemetry),
     ok.
 
