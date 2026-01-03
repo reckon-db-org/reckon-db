@@ -1,5 +1,5 @@
 %% @doc Unit tests for causation module
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_causation_tests).
 

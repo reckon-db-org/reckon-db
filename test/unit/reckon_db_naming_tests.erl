@@ -1,5 +1,5 @@
 %% @doc EUnit tests for reckon_db_naming module
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_naming_tests).
 

@@ -1,5 +1,5 @@
 %% @doc Unit tests for consistency checker module
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_consistency_checker_tests).
 

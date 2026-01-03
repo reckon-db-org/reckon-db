@@ -6,7 +6,7 @@
 %% - Stream metadata (version, exists, list)
 %% - Error cases
 %%
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_streams_SUITE).
 

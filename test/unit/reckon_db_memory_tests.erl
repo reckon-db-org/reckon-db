@@ -1,5 +1,5 @@
 %% @doc Unit tests for memory pressure module
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_memory_tests).
 

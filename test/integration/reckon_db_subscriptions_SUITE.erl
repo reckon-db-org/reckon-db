@@ -6,7 +6,7 @@
 %% - Event delivery via emitters
 %% - Subscription persistence
 %%
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_subscriptions_SUITE).
 

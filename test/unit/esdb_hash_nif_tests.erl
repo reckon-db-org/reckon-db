@@ -3,7 +3,7 @@
 %% Tests both the pure Erlang implementations (always tested) and the NIF
 %% implementations (tested only when available in Enterprise builds).
 %%
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(esdb_hash_nif_tests).
 

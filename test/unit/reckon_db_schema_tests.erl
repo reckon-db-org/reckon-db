@@ -1,5 +1,5 @@
 %% @doc Unit tests for schema registry module
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_schema_tests).
 

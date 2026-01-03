@@ -1,5 +1,5 @@
 %% @doc Unit tests for stream linking module
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_links_tests).
 

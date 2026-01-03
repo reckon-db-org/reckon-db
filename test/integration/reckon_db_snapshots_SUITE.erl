@@ -6,7 +6,7 @@
 %% - Delete operations
 %% - Integration with streams and aggregator
 %%
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_snapshots_SUITE).
 

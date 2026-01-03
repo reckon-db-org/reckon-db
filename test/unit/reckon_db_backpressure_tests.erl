@@ -1,5 +1,5 @@
 %% @doc Unit tests for backpressure module
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_backpressure_tests).
 

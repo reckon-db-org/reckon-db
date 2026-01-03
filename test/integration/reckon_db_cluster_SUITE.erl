@@ -9,7 +9,7 @@
 %% Note: Full multi-node cluster tests require ct_slave setup
 %% which is covered in test/cluster/ directory.
 %%
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_cluster_SUITE).
 

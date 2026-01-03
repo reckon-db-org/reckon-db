@@ -1,5 +1,5 @@
 %% @doc Test helpers for reckon-db integration tests
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_test_helpers).
 

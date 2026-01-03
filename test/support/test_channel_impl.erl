@@ -2,7 +2,7 @@
 %%
 %% Minimal channel implementation used by esdb_channel_auth_tests.
 %%
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(test_channel_impl).
 -behaviour(esdb_channel).

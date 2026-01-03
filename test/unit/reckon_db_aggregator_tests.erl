@@ -1,5 +1,5 @@
 %% @doc EUnit tests for reckon_db_aggregator module
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_aggregator_tests).
 

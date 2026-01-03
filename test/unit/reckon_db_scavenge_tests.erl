@@ -1,5 +1,5 @@
 %% @doc Unit tests for scavenge and archive modules
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_scavenge_tests).
 

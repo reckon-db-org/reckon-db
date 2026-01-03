@@ -1,5 +1,5 @@
 %% @doc Unit tests for reckon_db_temporal module
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_temporal_tests).
 

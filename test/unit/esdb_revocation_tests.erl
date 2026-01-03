@@ -5,7 +5,7 @@
 %% - Issuer revocation
 %% - Revocation expiration
 %%
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(esdb_revocation_tests).
 

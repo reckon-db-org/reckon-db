@@ -10,7 +10,7 @@
 %% - Load balancing across multiple workers
 %% - Retry and failover behavior
 %%
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(reckon_db_gater_e2e_SUITE).
 

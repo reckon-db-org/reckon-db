@@ -6,7 +6,7 @@
 %% - Permission matching
 %% - Revocation integration
 %%
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(esdb_capability_verifier_tests).
 

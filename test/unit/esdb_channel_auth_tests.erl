@@ -3,7 +3,7 @@
 %% Tests capability-based authorization for PubSub channels.
 %% Tests run in reckon-db where both channel server and verifier are available.
 %%
-%% @author Macula.io
+%% @author R. Lefever
 
 -module(esdb_channel_auth_tests).
 
