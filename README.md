@@ -42,7 +42,7 @@ For NIF-accelerated performance (5-100x faster for specific operations), add the
 ```erlang
 {deps, [
     {reckon_db, "0.1.0"},
-    {reckon_nifs, {git, "git@github.com:reckon-db-org/reckon-nifs.git", {tag, "0.1.0"}}}
+    {reckon_nifs, {git, "https://github.com/reckon-db-org/reckon-nifs.git", {tag, "v0.1.0"}}}
 ]}.
 ```
 
