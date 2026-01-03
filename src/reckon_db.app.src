@@ -1,0 +1,28 @@
+{application, reckon_db, [
+    {description, "BEAM-native Event Store built on Khepri/Ra"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {reckon_db_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        crypto,
+        sasl,
+        khepri,
+        ra,
+        telemetry,
+        reckon_gater
+    ]},
+    {env, [
+        {stores, []},
+        {default_timeout, 5000},
+        {writer_pool_size, 10},
+        {reader_pool_size, 10},
+        {telemetry_handlers, [logger]}
+    ]},
+    {modules, []},
+    {licenses, ["Apache-2.0"]},
+    {links, [
+        {"GitHub", "https://github.com/reckon-db-org/reckon-db"}
+    ]}
+]}.

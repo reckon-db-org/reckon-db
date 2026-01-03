@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 400">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+    </marker>
+    <linearGradient id="khepriGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="filterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f6ad55"/>
+      <stop offset="100%" style="stop-color:#ed8936"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="700" height="400" fill="#f7fafc"/>
+
+  <!-- Title -->
+  <text x="350" y="30" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="bold" fill="#2d3748">Temporal Query Flow</text>
+
+  <!-- Client Request -->
+  <rect x="50" y="60" width="120" height="50" rx="8" fill="#e2e8f0" stroke="#a0aec0" stroke-width="2"/>
+  <text x="110" y="90" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" fill="#2d3748">Client Request</text>
+
+  <!-- Arrow to temporal module -->
+  <line x1="170" y1="85" x2="220" y2="85" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Temporal Module -->
+  <rect x="230" y="55" width="160" height="60" rx="8" fill="#4299e1" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="310" y="80" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="white">reckon_db_temporal</text>
+  <text x="310" y="100" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#bee3f8">read_until | read_range</text>
+
+  <!-- Arrow to Khepri -->
+  <line x1="310" y1="115" x2="310" y2="155" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="330" y="140" font-family="system-ui, sans-serif" font-size="10" fill="#718096">1. Read all events</text>
+
+  <!-- Khepri Storage -->
+  <rect x="200" y="165" width="220" height="80" rx="8" fill="url(#khepriGrad)" stroke="#5a67d8" stroke-width="2"/>
+  <text x="310" y="190" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Khepri (Ra Consensus)</text>
+  <text x="310" y="210" text-anchor="middle" font-family="monospace" font-size="9" fill="#e9d8fd">[streams, StreamId, Version]</text>
+  <text x="310" y="225" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#e9d8fd">Events with epoch_us timestamps</text>
+
+  <!-- Arrow back up -->
+  <path d="M 420 205 L 480 205 L 480 120 L 440 120" stroke="#4a5568" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="490" y="165" font-family="system-ui, sans-serif" font-size="10" fill="#718096">2. All events</text>
+
+  <!-- Filter Box -->
+  <rect x="450" y="55" width="180" height="80" rx="8" fill="url(#filterGrad)" stroke="#dd6b20" stroke-width="2"/>
+  <text x="540" y="80" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="white">Timestamp Filter</text>
+  <text x="540" y="100" text-anchor="middle" font-family="monospace" font-size="9" fill="#feebc8">epoch_us &lt;= Timestamp</text>
+  <text x="540" y="115" text-anchor="middle" font-family="monospace" font-size="9" fill="#feebc8">From &lt;= epoch_us &lt;= To</text>
+
+  <!-- Arrow to result -->
+  <line x1="540" y1="135" x2="540" y2="175" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="560" y="160" font-family="system-ui, sans-serif" font-size="10" fill="#718096">3. Filter</text>
+
+  <!-- Options Box -->
+  <rect x="450" y="185" width="180" height="60" rx="8" fill="#48bb78" stroke="#276749" stroke-width="2"/>
+  <text x="540" y="210" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="white">Apply Options</text>
+  <text x="540" y="228" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#c6f6d5">direction: forward|backward</text>
+
+  <!-- Arrow to result -->
+  <line x1="540" y1="245" x2="540" y2="285" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Result -->
+  <rect x="450" y="295" width="180" height="50" rx="8" fill="#e2e8f0" stroke="#a0aec0" stroke-width="2"/>
+  <text x="540" y="320" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#2d3748">{ok, FilteredEvents}</text>
+  <text x="540" y="335" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#718096">Sorted by version</text>
+
+  <!-- Timeline visualization -->
+  <rect x="50" y="280" width="340" height="100" rx="8" fill="#edf2f7" stroke="#cbd5e0" stroke-width="1"/>
+  <text x="220" y="300" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#4a5568">Event Timeline</text>
+
+  <!-- Timeline axis -->
+  <line x1="70" y1="340" x2="370" y2="340" stroke="#a0aec0" stroke-width="2"/>
+
+  <!-- Events on timeline -->
+  <circle cx="100" cy="340" r="6" fill="#4299e1"/>
+  <circle cx="150" cy="340" r="6" fill="#4299e1"/>
+  <circle cx="200" cy="340" r="6" fill="#f6ad55"/>
+  <circle cx="250" cy="340" r="6" fill="#f6ad55"/>
+  <circle cx="300" cy="340" r="6" fill="#e2e8f0" stroke="#a0aec0"/>
+  <circle cx="350" cy="340" r="6" fill="#e2e8f0" stroke="#a0aec0"/>
+
+  <!-- Timestamp marker -->
+  <line x1="225" y1="315" x2="225" y2="355" stroke="#e53e3e" stroke-width="2" stroke-dasharray="4"/>
+  <text x="225" y="370" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#e53e3e">Timestamp</text>
+
+  <!-- Legend -->
+  <circle cx="85" cy="365" r="5" fill="#4299e1"/>
+  <text x="95" y="368" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">Matched</text>
+  <circle cx="155" cy="365" r="5" fill="#f6ad55"/>
+  <text x="165" y="368" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">Included</text>
+  <circle cx="230" cy="365" r="5" fill="#e2e8f0" stroke="#a0aec0"/>
+  <text x="240" y="368" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">Excluded</text>
+</svg>

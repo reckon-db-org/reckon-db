@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 650">
+  <defs>
+    <linearGradient id="partition1Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4299e1"/>
+      <stop offset="100%" style="stop-color:#3182ce"/>
+    </linearGradient>
+    <linearGradient id="partition2Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ed8936"/>
+      <stop offset="100%" style="stop-color:#dd6b20"/>
+    </linearGradient>
+    <linearGradient id="alertGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fc8181"/>
+      <stop offset="100%" style="stop-color:#e53e3e"/>
+    </linearGradient>
+    <linearGradient id="detectorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="650" fill="#f7fafc"/>
+
+  <!-- Title -->
+  <text x="450" y="35" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20" font-weight="bold" fill="#2d3748">Split-Brain Detection</text>
+
+  <!-- Normal State Section -->
+  <rect x="30" y="55" width="410" height="180" rx="10" fill="#f0fff4" stroke="#9ae6b4" stroke-width="2"/>
+  <text x="235" y="80" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="#276749">Normal State - Consensus</text>
+
+  <!-- Connected nodes -->
+  <circle cx="100" cy="140" r="35" fill="#4299e1" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="100" y="145" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="white">Node 1</text>
+  <text x="100" y="158" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="rgba(255,255,255,0.8)">Leader</text>
+
+  <circle cx="235" cy="140" r="35" fill="#48bb78" stroke="#276749" stroke-width="2"/>
+  <text x="235" y="145" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="white">Node 2</text>
+
+  <circle cx="370" cy="140" r="35" fill="#48bb78" stroke="#276749" stroke-width="2"/>
+  <text x="370" y="145" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="white">Node 3</text>
+
+  <!-- Connection lines (normal) -->
+  <line x1="135" y1="140" x2="200" y2="140" stroke="#2d3748" stroke-width="2"/>
+  <line x1="270" y1="140" x2="335" y2="140" stroke="#2d3748" stroke-width="2"/>
+  <line x1="135" y1="160" x2="335" y2="160" stroke="#2d3748" stroke-width="1" stroke-dasharray="4"/>
+
+  <!-- Membership view -->
+  <rect x="70" y="190" width="300" height="35" rx="4" fill="white" stroke="#9ae6b4" stroke-width="1"/>
+  <text x="220" y="212" text-anchor="middle" font-family="monospace" font-size="10" fill="#2d3748">View: [Node1, Node2, Node3]</text>
+
+  <!-- Arrow down -->
+  <path d="M 450 145 L 450 270" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="455" y="210" font-family="system-ui, sans-serif" font-size="11" fill="#718096">Network</text>
+  <text x="455" y="224" font-family="system-ui, sans-serif" font-size="11" fill="#718096">Partition</text>
+
+  <!-- Split State Section -->
+  <rect x="30" y="280" width="410" height="200" rx="10" fill="#fed7d7" stroke="#fc8181" stroke-width="2"/>
+  <text x="235" y="305" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="#c53030">Split-Brain State</text>
+
+  <!-- Partition A -->
+  <rect x="50" y="320" width="170" height="140" rx="8" fill="url(#partition1Grad)" fill-opacity="0.2" stroke="#3182ce" stroke-width="2" stroke-dasharray="5"/>
+  <text x="135" y="340" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#2b6cb0">Partition A</text>
+
+  <circle cx="95" cy="390" r="30" fill="#4299e1" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="95" y="393" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="white">Node 1</text>
+  <text x="95" y="405" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" fill="rgba(255,255,255,0.8)">Leader A</text>
+
+  <circle cx="175" cy="390" r="30" fill="#4299e1" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="175" y="393" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="white">Node 2</text>
+
+  <rect x="60" y="430" width="150" height="25" rx="3" fill="white" stroke="#3182ce" stroke-width="1"/>
+  <text x="135" y="447" text-anchor="middle" font-family="monospace" font-size="9" fill="#2b6cb0">[Node1, Node2]</text>
+
+  <!-- Partition B -->
+  <rect x="250" y="320" width="170" height="140" rx="8" fill="url(#partition2Grad)" fill-opacity="0.2" stroke="#dd6b20" stroke-width="2" stroke-dasharray="5"/>
+  <text x="335" y="340" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#c05621">Partition B</text>
+
+  <circle cx="335" cy="390" r="30" fill="#ed8936" stroke="#dd6b20" stroke-width="2"/>
+  <text x="335" y="393" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="white">Node 3</text>
+  <text x="335" y="405" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" fill="rgba(255,255,255,0.8)">Leader B?</text>
+
+  <rect x="270" y="430" width="130" height="25" rx="3" fill="white" stroke="#dd6b20" stroke-width="1"/>
+  <text x="335" y="447" text-anchor="middle" font-family="monospace" font-size="9" fill="#c05621">[Node3]</text>
+
+  <!-- Broken connection -->
+  <line x1="205" y1="390" x2="260" y2="390" stroke="#e53e3e" stroke-width="3" stroke-dasharray="8"/>
+  <text x="232" y="382" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20" fill="#e53e3e">✕</text>
+
+  <!-- Detection Section -->
+  <rect x="460" y="55" width="410" height="425" rx="10" fill="#faf5ff" stroke="#d6bcfa" stroke-width="2"/>
+  <text x="665" y="80" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="#6b46c1">Consistency Checker Detection</text>
+
+  <!-- Detection Process -->
+  <rect x="490" y="100" width="350" height="60" rx="6" fill="url(#detectorGrad)" stroke="#5a67d8" stroke-width="2"/>
+  <text x="665" y="125" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">1. Collect Membership Views</text>
+  <text x="665" y="145" text-anchor="middle" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.9)">RPC: khepri_cluster:members/1</text>
+
+  <path d="M 665 160 L 665 175" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <rect x="490" y="180" width="350" height="80" rx="6" fill="white" stroke="#d6bcfa" stroke-width="2"/>
+  <text x="665" y="205" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#6b46c1">2. Compare Views</text>
+  <text x="540" y="230" font-family="monospace" font-size="10" fill="#2d3748">Node1: [Node1, Node2]</text>
+  <text x="540" y="248" font-family="monospace" font-size="10" fill="#2d3748">Node3: [Node3]</text>
+  <circle cx="800" cy="238" r="12" fill="#fc8181"/>
+  <text x="800" y="242" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="white">!</text>
+
+  <path d="M 665 260 L 665 275" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <rect x="490" y="280" width="350" height="60" rx="6" fill="url(#alertGrad)" stroke="#c53030" stroke-width="2"/>
+  <text x="665" y="305" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">3. Detect Split-Brain</text>
+  <text x="665" y="325" text-anchor="middle" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.9)">conflicting_views: 2</text>
+
+  <path d="M 665 340 L 665 355" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <rect x="490" y="360" width="350" height="100" rx="6" fill="white" stroke="#fc8181" stroke-width="2"/>
+  <text x="665" y="385" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#c53030">4. Alert &amp; Report</text>
+  <text x="520" y="410" font-family="monospace" font-size="9" fill="#2d3748">Status: split_brain</text>
+  <text x="520" y="428" font-family="monospace" font-size="9" fill="#2d3748">Telemetry: [reckon_db, consistency,</text>
+  <text x="520" y="444" font-family="monospace" font-size="9" fill="#2d3748">           split_brain, detected]</text>
+
+  <!-- Bottom Section - Recovery -->
+  <rect x="30" y="500" width="840" height="130" rx="10" fill="#edf2f7" stroke="#cbd5e0" stroke-width="1"/>
+  <text x="450" y="525" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="#2d3748">Recovery Strategy</text>
+
+  <!-- Steps -->
+  <rect x="60" y="545" width="180" height="65" rx="6" fill="white" stroke="#4299e1" stroke-width="1"/>
+  <text x="150" y="568" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#2b6cb0">1. Identify Partitions</text>
+  <text x="150" y="588" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">Check which nodes</text>
+  <text x="150" y="600" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">are in each group</text>
+
+  <path d="M 245 577 L 275 577" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <rect x="280" y="545" width="180" height="65" rx="6" fill="white" stroke="#ed8936" stroke-width="1"/>
+  <text x="370" y="568" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#c05621">2. Stop Minority</text>
+  <text x="370" y="588" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">Gracefully stop nodes</text>
+  <text x="370" y="600" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">in smaller partition</text>
+
+  <path d="M 465 577 L 495 577" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <rect x="500" y="545" width="180" height="65" rx="6" fill="white" stroke="#48bb78" stroke-width="1"/>
+  <text x="590" y="568" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#276749">3. Restore Network</text>
+  <text x="590" y="588" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">Fix connectivity issue</text>
+  <text x="590" y="600" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">between partitions</text>
+
+  <path d="M 685 577 L 715 577" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <rect x="720" y="545" width="130" height="65" rx="6" fill="white" stroke="#9f7aea" stroke-width="1"/>
+  <text x="785" y="568" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#6b46c1">4. Rejoin</text>
+  <text x="785" y="588" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">Nodes sync from</text>
+  <text x="785" y="600" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">majority</text>
+
+  <!-- Arrowhead marker -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+    </marker>
+  </defs>
+</svg>

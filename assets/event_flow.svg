@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 200">
+  <defs>
+    <linearGradient id="clientGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8f5e9"/>
+      <stop offset="100%" style="stop-color:#c8e6c9"/>
+    </linearGradient>
+    <linearGradient id="apiGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e3f2fd"/>
+      <stop offset="100%" style="stop-color:#bbdefb"/>
+    </linearGradient>
+    <linearGradient id="writerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fff3e0"/>
+      <stop offset="100%" style="stop-color:#ffe0b2"/>
+    </linearGradient>
+    <linearGradient id="raftGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fce4ec"/>
+      <stop offset="100%" style="stop-color:#f8bbd9"/>
+    </linearGradient>
+    <linearGradient id="emitterGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e1bee7"/>
+      <stop offset="100%" style="stop-color:#ce93d8"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#666"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="300" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#333">Event Write Flow</text>
+
+  <!-- Write Request -->
+  <rect x="20" y="45" width="80" height="45" rx="6" fill="url(#clientGrad)" stroke="#4caf50" stroke-width="2"/>
+  <text x="60" y="65" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#2e7d32">Write</text>
+  <text x="60" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#388e3c">Request</text>
+
+  <line x1="100" y1="67" x2="125" y2="67" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Streams API -->
+  <rect x="130" y="45" width="90" height="45" rx="6" fill="url(#apiGrad)" stroke="#2196f3" stroke-width="2"/>
+  <text x="175" y="62" text-anchor="middle" font-family="monospace" font-size="9" fill="#1565c0">reckon_db_streams</text>
+  <text x="175" y="78" text-anchor="middle" font-family="monospace" font-size="9" fill="#1976d2">:append()</text>
+
+  <line x1="220" y1="67" x2="245" y2="67" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Partitioned Writer -->
+  <rect x="250" y="35" width="90" height="65" rx="6" fill="url(#writerGrad)" stroke="#ff9800" stroke-width="2"/>
+  <text x="295" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#e65100">Partitioned</text>
+  <text x="295" y="70" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#ef6c00">Writer</text>
+  <text x="295" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#999">(hash by stream_id)</text>
+
+  <line x1="340" y1="67" x2="365" y2="67" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Khepri/Ra -->
+  <rect x="370" y="35" width="100" height="65" rx="6" fill="url(#raftGrad)" stroke="#e91e63" stroke-width="2"/>
+  <text x="420" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ad1457">Khepri/Ra</text>
+  <text x="420" y="72" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#c2185b">Raft Consensus</text>
+  <text x="420" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#999">(replicated)</text>
+
+  <line x1="470" y1="67" x2="495" y2="67" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Trigger -->
+  <rect x="500" y="45" width="80" height="45" rx="6" fill="url(#emitterGrad)" stroke="#9c27b0" stroke-width="2"/>
+  <text x="540" y="62" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#7b1fa2">Khepri</text>
+  <text x="540" y="78" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#8e24aa">Trigger</text>
+
+  <!-- Trigger fires down -->
+  <line x1="540" y1="90" x2="540" y2="120" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Emitter Pool -->
+  <rect x="480" y="125" width="100" height="50" rx="6" fill="url(#emitterGrad)" stroke="#9c27b0" stroke-width="2"/>
+  <text x="530" y="145" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#7b1fa2">Emitter Pool</text>
+  <text x="530" y="162" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#8e24aa">broadcasts</text>
+
+  <!-- Fan out to subscribers -->
+  <line x1="480" y1="150" x2="440" y2="150" stroke="#666" stroke-width="1.5"/>
+  <line x1="440" y1="130" x2="440" y2="175" stroke="#666" stroke-width="1.5"/>
+
+  <line x1="440" y1="130" x2="400" y2="130" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="440" y1="150" x2="400" y2="150" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="440" y1="175" x2="400" y2="175" stroke="#666" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Subscribers -->
+  <rect x="320" y="120" width="80" height="25" rx="4" fill="#e8f5e9" stroke="#4caf50"/>
+  <text x="360" y="137" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#2e7d32">Subscriber 1</text>
+
+  <rect x="320" y="145" width="80" height="25" rx="4" fill="#e8f5e9" stroke="#4caf50"/>
+  <text x="360" y="162" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#2e7d32">Subscriber 2</text>
+
+  <rect x="320" y="170" width="80" height="25" rx="4" fill="#e8f5e9" stroke="#4caf50"/>
+  <text x="360" y="187" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#2e7d32">Subscriber N</text>
+</svg>

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600">
+  <defs>
+    <linearGradient id="checkerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="proberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4299e1"/>
+      <stop offset="100%" style="stop-color:#3182ce"/>
+    </linearGradient>
+    <linearGradient id="healthyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#48bb78"/>
+      <stop offset="100%" style="stop-color:#38a169"/>
+    </linearGradient>
+    <linearGradient id="warningGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f6ad55"/>
+      <stop offset="100%" style="stop-color:#ed8936"/>
+    </linearGradient>
+    <linearGradient id="criticalGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fc8181"/>
+      <stop offset="100%" style="stop-color:#e53e3e"/>
+    </linearGradient>
+    <linearGradient id="nodeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e2e8f0"/>
+      <stop offset="100%" style="stop-color:#cbd5e0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="600" fill="#f7fafc"/>
+
+  <!-- Title -->
+  <text x="450" y="35" text-anchor="middle" font-family="system-ui, sans-serif" font-size="20" font-weight="bold" fill="#2d3748">Consistency Checker Architecture</text>
+
+  <!-- Consistency Checker Box -->
+  <rect x="300" y="60" width="300" height="120" rx="12" fill="url(#checkerGrad)" stroke="#5a67d8" stroke-width="2"/>
+  <text x="450" y="95" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="white">reckon_db_consistency_checker</text>
+  <text x="450" y="115" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="rgba(255,255,255,0.9)">Periodic verification loop</text>
+  <text x="450" y="135" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="rgba(255,255,255,0.9)">Status callbacks</text>
+  <text x="450" y="155" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="rgba(255,255,255,0.9)">Telemetry events</text>
+
+  <!-- Four Check Types -->
+  <!-- Membership -->
+  <rect x="50" y="220" width="170" height="80" rx="8" fill="url(#proberGrad)" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="135" y="250" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Membership</text>
+  <text x="135" y="268" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="rgba(255,255,255,0.9)">Consensus</text>
+  <text x="135" y="286" text-anchor="middle" font-family="monospace" font-size="9" fill="rgba(255,255,255,0.8)">verify_membership_consensus/1</text>
+
+  <!-- Leader -->
+  <rect x="260" y="220" width="170" height="80" rx="8" fill="url(#proberGrad)" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="345" y="250" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Leader</text>
+  <text x="345" y="268" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="rgba(255,255,255,0.9)">Consensus</text>
+  <text x="345" y="286" text-anchor="middle" font-family="monospace" font-size="9" fill="rgba(255,255,255,0.8)">verify_leader_consensus/1</text>
+
+  <!-- Raft -->
+  <rect x="470" y="220" width="170" height="80" rx="8" fill="url(#proberGrad)" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="555" y="250" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Raft Log</text>
+  <text x="555" y="268" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="rgba(255,255,255,0.9)">Consistency</text>
+  <text x="555" y="286" text-anchor="middle" font-family="monospace" font-size="9" fill="rgba(255,255,255,0.8)">verify_raft_consistency/1</text>
+
+  <!-- Quorum -->
+  <rect x="680" y="220" width="170" height="80" rx="8" fill="url(#proberGrad)" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="765" y="250" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Quorum</text>
+  <text x="765" y="268" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="rgba(255,255,255,0.9)">Availability</text>
+  <text x="765" y="286" text-anchor="middle" font-family="monospace" font-size="9" fill="rgba(255,255,255,0.8)">get_quorum_status/1</text>
+
+  <!-- Arrows from checker to checks -->
+  <line x1="350" y1="180" x2="135" y2="220" stroke="#4a5568" stroke-width="2"/>
+  <line x1="400" y1="180" x2="345" y2="220" stroke="#4a5568" stroke-width="2"/>
+  <line x1="500" y1="180" x2="555" y2="220" stroke="#4a5568" stroke-width="2"/>
+  <line x1="550" y1="180" x2="765" y2="220" stroke="#4a5568" stroke-width="2"/>
+
+  <!-- Cluster Nodes -->
+  <text x="450" y="340" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="#4a5568">Cluster Nodes (via RPC)</text>
+
+  <!-- Node boxes -->
+  <rect x="150" y="360" width="140" height="70" rx="8" fill="url(#nodeGrad)" stroke="#a0aec0" stroke-width="2"/>
+  <text x="220" y="390" text-anchor="middle" font-family="monospace" font-size="11" fill="#2d3748">node1@host</text>
+  <text x="220" y="408" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#718096">Ra Member</text>
+  <circle cx="270" cy="375" r="8" fill="url(#healthyGrad)"/>
+
+  <rect x="380" y="360" width="140" height="70" rx="8" fill="url(#nodeGrad)" stroke="#a0aec0" stroke-width="2"/>
+  <text x="450" y="390" text-anchor="middle" font-family="monospace" font-size="11" fill="#2d3748">node2@host</text>
+  <text x="450" y="408" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#718096">Ra Member</text>
+  <circle cx="500" cy="375" r="8" fill="url(#healthyGrad)"/>
+
+  <rect x="610" y="360" width="140" height="70" rx="8" fill="url(#nodeGrad)" stroke="#a0aec0" stroke-width="2"/>
+  <text x="680" y="390" text-anchor="middle" font-family="monospace" font-size="11" fill="#2d3748">node3@host</text>
+  <text x="680" y="408" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#718096">Ra Member</text>
+  <circle cx="730" cy="375" r="8" fill="url(#warningGrad)"/>
+
+  <!-- Arrows from checks to nodes -->
+  <line x1="135" y1="300" x2="220" y2="360" stroke="#4a5568" stroke-width="1" stroke-dasharray="4"/>
+  <line x1="345" y1="300" x2="450" y2="360" stroke="#4a5568" stroke-width="1" stroke-dasharray="4"/>
+  <line x1="555" y1="300" x2="450" y2="360" stroke="#4a5568" stroke-width="1" stroke-dasharray="4"/>
+  <line x1="765" y1="300" x2="680" y2="360" stroke="#4a5568" stroke-width="1" stroke-dasharray="4"/>
+
+  <!-- Status output section -->
+  <rect x="50" y="460" width="800" height="120" rx="10" fill="#edf2f7" stroke="#cbd5e0" stroke-width="1"/>
+  <text x="450" y="490" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="#2d3748">Consistency Status Output</text>
+
+  <!-- Status badges -->
+  <rect x="80" y="510" width="120" height="50" rx="6" fill="url(#healthyGrad)" stroke="#276749" stroke-width="2"/>
+  <text x="140" y="535" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">healthy</text>
+  <text x="140" y="550" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="rgba(255,255,255,0.9)">All checks pass</text>
+
+  <rect x="230" y="510" width="120" height="50" rx="6" fill="url(#warningGrad)" stroke="#dd6b20" stroke-width="2"/>
+  <text x="290" y="535" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">degraded</text>
+  <text x="290" y="550" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="rgba(255,255,255,0.9)">Warnings present</text>
+
+  <rect x="380" y="510" width="120" height="50" rx="6" fill="url(#criticalGrad)" stroke="#c53030" stroke-width="2"/>
+  <text x="440" y="535" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">split_brain</text>
+  <text x="440" y="550" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="rgba(255,255,255,0.9)">Nodes disagree</text>
+
+  <rect x="530" y="510" width="120" height="50" rx="6" fill="url(#criticalGrad)" stroke="#c53030" stroke-width="2"/>
+  <text x="590" y="535" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">no_quorum</text>
+  <text x="590" y="550" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="rgba(255,255,255,0.9)">Insufficient nodes</text>
+
+  <!-- Telemetry arrow -->
+  <rect x="680" y="510" width="150" height="50" rx="6" fill="#f7fafc" stroke="#9f7aea" stroke-width="2"/>
+  <text x="755" y="532" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#6b46c1">Telemetry Events</text>
+  <text x="755" y="548" text-anchor="middle" font-family="monospace" font-size="8" fill="#805ad5">[reckon_db, consistency, ...]</text>
+</svg>

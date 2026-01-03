@@ -15,3 +15,21 @@ deps
 .rebar3
 _build/
 _checkouts/
+
+# Build artifacts
+_build/
+*.beam
+ebin/
+.rebar3/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Crash dumps
+rebar3.crashdump
+erl_crash.dump

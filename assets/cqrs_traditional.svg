@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180">
+  <defs>
+    <linearGradient id="modelGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e3f2fd"/>
+      <stop offset="100%" style="stop-color:#bbdefb"/>
+    </linearGradient>
+    <linearGradient id="dbGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fff3e0"/>
+      <stop offset="100%" style="stop-color:#ffe0b2"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#666"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="150" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">Traditional: Single Model</text>
+
+  <!-- Single Model Box -->
+  <rect x="50" y="35" width="200" height="70" rx="8" fill="url(#modelGrad)" stroke="#2196f3" stroke-width="2"/>
+  <text x="150" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#1565c0">Single Model</text>
+
+  <!-- Read/Write boxes inside -->
+  <rect x="70" y="65" width="70" height="30" rx="4" fill="#e8f5e9" stroke="#4caf50"/>
+  <text x="105" y="85" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#2e7d32">Read</text>
+
+  <text x="150" y="85" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#666">&lt;-&gt;</text>
+
+  <rect x="160" y="65" width="70" height="30" rx="4" fill="#fce4ec" stroke="#e91e63"/>
+  <text x="195" y="85" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#ad1457">Write</text>
+
+  <!-- Arrow down -->
+  <line x1="150" y1="105" x2="150" y2="130" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Database -->
+  <rect x="90" y="135" width="120" height="35" rx="6" fill="url(#dbGrad)" stroke="#ff9800" stroke-width="2"/>
+  <text x="150" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#e65100">Database</text>
+</svg>

@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 420">
+  <defs>
+    <linearGradient id="rootGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e94560"/>
+      <stop offset="100%" style="stop-color:#c73e54"/>
+    </linearGradient>
+    <linearGradient id="supGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f3460"/>
+      <stop offset="100%" style="stop-color:#0a2540"/>
+    </linearGradient>
+    <linearGradient id="workerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#533483"/>
+      <stop offset="100%" style="stop-color:#3d2666"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#888"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="350" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#333">Supervision Tree (per store_id)</text>
+
+  <!-- Root: reckon_db_system_sup -->
+  <rect x="240" y="40" width="220" height="35" rx="6" fill="url(#rootGrad)"/>
+  <text x="350" y="62" text-anchor="middle" font-family="monospace" font-size="11" fill="#fff">reckon_db_system_sup</text>
+  <text x="350" y="78" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#faa">(rest_for_one)</text>
+
+  <!-- Level 1 connectors -->
+  <line x1="350" y1="75" x2="350" y2="95" stroke="#888" stroke-width="1.5"/>
+  <line x1="120" y1="95" x2="580" y2="95" stroke="#888" stroke-width="1.5"/>
+  <line x1="120" y1="95" x2="120" y2="115" stroke="#888" stroke-width="1.5"/>
+  <line x1="350" y1="95" x2="350" y2="115" stroke="#888" stroke-width="1.5"/>
+  <line x1="580" y1="95" x2="580" y2="115" stroke="#888" stroke-width="1.5"/>
+
+  <!-- Core Sup -->
+  <rect x="30" y="115" width="180" height="35" rx="5" fill="url(#supGrad)"/>
+  <text x="120" y="137" text-anchor="middle" font-family="monospace" font-size="10" fill="#fff">reckon_db_core_sup</text>
+  <text x="120" y="152" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#6af">(one_for_all)</text>
+
+  <!-- Cluster Sup -->
+  <rect x="260" y="115" width="180" height="35" rx="5" fill="url(#supGrad)"/>
+  <text x="350" y="137" text-anchor="middle" font-family="monospace" font-size="10" fill="#fff">reckon_db_cluster_sup</text>
+  <text x="350" y="152" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#6af">(cluster mode)</text>
+
+  <!-- Gateway Sup -->
+  <rect x="490" y="115" width="180" height="35" rx="5" fill="url(#supGrad)"/>
+  <text x="580" y="137" text-anchor="middle" font-family="monospace" font-size="10" fill="#fff">reckon_db_gateway_sup</text>
+
+  <!-- Core Sup children connectors -->
+  <line x1="120" y1="150" x2="120" y2="170" stroke="#888" stroke-width="1.5"/>
+  <line x1="60" y1="170" x2="180" y2="170" stroke="#888" stroke-width="1.5"/>
+  <line x1="60" y1="170" x2="60" y2="190" stroke="#888" stroke-width="1.5"/>
+  <line x1="120" y1="170" x2="120" y2="190" stroke="#888" stroke-width="1.5"/>
+  <line x1="180" y1="170" x2="180" y2="190" stroke="#888" stroke-width="1.5"/>
+
+  <!-- Persistence Sup -->
+  <rect x="10" y="190" width="100" height="30" rx="4" fill="url(#workerGrad)"/>
+  <text x="60" y="209" text-anchor="middle" font-family="monospace" font-size="8" fill="#fff">persistence_sup</text>
+
+  <!-- Notification Sup -->
+  <rect x="70" y="190" width="100" height="30" rx="4" fill="url(#workerGrad)"/>
+  <text x="120" y="209" text-anchor="middle" font-family="monospace" font-size="8" fill="#fff">notification_sup</text>
+
+  <!-- Store Mgr -->
+  <rect x="130" y="190" width="100" height="30" rx="4" fill="url(#workerGrad)"/>
+  <text x="180" y="209" text-anchor="middle" font-family="monospace" font-size="8" fill="#fff">store_mgr</text>
+
+  <!-- Persistence children -->
+  <line x1="60" y1="220" x2="60" y2="240" stroke="#888" stroke-width="1"/>
+  <rect x="10" y="240" width="100" height="140" rx="4" fill="#1e3a5f" stroke="#0f3460"/>
+  <text x="60" y="258" text-anchor="middle" font-family="monospace" font-size="8" fill="#ccc">reckon_db_store</text>
+  <text x="60" y="278" text-anchor="middle" font-family="monospace" font-size="8" fill="#ccc">streams_sup</text>
+  <text x="60" y="298" text-anchor="middle" font-family="monospace" font-size="8" fill="#ccc">snapshots_store</text>
+  <text x="60" y="318" text-anchor="middle" font-family="monospace" font-size="8" fill="#ccc">subscriptions_store</text>
+  <text x="60" y="348" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#888">writers/readers</text>
+  <text x="60" y="368" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#888">(partitioned)</text>
+
+  <!-- Notification children -->
+  <line x1="120" y1="220" x2="120" y2="240" stroke="#888" stroke-width="1"/>
+  <rect x="80" y="240" width="80" height="100" rx="4" fill="#1e3a5f" stroke="#0f3460"/>
+  <text x="120" y="258" text-anchor="middle" font-family="monospace" font-size="8" fill="#ccc">leader_sup</text>
+  <text x="120" y="278" text-anchor="middle" font-family="monospace" font-size="8" fill="#ccc">leader_tracker</text>
+  <text x="120" y="298" text-anchor="middle" font-family="monospace" font-size="8" fill="#ccc">leader</text>
+  <text x="120" y="318" text-anchor="middle" font-family="monospace" font-size="8" fill="#ccc">emitter_sup</text>
+
+  <!-- Cluster Sup children -->
+  <line x1="350" y1="150" x2="350" y2="170" stroke="#888" stroke-width="1.5"/>
+  <rect x="270" y="170" width="160" height="90" rx="4" fill="#1e3a5f" stroke="#0f3460"/>
+  <text x="350" y="190" text-anchor="middle" font-family="monospace" font-size="9" fill="#ccc">reckon_db_discovery</text>
+  <text x="350" y="210" text-anchor="middle" font-family="monospace" font-size="9" fill="#ccc">store_coordinator</text>
+  <text x="350" y="230" text-anchor="middle" font-family="monospace" font-size="9" fill="#ccc">node_monitor</text>
+  <text x="350" y="250" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#888">(multicast/k8s)</text>
+
+  <!-- Gateway children -->
+  <line x1="580" y1="150" x2="580" y2="170" stroke="#888" stroke-width="1.5"/>
+  <rect x="510" y="170" width="140" height="50" rx="4" fill="#1e3a5f" stroke="#0f3460"/>
+  <text x="580" y="190" text-anchor="middle" font-family="monospace" font-size="9" fill="#ccc">gateway_worker</text>
+  <text x="580" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#888">(registers with gater)</text>
+
+  <!-- Legend -->
+  <rect x="430" y="380" width="12" height="12" rx="2" fill="url(#rootGrad)"/>
+  <text x="448" y="390" font-family="Arial, sans-serif" font-size="9" fill="#666">Root supervisor</text>
+  <rect x="530" y="380" width="12" height="12" rx="2" fill="url(#supGrad)"/>
+  <text x="548" y="390" font-family="Arial, sans-serif" font-size="9" fill="#666">Supervisor</text>
+  <rect x="620" y="380" width="12" height="12" rx="2" fill="url(#workerGrad)"/>
+  <text x="638" y="390" font-family="Arial, sans-serif" font-size="9" fill="#666">Worker</text>
+</svg>
