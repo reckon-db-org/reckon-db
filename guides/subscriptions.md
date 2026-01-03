@@ -8,7 +8,7 @@ Subscriptions enable real-time event delivery to consumers. When events are writ
 
 reckon-db uses Khepri triggers for guaranteed event delivery:
 
-![Subscription Flow](assets/subscription_flow.svg)
+![Subscription Flow](../assets/subscription_flow.svg)
 
 **Key guarantee**: Triggers only fire AFTER events are committed via Raft consensus. Subscribers never receive events that don't exist.
 

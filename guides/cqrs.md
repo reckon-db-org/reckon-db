@@ -6,11 +6,11 @@ Command Query Responsibility Segregation (CQRS) is an architectural pattern that
 
 In traditional architectures, the same model handles both reads and writes:
 
-![Traditional Single Model](assets/cqrs_traditional.svg)
+![Traditional Single Model](../assets/cqrs_traditional.svg)
 
 CQRS separates these concerns:
 
-![CQRS Separated Architecture](assets/cqrs_separated.svg)
+![CQRS Separated Architecture](../assets/cqrs_separated.svg)
 
 ## Why CQRS?
 
@@ -33,7 +33,7 @@ With CQRS, you optimize each path independently:
 
 Read and write workloads can scale independently:
 
-![CQRS Scaling](assets/cqrs_scaling.svg)
+![CQRS Scaling](../assets/cqrs_scaling.svg)
 
 ### Multiple Read Models
 

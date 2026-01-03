@@ -1,4 +1,4 @@
-# erl-esdb Docker image
+# reckon-db Docker image
 # Multi-stage build for optimized production image
 
 # Build stage
@@ -48,7 +48,7 @@ RUN useradd --create-home --shell /bin/bash app
 WORKDIR /app
 
 # Copy release from builder (includes ERTS)
-COPY --from=builder /app/_build/prod/rel/erl_esdb .
+COPY --from=builder /app/_build/prod/rel/reckon_db .
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R app:app /app
@@ -64,13 +64,13 @@ EXPOSE 4369
 EXPOSE 9100-9200
 
 # Environment variables
-ENV ERL_ESDB_NODE_NAME=store@localhost
-ENV ERL_ESDB_CLUSTER_NODES=
-ENV ERL_ESDB_DATA_DIR=/app/data
+ENV RECKON_DB_NODE_NAME=store@localhost
+ENV RECKON_DB_CLUSTER_NODES=
+ENV RECKON_DB_DATA_DIR=/app/data
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD /app/bin/erl_esdb ping || exit 1
+    CMD /app/bin/reckon_db ping || exit 1
 
 # Start command
-CMD ["/app/bin/erl_esdb", "foreground"]
+CMD ["/app/bin/reckon_db", "foreground"]
