@@ -4,7 +4,7 @@
 %% - LeaderSystem (leader responsibilities, tracking)
 %% - EmitterSystem (event distribution workers)
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_notification_sup).
 -behaviour(supervisor).

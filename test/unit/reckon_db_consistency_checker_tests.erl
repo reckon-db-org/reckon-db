@@ -1,5 +1,5 @@
 %% @doc Unit tests for consistency checker module
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_consistency_checker_tests).
 

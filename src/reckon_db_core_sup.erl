@@ -7,7 +7,7 @@
 %%
 %% If any child fails, all children are restarted to ensure consistency.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_core_sup).
 -behaviour(supervisor).

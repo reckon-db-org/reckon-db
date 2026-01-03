@@ -2,7 +2,7 @@
 %%
 %% Coordinates store lifecycle and provides store-level operations.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_store_mgr).
 -behaviour(gen_server).

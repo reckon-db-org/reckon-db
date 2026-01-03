@@ -1,5 +1,5 @@
 %% @doc Unit tests for memory pressure module
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_memory_tests).
 

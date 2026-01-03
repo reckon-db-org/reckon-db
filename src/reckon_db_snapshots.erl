@@ -11,7 +11,7 @@
 %% Snapshots are used to optimize event replay by storing
 %% aggregate state at specific versions.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_snapshots).
 

@@ -25,7 +25,7 @@
 %% UpcastedEvents = reckon_db_schema:upcast(my_store, Events).
 %% '''
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_schema).
 

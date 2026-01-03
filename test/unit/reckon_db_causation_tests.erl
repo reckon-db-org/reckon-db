@@ -1,5 +1,5 @@
 %% @doc Unit tests for causation module
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_causation_tests).
 

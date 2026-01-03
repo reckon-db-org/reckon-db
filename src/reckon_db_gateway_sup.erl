@@ -18,7 +18,7 @@
 %% When reckon-gater is not available, the gateway workers still run
 %% locally but are not registered for external load balancing.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_gateway_sup).
 -behaviour(supervisor).

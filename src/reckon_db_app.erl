@@ -1,5 +1,5 @@
 %% @doc Application behaviour for reckon-db
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_app).
 -behaviour(application).

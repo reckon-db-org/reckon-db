@@ -6,7 +6,7 @@
 %% - Delete operations
 %% - Integration with streams and aggregator
 %%
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_snapshots_SUITE).
 

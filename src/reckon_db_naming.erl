@@ -3,7 +3,7 @@
 %% Provides consistent naming conventions for all processes and
 %% registered names throughout the system.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_naming).
 

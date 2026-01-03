@@ -15,7 +15,7 @@
 %% - Supports dry-run mode for previewing changes
 %% - Telemetry events for monitoring
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_scavenge).
 

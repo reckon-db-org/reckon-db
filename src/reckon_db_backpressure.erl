@@ -20,7 +20,7 @@
 %% {ok, Events, Queue3} = reckon_db_backpressure:dequeue(Queue2, 10).
 %% '''
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_backpressure).
 

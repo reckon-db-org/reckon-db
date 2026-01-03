@@ -20,7 +20,7 @@
 %% - Saga/process manager state reconstruction
 %% - Dependency analysis
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_causation).
 

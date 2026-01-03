@@ -9,7 +9,7 @@
 %% - {forward_to_local, Topic, Event}: Forward event locally (optimization)
 %% - {events, [Event]}: Direct event delivery to subscriber pid
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_emitter).
 -behaviour(gen_server).

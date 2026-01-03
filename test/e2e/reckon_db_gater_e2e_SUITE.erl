@@ -10,7 +10,7 @@
 %% - Load balancing across multiple workers
 %% - Retry and failover behavior
 %%
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_gater_e2e_SUITE).
 

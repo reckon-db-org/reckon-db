@@ -8,7 +8,7 @@
 %% - Audit queries ("what was the state on date X?")
 %% - Time-range analytics
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_temporal).
 

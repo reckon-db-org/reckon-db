@@ -15,7 +15,7 @@
 %% Emit an event:
 %%   reckon_db_telemetry:emit(?STREAM_WRITE_STOP, #{duration => 1000}, #{store_id => my_store}).
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_telemetry).
 

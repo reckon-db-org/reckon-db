@@ -7,7 +7,7 @@
 %% 2. ClusterSystem (cluster mode only) - discovery, coordination, monitoring
 %% 3. GatewaySystem - external interface workers
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_system_sup).
 -behaviour(supervisor).

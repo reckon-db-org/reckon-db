@@ -5,7 +5,7 @@
 %% - Store coordinator (cluster join coordination)
 %% - Node monitor (health probing)
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_cluster_sup).
 -behaviour(supervisor).

@@ -7,7 +7,7 @@
 %% - exists: Check if stream exists
 %% - list_streams: List all streams in the store
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_streams).
 

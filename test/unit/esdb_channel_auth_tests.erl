@@ -3,7 +3,7 @@
 %% Tests capability-based authorization for PubSub channels.
 %% Tests run in reckon-db where both channel server and verifier are available.
 %%
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(esdb_channel_auth_tests).
 

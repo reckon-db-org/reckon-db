@@ -3,7 +3,7 @@
 %% Handles reading and validating store configurations from the
 %% application environment.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_config).
 

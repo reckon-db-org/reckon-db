@@ -12,7 +12,7 @@
 %% - streams: Stream lifecycle
 %% - snapshots: Snapshot lifecycle
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_tracker_group).
 

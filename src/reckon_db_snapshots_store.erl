@@ -3,7 +3,7 @@
 %% Manages snapshot persistence and retrieval directly via Khepri.
 %% Snapshots are stored at path [snapshots, StreamId, PaddedVersion].
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_snapshots_store).
 

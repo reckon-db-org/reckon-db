@@ -1,5 +1,5 @@
 %% @doc Unit tests for schema registry module
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_schema_tests).
 

@@ -5,7 +5,7 @@
 %% - Cluster formation (in cluster mode)
 %% - Health checks
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_store).
 -behaviour(gen_server).

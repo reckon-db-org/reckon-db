@@ -6,7 +6,7 @@
 %% - S3/object storage
 %% - Network storage
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_archive_backend).
 

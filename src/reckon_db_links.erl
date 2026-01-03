@@ -22,7 +22,7 @@
 %% reckon_db_subscriptions:subscribe(my_store, stream, <<"$link:high-value-orders">>, ...).
 %% '''
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_links).
 

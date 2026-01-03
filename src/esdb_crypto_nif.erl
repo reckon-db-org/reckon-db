@@ -28,7 +28,7 @@
 %% false = esdb_crypto_nif:is_nif_loaded(). %% Community
 %% '''
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(esdb_crypto_nif).
 

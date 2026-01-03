@@ -3,7 +3,7 @@
 %% Manages emitter pools for subscriptions. Emitter pools are created
 %% dynamically when subscriptions are registered.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_emitter_sup).
 -behaviour(supervisor).

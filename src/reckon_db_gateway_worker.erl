@@ -11,7 +11,7 @@
 %% The message format matches the ExESDB.GatewayWorker from the
 %% original Elixir implementation.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_gateway_worker).
 -behaviour(gen_server).

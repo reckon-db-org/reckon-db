@@ -6,7 +6,7 @@
 %% - Event delivery via emitters
 %% - Subscription persistence
 %%
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_subscriptions_SUITE).
 

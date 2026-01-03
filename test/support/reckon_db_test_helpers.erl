@@ -1,5 +1,5 @@
 %% @doc Test helpers for reckon-db integration tests
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_test_helpers).
 

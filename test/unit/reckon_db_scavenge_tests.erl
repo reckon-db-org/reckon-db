@@ -1,5 +1,5 @@
 %% @doc Unit tests for scavenge and archive modules
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_scavenge_tests).
 

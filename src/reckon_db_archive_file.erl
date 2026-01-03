@@ -12,7 +12,7 @@
 %%       100-199.archive
 %% '''
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_archive_file).
 -behaviour(reckon_db_archive_backend).

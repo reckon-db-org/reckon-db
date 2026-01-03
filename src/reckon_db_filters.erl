@@ -3,7 +3,7 @@
 %% Provides filter builders for Khepri event subscriptions.
 %% These filters are used to watch for new events matching specific criteria.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_filters).
 

@@ -1,5 +1,5 @@
 %% @doc Telemetry events for reckon-db
-%% @author R. Lefever
+%% @author rgfaber
 
 -ifndef(RECKON_DB_TELEMETRY_HRL).
 -define(RECKON_DB_TELEMETRY_HRL, true).

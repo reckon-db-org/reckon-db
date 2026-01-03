@@ -1,5 +1,5 @@
 %% @doc Unit tests for health prober module
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_health_prober_tests).
 

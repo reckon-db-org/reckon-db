@@ -8,7 +8,7 @@
 %% 2. On receive: verify secret, call net_kernel:connect_node/1
 %% 3. On node up: trigger Khepri cluster join via StoreCoordinator
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_discovery).
 -behaviour(gen_server).

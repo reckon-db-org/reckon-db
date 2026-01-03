@@ -3,7 +3,7 @@
 %% Manages stream reader and writer pools for concurrent operations.
 %% Uses partitioned workers for high-throughput stream access.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_streams_sup).
 -behaviour(supervisor).

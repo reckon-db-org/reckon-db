@@ -1,5 +1,5 @@
 %% @doc Unit tests for stream linking module
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_links_tests).
 

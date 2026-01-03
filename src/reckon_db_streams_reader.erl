@@ -8,7 +8,7 @@
 %% - Idle timeout to free up resources
 %% - Registration via pg groups
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_streams_reader).
 -behaviour(gen_server).

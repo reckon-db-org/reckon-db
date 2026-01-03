@@ -23,7 +23,7 @@
 %% end).
 %% '''
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_memory).
 -behaviour(gen_server).

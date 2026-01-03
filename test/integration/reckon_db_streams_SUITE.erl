@@ -6,7 +6,7 @@
 %% - Stream metadata (version, exists, list)
 %% - Error cases
 %%
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_streams_SUITE).
 

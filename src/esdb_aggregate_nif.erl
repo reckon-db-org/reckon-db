@@ -38,7 +38,7 @@
 %% erlang = esdb_aggregate_nif:implementation(). %% Community
 %% '''
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(esdb_aggregate_nif).
 

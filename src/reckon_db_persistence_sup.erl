@@ -8,7 +8,7 @@
 %% Note: Snapshots and Subscriptions stores are facade modules that
 %% work directly with Khepri without needing gen_servers.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_persistence_sup).
 -behaviour(supervisor).

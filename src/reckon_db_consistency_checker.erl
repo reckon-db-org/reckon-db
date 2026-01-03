@@ -25,7 +25,7 @@
 %% - Brewer, E. (2012). CAP Twelve Years Later: How the "Rules" Have Changed.
 %%   IEEE Computer, 45(2), 23-29.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 %% @see reckon_db_health_prober
 
 -module(reckon_db_consistency_checker).

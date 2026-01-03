@@ -4,7 +4,7 @@
 %% - Leader tracker (subscription tracking)
 %% - Leader worker (leader responsibilities)
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_leader_sup).
 -behaviour(supervisor).

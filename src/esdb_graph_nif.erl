@@ -28,7 +28,7 @@
 %% erlang = esdb_graph_nif:implementation(). %% Community
 %% '''
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(esdb_graph_nif).
 

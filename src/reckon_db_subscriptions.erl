@@ -13,7 +13,7 @@
 %% - event_pattern: Subscribe to events matching a pattern
 %% - event_payload: Subscribe to events with specific payload patterns
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_subscriptions).
 

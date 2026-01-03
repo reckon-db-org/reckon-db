@@ -8,7 +8,7 @@
 %%   {overwrite, V}   - Replace current value with V
 %%   plain value      - Replace current value (default behavior)
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_aggregator).
 

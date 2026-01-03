@@ -6,7 +6,7 @@
 %% - Permission matching
 %% - Revocation integration
 %%
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(esdb_capability_verifier_tests).
 

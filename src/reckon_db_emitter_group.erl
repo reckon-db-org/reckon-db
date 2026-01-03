@@ -9,7 +9,7 @@
 %% - Topic generation for pub/sub
 %% - Emitter name generation for registration
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_emitter_group).
 

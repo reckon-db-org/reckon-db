@@ -9,7 +9,7 @@
 %% - Emit telemetry on node events
 %% - Periodic leader checks
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_node_monitor).
 -behaviour(gen_server).

@@ -3,7 +3,7 @@
 %% Supervises a pool of emitter workers for a single subscription.
 %% Each subscription can have multiple emitter workers for load distribution.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_emitter_pool).
 -behaviour(supervisor).

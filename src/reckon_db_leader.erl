@@ -7,7 +7,7 @@
 %% - Start emitter pools for active subscriptions
 %% - Coordinate leader-specific tasks
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_leader).
 -behaviour(gen_server).

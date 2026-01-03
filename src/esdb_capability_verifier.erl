@@ -14,7 +14,7 @@
 %% <li>Match action against permitted actions</li>
 %% </ol>
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 %% @see esdb_capability
 %% @see esdb_identity
 

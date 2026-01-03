@@ -5,7 +5,7 @@
 %% storage without going through a gen_server, since Khepri/Ra handles
 %% concurrency internally.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_subscriptions_store).
 

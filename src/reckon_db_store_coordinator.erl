@@ -8,7 +8,7 @@
 %% - Coordinated cluster joining
 %% - Split-brain prevention
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_store_coordinator).
 -behaviour(gen_server).

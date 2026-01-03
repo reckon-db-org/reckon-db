@@ -1,5 +1,5 @@
 %% @doc Unit tests for backpressure module
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_backpressure_tests).
 

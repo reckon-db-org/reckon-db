@@ -35,7 +35,7 @@
 %% erlang = esdb_filter_nif:implementation(). %% Community
 %% '''
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(esdb_filter_nif).
 

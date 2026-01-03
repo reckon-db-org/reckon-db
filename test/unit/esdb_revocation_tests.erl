@@ -5,7 +5,7 @@
 %% - Issuer revocation
 %% - Revocation expiration
 %%
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(esdb_revocation_tests).
 

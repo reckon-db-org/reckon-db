@@ -27,7 +27,7 @@
 %% Once a node is marked failed, probing continues. When probes succeed
 %% again, the node is marked recovered and callbacks are notified.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 %% @see reckon_db_consistency_checker
 
 -module(reckon_db_health_prober).

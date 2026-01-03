@@ -8,7 +8,7 @@
 %% - Idle timeout to free up resources
 %% - Swarm-like registration via pg groups
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_streams_writer).
 -behaviour(gen_server).

@@ -11,7 +11,7 @@
 %% Since Khepri triggers execute on the leader node, this module
 %% coordinates emitter lifecycle with subscription changes.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_leader_tracker).
 -behaviour(gen_server).

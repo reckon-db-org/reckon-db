@@ -15,7 +15,7 @@
 %% <li>Epoch-based (planned): Revoke all tokens before a timestamp</li>
 %% </ul>
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(esdb_revocation).
 

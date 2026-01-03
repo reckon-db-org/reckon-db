@@ -3,7 +3,7 @@
 %% This supervisor manages all store instances configured in the application
 %% environment. Each store gets its own system supervisor subtree.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_sup).
 -behaviour(supervisor).

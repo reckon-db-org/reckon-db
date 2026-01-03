@@ -1,5 +1,5 @@
 %% @doc EUnit tests for reckon_db_config module
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(reckon_db_config_tests).
 

@@ -14,7 +14,7 @@
 %% handles persistence internally via Raft consensus. This module exists
 %% for future optimization and to match the architecture of ex-esdb.
 %%
-%% @author Reckon-DB
+%% @author rgfaber
 
 -module(reckon_db_persistence_worker).
 -behaviour(gen_server).

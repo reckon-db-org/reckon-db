@@ -3,7 +3,7 @@
 %% Tests both the pure Erlang implementations (always tested) and the NIF
 %% implementations (tested only when available in Enterprise builds).
 %%
-%% @author R. Lefever
+%% @author rgfaber
 
 -module(esdb_graph_nif_tests).
 
