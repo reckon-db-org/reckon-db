@@ -23,8 +23,6 @@ reckon-db is an Erlang implementation of a distributed event store designed for:
 
 ## Installation
 
-### Community Edition (hex.pm)
-
 Add to your `rebar.config`:
 
 ```erlang
@@ -34,29 +32,6 @@ Add to your `rebar.config`:
 ```
 
 Pure Erlang implementation - works everywhere, no native dependencies.
-
-### Enterprise Edition (optional NIF acceleration)
-
-For NIF-accelerated performance (5-100x faster for specific operations), add the `reckon_nifs` package:
-
-```erlang
-{deps, [
-    {reckon_db, "0.1.0"},
-    {reckon_nifs, {git, "https://github.com/reckon-db-org/reckon-nifs.git", {tag, "v0.1.0"}}}
-]}.
-```
-
-Requires Rust toolchain: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-
-Enterprise NIFs provide acceleration for:
-- **Crypto**: Ed25519 signature verification, SHA256 (~5x faster)
-- **Archive**: LZ4/Zstd compression/decompression (~10x faster)
-- **Hash**: xxHash3, FNV-1a for consistent partitioning (SIMD optimized)
-- **Aggregate**: Vectorized event folding with tagged values
-- **Filter**: Pre-compiled predicates for event filtering
-- **Graph**: Causation graph analysis via petgraph (topological sort, cycle detection)
-
-When NIFs are unavailable, pure Erlang fallbacks are used automatically.
 
 ## Quick Start
 
