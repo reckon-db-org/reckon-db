@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.38.2">
+    <meta name="project" content="reckon_db v1.0.0">
+
+
+    <title>reckon_db_links — reckon_db v1.0.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
+
+    <script defer src="dist/sidebar_items-8BBF0070.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-DPJLHKSM.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="readme.html" class="sidebar-projectName" translate="no">
+reckon_db
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v1.0.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of reckon_db</span>
+            <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </label>
+          <button type="submit" class="search-button" aria-label="Submit Search" tabindex="-1">
+            <i class="ri-search-2-line ri-lg" aria-hidden="true"></i>
+          </button>
+          <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+            <i class="ri-close-line ri-lg" title="Cancel search"></i>
+          </button>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">reckon_db_links</span> 
+      <small class="app-vsn" translate="no">(reckon_db v1.0.0)</small>
+
+    </h1>
+
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L27" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>Stream linking and simple projections for reckon-db</p><p>Provides derived streams from source streams: - Filter events based on predicates - Transform event data - Create materialized streams for specialized queries</p><p>Links are live - new events are automatically propagated. Link streams can be subscribed to like regular streams.</p><p>Usage:</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Create a link for high-value orders</span><span class="w">
+  </span><span class="nc">reckon_db_links</span><span class="p">:</span><span class="nf">create</span><span class="p" data-group-id="3886065145-1">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="3886065145-2">#{</span><span class="w">
+      </span><span class="ss">name</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="3886065145-3">&lt;&lt;</span><span class="s">&quot;high-value-orders&quot;</span><span class="p" data-group-id="3886065145-3">&gt;&gt;</span><span class="p">,</span><span class="w">
+      </span><span class="ss">source</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="3886065145-4">#{</span><span class="ss">type</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="ss">stream_pattern</span><span class="p">,</span><span class="w"> </span><span class="ss">pattern</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="3886065145-5">&lt;&lt;</span><span class="s">&quot;orders-*&quot;</span><span class="p" data-group-id="3886065145-5">&gt;&gt;</span><span class="p" data-group-id="3886065145-4">}</span><span class="p">,</span><span class="w">
+      </span><span class="ss">filter</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">fun</span><span class="p" data-group-id="3886065145-6">(</span><span class="n">E</span><span class="p" data-group-id="3886065145-6">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">maps</span><span class="p">:</span><span class="nf">get</span><span class="p" data-group-id="3886065145-7">(</span><span class="ss">total</span><span class="p">,</span><span class="w"> </span><span class="n">E</span><span class="o">#</span><span class="ss">event</span><span class="p">.</span><span class="ss">data</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p" data-group-id="3886065145-7">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">1000</span><span class="w"> </span><span class="k">end</span><span class="p">,</span><span class="w">
+      </span><span class="ss">transform</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">fun</span><span class="p" data-group-id="3886065145-8">(</span><span class="n">E</span><span class="p" data-group-id="3886065145-8">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="n">E</span><span class="o">#</span><span class="ss">event</span><span class="p" data-group-id="3886065145-9">{</span><span class="ss">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">E</span><span class="o">#</span><span class="ss">event</span><span class="p">.</span><span class="ss">data</span><span class="p" data-group-id="3886065145-10">#{</span><span class="ss">flagged</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="ss">true</span><span class="p" data-group-id="3886065145-10">}</span><span class="p" data-group-id="3886065145-9">}</span><span class="w"> </span><span class="k">end</span><span class="w">
+  </span><span class="p" data-group-id="3886065145-2">}</span><span class="p" data-group-id="3886065145-1">)</span><span class="p">.</span><span class="w">
+ 
+  </span><span class="c1">%% Subscribe to linked stream</span><span class="w">
+  </span><span class="nc">reckon_db_subscriptions</span><span class="p">:</span><span class="nf">subscribe</span><span class="p" data-group-id="3886065145-11">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="ss">stream</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="3886065145-12">&lt;&lt;</span><span class="s">&quot;$link:high-value-orders&quot;</span><span class="p" data-group-id="3886065145-12">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="p">.</span><span class="p">.</span><span class="p" data-group-id="3886065145-11">)</span><span class="p">.</span></code></pre>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h1>
+<div class="summary-types summary">
+  <h2>
+    <a href="#types">Types</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:event/0" data-no-tooltip="" translate="no">event/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:filter_fun/0" data-no-tooltip="" translate="no">filter_fun/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:link_info/0" data-no-tooltip="" translate="no">link_info/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:link_spec/0" data-no-tooltip="" translate="no">link_spec/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:source_spec/0" data-no-tooltip="" translate="no">source_spec/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:transform_fun/0" data-no-tooltip="" translate="no">transform_fun/0</a>
+
+      </div>
+
+    </div>
+
+</div>
+<div class="summary-functions summary">
+  <h2>
+    <a href="#functions">Functions</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#create/2" data-no-tooltip="" translate="no">create(StoreId, Spec)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Create a new link.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#delete/2" data-no-tooltip="" translate="no">delete(StoreId, Name)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Delete a link.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#get/2" data-no-tooltip="" translate="no">get(StoreId, Name)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Get a link by name.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#info/2" data-no-tooltip="" translate="no">info(StoreId, Name)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Get detailed link info.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#list/1" data-no-tooltip="" translate="no">list(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>List all links.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start/2" data-no-tooltip="" translate="no">start(StoreId, Name)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Start processing a link.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#stop/2" data-no-tooltip="" translate="no">stop(StoreId, Name)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Stop processing a link.</p></div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#types">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Types</span>
+    </h1>
+    <div class="types-list">
+<section class="detail" id="t:event/0">
+
+  <div class="detail-header">
+    <a href="#t:event/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">event/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L70" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> event() ::
+          #event{event_id :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 event_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 stream_id :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 version :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
+                 data :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 metadata :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
+                 timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
+                 epoch_us :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
+                 data_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 metadata_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:filter_fun/0">
+
+  <div class="detail-header">
+    <a href="#t:filter_fun/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">filter_fun/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L53" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> filter_fun() :: fun((<a href="#t:event/0">event</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>()).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:link_info/0">
+
+  <div class="detail-header">
+    <a href="#t:link_info/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">link_info/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L64" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> link_info() ::
+          #{name := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            source := <a href="#t:source_spec/0">source_spec</a>(),
+            status := running | stopped | error,
+            processed := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
+            last_event => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:link_spec/0">
+
+  <div class="detail-header">
+    <a href="#t:link_spec/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">link_spec/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L56" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> link_spec() ::
+          #{name := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            source := <a href="#t:source_spec/0">source_spec</a>(),
+            filter => <a href="#t:filter_fun/0">filter_fun</a>(),
+            transform => <a href="#t:transform_fun/0">transform_fun</a>(),
+            backfill => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:source_spec/0">
+
+  <div class="detail-header">
+    <a href="#t:source_spec/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">source_spec/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L47" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> source_spec() ::
+          #{type := stream | stream_pattern | all, stream_id => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), pattern => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:transform_fun/0">
+
+  <div class="detail-header">
+    <a href="#t:transform_fun/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">transform_fun/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L54" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> transform_fun() :: fun((<a href="#t:event/0">event</a>()) -> <a href="#t:event/0">event</a>()).</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h1>
+    <div class="functions-list">
+<section class="detail" id="create/2">
+
+  <div class="detail-header">
+    <a href="#create/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">create(StoreId, Spec)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L110" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> create(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="#t:link_spec/0">link_spec</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Create a new link.</p><p>Options: - name: Link name (required, will create stream with $link prefix) - source: Source specification (stream, stream_pattern, or all) - filter: Predicate function to filter events - transform: Function to transform events - backfill: Process existing events (default: false)</p>
+  </section>
+</section>
+<section class="detail" id="delete/2">
+
+  <div class="detail-header">
+    <a href="#delete/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">delete(StoreId, Name)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L139" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> delete(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Delete a link.</p>
+  </section>
+</section>
+<section class="detail" id="get/2">
+
+  <div class="detail-header">
+    <a href="#get/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">get(StoreId, Name)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L154" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> get(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> {ok, <a href="#t:link_info/0">link_info</a>()} | {error, not_found}.</pre>
+
+      </div>
+
+<p>Get a link by name.</p>
+  </section>
+</section>
+<section class="detail" id="info/2">
+
+  <div class="detail-header">
+    <a href="#info/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">info(StoreId, Name)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L222" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> info(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()} | {error, not_found}.</pre>
+
+      </div>
+
+<p>Get detailed link info.</p>
+  </section>
+</section>
+<section class="detail" id="list/1">
+
+  <div class="detail-header">
+    <a href="#list/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">list(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L167" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> list(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, [<a href="#t:link_info/0">link_info</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>List all links.</p>
+  </section>
+</section>
+<section class="detail" id="start/2">
+
+  <div class="detail-header">
+    <a href="#start/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start(StoreId, Name)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L185" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> start(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Start processing a link.</p><p>This will: 1. Subscribe to source stream(s) 2. Optionally backfill existing events 3. Apply filter and transform to each event 4. Write matching events to the link stream</p>
+  </section>
+</section>
+<section class="detail" id="stop/2">
+
+  <div class="detail-header">
+    <a href="#stop/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">stop(StoreId, Name)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_links.erl#L210" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> stop(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Stop processing a link.</p>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/reckon_db/1.0.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/reckon_db/1.0.0">Hex Preview</a>
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="reckon_db.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.38.2) for the
+
+          <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.38.2">
+    <meta name="project" content="reckon_db v1.0.0">
+
+
+    <title>reckon_db_tracker_group — reckon_db v1.0.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
+
+    <script defer src="dist/sidebar_items-8BBF0070.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-DPJLHKSM.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="readme.html" class="sidebar-projectName" translate="no">
+reckon_db
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v1.0.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of reckon_db</span>
+            <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </label>
+          <button type="submit" class="search-button" aria-label="Submit Search" tabindex="-1">
+            <i class="ri-search-2-line ri-lg" aria-hidden="true"></i>
+          </button>
+          <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+            <i class="ri-close-line ri-lg" title="Cancel search"></i>
+          </button>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">reckon_db_tracker_group</span> 
+      <small class="app-vsn" translate="no">(reckon_db v1.0.0)</small>
+
+    </h1>
+
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_tracker_group.erl#L17" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>Tracker group management for reckon-db</p><p>Uses pg (process groups) for managing tracker processes. Trackers receive notifications about subscription lifecycle events.</p><p>This module provides: - Process group management for tracker processes - Notification broadcasting for created/deleted/updated events</p><p>Features that can be tracked: - subscriptions: Subscription lifecycle - streams: Stream lifecycle - snapshots: Snapshot lifecycle</p>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h1>
+<div class="summary-types summary">
+  <h2>
+    <a href="#types">Types</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:feature/0" data-no-tooltip="" translate="no">feature/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:store_id/0" data-no-tooltip="" translate="no">store_id/0</a>
+
+      </div>
+
+    </div>
+
+</div>
+<div class="summary-functions summary">
+  <h2>
+    <a href="#functions">Functions</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#group_key/2" data-no-tooltip="" translate="no">group_key(StoreId, Feature)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Generate the group key for a feature's trackers</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#join/3" data-no-tooltip="" translate="no">join(StoreId, Feature, PidOrPids)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Join one or more processes to the tracker group for a feature</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#leave/3" data-no-tooltip="" translate="no">leave(StoreId, Feature, PidOrPids)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Remove one or more processes from the tracker group</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#members/2" data-no-tooltip="" translate="no">members(StoreId, Feature)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Get all member processes tracking a feature</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#notify_created/3" data-no-tooltip="" translate="no">notify_created(StoreId, Feature, Data)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Notify all trackers that a feature instance was created</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#notify_deleted/3" data-no-tooltip="" translate="no">notify_deleted(StoreId, Feature, Data)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Notify all trackers that a feature instance was deleted</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#notify_updated/3" data-no-tooltip="" translate="no">notify_updated(StoreId, Feature, Data)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Notify all trackers that a feature instance was updated</p></div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#types">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Types</span>
+    </h1>
+    <div class="types-list">
+<section class="detail" id="t:feature/0">
+
+  <div class="detail-header">
+    <a href="#t:feature/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">feature/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_tracker_group.erl#L36" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> feature() :: subscriptions | streams | snapshots | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:store_id/0">
+
+  <div class="detail-header">
+    <a href="#t:store_id/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">store_id/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_tracker_group.erl#L35" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> store_id() :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h1>
+    <div class="functions-list">
+<section class="detail" id="group_key/2">
+
+  <div class="detail-header">
+    <a href="#group_key/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">group_key(StoreId, Feature)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_tracker_group.erl#L44" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> group_key(<a href="#t:store_id/0">store_id</a>(), <a href="#t:feature/0">feature</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>().</pre>
+
+      </div>
+
+<p>Generate the group key for a feature's trackers</p>
+  </section>
+</section>
+<section class="detail" id="join/3">
+
+  <div class="detail-header">
+    <a href="#join/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">join(StoreId, Feature, PidOrPids)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_tracker_group.erl#L49" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> join(<a href="#t:store_id/0">store_id</a>(), <a href="#t:feature/0">feature</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>() | [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()]) -> ok.</pre>
+
+      </div>
+
+<p>Join one or more processes to the tracker group for a feature</p>
+  </section>
+</section>
+<section class="detail" id="leave/3">
+
+  <div class="detail-header">
+    <a href="#leave/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">leave(StoreId, Feature, PidOrPids)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_tracker_group.erl#L56" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> leave(<a href="#t:store_id/0">store_id</a>(), <a href="#t:feature/0">feature</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>() | [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()]) -> ok.</pre>
+
+      </div>
+
+<p>Remove one or more processes from the tracker group</p>
+  </section>
+</section>
+<section class="detail" id="members/2">
+
+  <div class="detail-header">
+    <a href="#members/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">members(StoreId, Feature)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_tracker_group.erl#L63" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> members(<a href="#t:store_id/0">store_id</a>(), <a href="#t:feature/0">feature</a>()) -> [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()].</pre>
+
+      </div>
+
+<p>Get all member processes tracking a feature</p>
+  </section>
+</section>
+<section class="detail" id="notify_created/3">
+
+  <div class="detail-header">
+    <a href="#notify_created/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">notify_created(StoreId, Feature, Data)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_tracker_group.erl#L69" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> notify_created(<a href="#t:store_id/0">store_id</a>(), <a href="#t:feature/0">feature</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()) -> ok.</pre>
+
+      </div>
+
+<p>Notify all trackers that a feature instance was created</p>
+  </section>
+</section>
+<section class="detail" id="notify_deleted/3">
+
+  <div class="detail-header">
+    <a href="#notify_deleted/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">notify_deleted(StoreId, Feature, Data)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_tracker_group.erl#L77" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> notify_deleted(<a href="#t:store_id/0">store_id</a>(), <a href="#t:feature/0">feature</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()) -> ok.</pre>
+
+      </div>
+
+<p>Notify all trackers that a feature instance was deleted</p>
+  </section>
+</section>
+<section class="detail" id="notify_updated/3">
+
+  <div class="detail-header">
+    <a href="#notify_updated/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">notify_updated(StoreId, Feature, Data)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_tracker_group.erl#L85" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> notify_updated(<a href="#t:store_id/0">store_id</a>(), <a href="#t:feature/0">feature</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()) -> ok.</pre>
+
+      </div>
+
+<p>Notify all trackers that a feature instance was updated</p>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/reckon_db/1.0.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/reckon_db/1.0.0">Hex Preview</a>
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="reckon_db.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.38.2) for the
+
+          <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

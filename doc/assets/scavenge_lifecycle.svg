@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+    </marker>
+    <linearGradient id="activeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#48bb78"/>
+      <stop offset="100%" style="stop-color:#38a169"/>
+    </linearGradient>
+    <linearGradient id="archiveGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4299e1"/>
+      <stop offset="100%" style="stop-color:#3182ce"/>
+    </linearGradient>
+    <linearGradient id="deleteGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fc8181"/>
+      <stop offset="100%" style="stop-color:#e53e3e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="500" fill="#f7fafc"/>
+
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="bold" fill="#2d3748">Event Lifecycle &amp; Scavenging</text>
+
+  <!-- Phase 1: Active Events -->
+  <rect x="40" y="60" width="160" height="120" rx="10" fill="url(#activeGrad)" stroke="#276749" stroke-width="2"/>
+  <text x="120" y="90" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="white">Active Events</text>
+  <text x="120" y="115" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#c6f6d5">Khepri/Ra Storage</text>
+  <text x="120" y="135" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#c6f6d5">Fast reads</text>
+  <text x="120" y="150" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#c6f6d5">Raft replicated</text>
+  <text x="120" y="165" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#c6f6d5">Strongly consistent</text>
+
+  <!-- Arrow 1 -->
+  <line x1="200" y1="120" x2="250" y2="120" stroke="#4a5568" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="225" y="110" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#718096">archive</text>
+
+  <!-- Phase 2: Archived -->
+  <rect x="260" y="60" width="160" height="120" rx="10" fill="url(#archiveGrad)" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="340" y="90" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="white">Archived</text>
+  <text x="340" y="115" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#bee3f8">Cold Storage</text>
+  <text x="340" y="135" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#bee3f8">File / S3 / etc</text>
+  <text x="340" y="150" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#bee3f8">Compliance retention</text>
+  <text x="340" y="165" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#bee3f8">Rare access</text>
+
+  <!-- Arrow 2 -->
+  <line x1="420" y1="120" x2="470" y2="120" stroke="#4a5568" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="445" y="110" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#718096">scavenge</text>
+
+  <!-- Phase 3: Scavenged -->
+  <rect x="480" y="60" width="160" height="120" rx="10" fill="#f6ad55" stroke="#dd6b20" stroke-width="2"/>
+  <text x="560" y="90" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="white">Scavenged</text>
+  <text x="560" y="115" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#feebc8">Khepri Deleted</text>
+  <text x="560" y="135" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#feebc8">Storage freed</text>
+  <text x="560" y="150" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#feebc8">Archive reference</text>
+  <text x="560" y="165" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#feebc8">remains</text>
+
+  <!-- Arrow 3 -->
+  <line x1="640" y1="120" x2="690" y2="120" stroke="#4a5568" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="665" y="110" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#718096">purge</text>
+
+  <!-- Phase 4: Deleted -->
+  <rect x="700" y="60" width="80" height="120" rx="10" fill="url(#deleteGrad)" stroke="#c53030" stroke-width="2"/>
+  <text x="740" y="110" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Gone</text>
+  <text x="740" y="130" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#fed7d7">Permanent</text>
+  <text x="740" y="145" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#fed7d7">removal</text>
+
+  <!-- Safety Checks Section -->
+  <rect x="40" y="210" width="720" height="130" rx="10" fill="#edf2f7" stroke="#cbd5e0" stroke-width="1"/>
+  <text x="400" y="235" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="#2d3748">Safety Checks</text>
+
+  <!-- Check 1: Snapshot -->
+  <rect x="60" y="255" width="200" height="70" rx="8" fill="white" stroke="#a0aec0" stroke-width="1"/>
+  <text x="160" y="280" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#2d3748">Snapshot Required</text>
+  <text x="160" y="300" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#718096">require_snapshot: true</text>
+  <text x="160" y="315" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#718096">Ensures replay capability</text>
+
+  <!-- Check 2: Keep Versions -->
+  <rect x="280" y="255" width="200" height="70" rx="8" fill="white" stroke="#a0aec0" stroke-width="1"/>
+  <text x="380" y="280" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#2d3748">Keep Versions</text>
+  <text x="380" y="300" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#718096">keep_versions: N</text>
+  <text x="380" y="315" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#718096">Always keep recent events</text>
+
+  <!-- Check 3: Dry Run -->
+  <rect x="500" y="255" width="200" height="70" rx="8" fill="white" stroke="#a0aec0" stroke-width="1"/>
+  <text x="600" y="280" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#2d3748">Preview Mode</text>
+  <text x="600" y="300" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#718096">dry_run: true</text>
+  <text x="600" y="315" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#718096">See before deleting</text>
+
+  <!-- Khepri Delete Flow -->
+  <rect x="40" y="360" width="350" height="120" rx="10" fill="#f0fff4" stroke="#9ae6b4" stroke-width="1"/>
+  <text x="215" y="385" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#276749">Khepri Delete Path</text>
+
+  <!-- Path visualization -->
+  <text x="60" y="410" font-family="monospace" font-size="10" fill="#2d3748">[streams, StreamId, "000000000000"] → X</text>
+  <text x="60" y="428" font-family="monospace" font-size="10" fill="#2d3748">[streams, StreamId, "000000000001"] → X</text>
+  <text x="60" y="446" font-family="monospace" font-size="10" fill="#718096">...</text>
+  <text x="60" y="464" font-family="monospace" font-size="10" fill="#2d3748">[streams, StreamId, "000000000499"] → X</text>
+
+  <!-- Delete markers -->
+  <text x="330" y="410" font-family="system-ui, sans-serif" font-size="10" fill="#e53e3e">deleted</text>
+  <text x="330" y="428" font-family="system-ui, sans-serif" font-size="10" fill="#e53e3e">deleted</text>
+  <text x="330" y="464" font-family="system-ui, sans-serif" font-size="10" fill="#e53e3e">deleted</text>
+
+  <!-- Archive Key Format -->
+  <rect x="410" y="360" width="350" height="120" rx="10" fill="#ebf8ff" stroke="#90cdf4" stroke-width="1"/>
+  <text x="585" y="385" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#2b6cb0">Archive Key Format</text>
+
+  <text x="430" y="415" font-family="monospace" font-size="10" fill="#2d3748">{StoreId}/{StreamId}/{From}-{To}.archive</text>
+
+  <text x="430" y="445" font-family="system-ui, sans-serif" font-size="10" fill="#718096">Example:</text>
+  <text x="430" y="465" font-family="monospace" font-size="10" fill="#4299e1">my_store/orders-123/0-499.archive</text>
+</svg>

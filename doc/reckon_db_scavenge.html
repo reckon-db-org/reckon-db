@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.38.2">
+    <meta name="project" content="reckon_db v1.0.0">
+
+
+    <title>reckon_db_scavenge — reckon_db v1.0.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
+
+    <script defer src="dist/sidebar_items-8BBF0070.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-DPJLHKSM.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="readme.html" class="sidebar-projectName" translate="no">
+reckon_db
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v1.0.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of reckon_db</span>
+            <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </label>
+          <button type="submit" class="search-button" aria-label="Submit Search" tabindex="-1">
+            <i class="ri-search-2-line ri-lg" aria-hidden="true"></i>
+          </button>
+          <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+            <i class="ri-close-line ri-lg" title="Cancel search"></i>
+          </button>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">reckon_db_scavenge</span> 
+      <small class="app-vsn" translate="no">(reckon_db v1.0.0)</small>
+
+    </h1>
+
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_scavenge.erl#L20" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>Scavenging and archival for reckon-db</p><p>Provides functionality to: - Remove old events beyond a retention period - Optionally archive events before deletion - Maintain stream integrity by requiring snapshots</p><p>Use cases: - Reduce storage costs by removing old events - Comply with data retention policies - Archive events to cold storage</p><p>Safety guarantees: - By default, requires a snapshot before scavenging - Supports dry-run mode for previewing changes - Telemetry events for monitoring</p>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h1>
+<div class="summary-types summary">
+  <h2>
+    <a href="#types">Types</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:event/0" data-no-tooltip="" translate="no">event/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:scavenge_opts/0" data-no-tooltip="" translate="no">scavenge_opts/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:scavenge_result/0" data-no-tooltip="" translate="no">scavenge_result/0</a>
+
+      </div>
+
+    </div>
+
+</div>
+<div class="summary-functions summary">
+  <h2>
+    <a href="#functions">Functions</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#archive_and_scavenge/4" data-no-tooltip="" translate="no">archive_and_scavenge(StoreId, StreamId, _, Opts)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Archive events to a backend, then scavenge.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#dry_run/3" data-no-tooltip="" translate="no">dry_run(StoreId, StreamId, Opts)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Preview what would be scavenged without making changes.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#scavenge/3" data-no-tooltip="" translate="no">scavenge(StoreId, StreamId, Opts)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Scavenge a single stream.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#scavenge_matching/3" data-no-tooltip="" translate="no">scavenge_matching(StoreId, Pattern, Opts)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Scavenge all streams matching a pattern.</p></div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="types" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#types">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Types</span>
+    </h1>
+    <div class="types-list">
+<section class="detail" id="t:event/0">
+
+  <div class="detail-header">
+    <a href="#t:event/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">event/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L70" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> event() ::
+          #event{event_id :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 event_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 stream_id :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 version :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
+                 data :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 metadata :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
+                 timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
+                 epoch_us :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
+                 data_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 metadata_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:scavenge_opts/0">
+
+  <div class="detail-header">
+    <a href="#t:scavenge_opts/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">scavenge_opts/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_scavenge.erl#L36" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> scavenge_opts() ::
+          #{before => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
+            before_version => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
+            keep_versions => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
+            require_snapshot => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>(),
+            dry_run => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:scavenge_result/0">
+
+  <div class="detail-header">
+    <a href="#t:scavenge_result/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">scavenge_result/0</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_scavenge.erl#L44" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> scavenge_result() ::
+          #{stream_id := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            deleted_count := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
+            deleted_versions := {<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()},
+            archived := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>(),
+            archive_key => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+
+    </div>
+  </section>
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h1>
+    <div class="functions-list">
+<section class="detail" id="archive_and_scavenge/4">
+
+  <div class="detail-header">
+    <a href="#archive_and_scavenge/4" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">archive_and_scavenge(StoreId, StreamId, _, Opts)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_scavenge.erl#L114" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> archive_and_scavenge(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), {<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:module/0">module</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}, <a href="#t:scavenge_opts/0">scavenge_opts</a>()) ->
+                              {ok, <a href="#t:scavenge_result/0">scavenge_result</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Archive events to a backend, then scavenge.</p><p>First archives events to the specified backend, then deletes them. This ensures events are preserved before removal.</p>
+  </section>
+</section>
+<section class="detail" id="dry_run/3">
+
+  <div class="detail-header">
+    <a href="#dry_run/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">dry_run(StoreId, StreamId, Opts)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_scavenge.erl#L142" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> dry_run(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="#t:scavenge_opts/0">scavenge_opts</a>()) -> {ok, <a href="#t:scavenge_result/0">scavenge_result</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Preview what would be scavenged without making changes.</p>
+  </section>
+</section>
+<section class="detail" id="scavenge/3">
+
+  <div class="detail-header">
+    <a href="#scavenge/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">scavenge(StoreId, StreamId, Opts)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_scavenge.erl#L81" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> scavenge(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="#t:scavenge_opts/0">scavenge_opts</a>()) -> {ok, <a href="#t:scavenge_result/0">scavenge_result</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Scavenge a single stream.</p><p>Deletes old events based on the provided options. By default, requires a snapshot to exist (safety measure).</p><p>Options: - <code>before`: Delete events with epoch_us before this timestamp - `before_version`: Delete events before this version (alternative to `before`) - `keep_versions`: Always keep at least N latest versions (default: 0) - `require_snapshot`: Require snapshot exists (default: true) - `dry_run`: Preview only, don</code>t delete (default: false)</p><p>Example:</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Delete events older than 1 year, keep last 10 versions</span><span class="w">
+  </span><span class="n">OneYearAgo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">erlang</span><span class="p">:</span><span class="nf">system_time</span><span class="p" data-group-id="6606202857-1">(</span><span class="ss">microsecond</span><span class="p" data-group-id="6606202857-1">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p" data-group-id="6606202857-2">(</span><span class="mi">365</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">24</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000000</span><span class="p" data-group-id="6606202857-2">)</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="6606202857-3">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Result</span><span class="p" data-group-id="6606202857-3">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_scavenge</span><span class="p">:</span><span class="nf">scavenge</span><span class="p" data-group-id="6606202857-4">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6606202857-5">&lt;&lt;</span><span class="s">&quot;orders-123&quot;</span><span class="p" data-group-id="6606202857-5">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6606202857-6">#{</span><span class="w">
+      </span><span class="ss">before</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">OneYearAgo</span><span class="p">,</span><span class="w">
+      </span><span class="ss">keep_versions</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="mi">10</span><span class="w">
+  </span><span class="p" data-group-id="6606202857-6">}</span><span class="p" data-group-id="6606202857-4">)</span><span class="p">.</span></code></pre>
+  </section>
+</section>
+<section class="detail" id="scavenge_matching/3">
+
+  <div class="detail-header">
+    <a href="#scavenge_matching/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">scavenge_matching(StoreId, Pattern, Opts)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_scavenge.erl#L97" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> scavenge_matching(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="#t:scavenge_opts/0">scavenge_opts</a>()) ->
+                           {ok, [<a href="#t:scavenge_result/0">scavenge_result</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Scavenge all streams matching a pattern.</p><p>Pattern uses shell-like wildcards (e.g., &quot;orders-*&quot;). Applies the same options to all matching streams.</p>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/reckon_db/1.0.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/reckon_db/1.0.0">Hex Preview</a>
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="reckon_db.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.38.2) for the
+
+          <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

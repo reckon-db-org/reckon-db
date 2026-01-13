@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.38.2">
+    <meta name="project" content="reckon_db v1.0.0">
+
+
+    <title>esdb_filter_nif — reckon_db v1.0.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
+
+    <script defer src="dist/sidebar_items-8BBF0070.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-DPJLHKSM.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="readme.html" class="sidebar-projectName" translate="no">
+reckon_db
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v1.0.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of reckon_db</span>
+            <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </label>
+          <button type="submit" class="search-button" aria-label="Submit Search" tabindex="-1">
+            <i class="ri-search-2-line ri-lg" aria-hidden="true"></i>
+          </button>
+          <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+            <i class="ri-close-line ri-lg" title="Cancel search"></i>
+          </button>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">esdb_filter_nif</span> 
+      <small class="app-vsn" translate="no">(reckon_db v1.0.0)</small>
+
+    </h1>
+
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L40" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>Optimized pattern matching and filtering operations for reckon-db.</p><p>This module provides high-performance pattern matching implementations:</p><ul><li><b>Wildcard matching</b>: Fast * and ? pattern matching</li><li><b>Regex matching</b>: Compiled regex pattern matching</li><li><b>Prefix/Suffix matching</b>: Optimized start/end checks</li><li><b>Batch filtering</b>: Filter lists by patterns efficiently</li></ul><p>The mode is automatically detected at startup based on whether the NIF library is available. Community edition users (hex.pm) will always use the Erlang fallbacks, which provide identical functionality.</p><h3 id="module-wildcard-patterns" class="section-heading"><a href="#module-wildcard-patterns" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Wildcard_Patterns">Wildcard Patterns</a></span></h3><p>Wildcards supported:</p><ul><li><code>*</code> matches any sequence of characters (including empty)</li><li><code>?</code> matches any single character</li></ul><h3 id="module-usage" class="section-heading"><a href="#module-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Usage">Usage</a></span></h3><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Check if a stream matches a pattern</span><span class="w">
+  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">wildcard_match</span><span class="p" data-group-id="6070372333-1">(</span><span class="p" data-group-id="6070372333-2">&lt;&lt;</span><span class="s">&quot;orders-123&quot;</span><span class="p" data-group-id="6070372333-2">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6070372333-3">&lt;&lt;</span><span class="s">&quot;orders-*&quot;</span><span class="p" data-group-id="6070372333-3">&gt;&gt;</span><span class="p" data-group-id="6070372333-1">)</span><span class="p">.</span><span class="w">
+ 
+  </span><span class="c1">%% Filter streams by pattern</span><span class="w">
+  </span><span class="n">Matching</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">filter_by_wildcard</span><span class="p" data-group-id="6070372333-4">(</span><span class="n">Streams</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6070372333-5">&lt;&lt;</span><span class="s">&quot;user-*&quot;</span><span class="p" data-group-id="6070372333-5">&gt;&gt;</span><span class="p" data-group-id="6070372333-4">)</span><span class="p">.</span><span class="w">
+ 
+  </span><span class="c1">%% Check which mode is active</span><span class="w">
+  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="6070372333-6">(</span><span class="p" data-group-id="6070372333-6">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
+  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="6070372333-7">(</span><span class="p" data-group-id="6070372333-7">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h1>
+<div class="summary-functions summary">
+  <h2>
+    <a href="#functions">Functions</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#count_matches/2" data-no-tooltip="" translate="no">count_matches(Items, Pattern)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Count items matching a wildcard pattern.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#filter_by_prefix/2" data-no-tooltip="" translate="no">filter_by_prefix(Items, Prefix)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Filter a list of binaries by prefix.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#filter_by_regex/2" data-no-tooltip="" translate="no">filter_by_regex(Items, RegexPattern)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Filter a list of binaries by regex pattern.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#filter_by_suffix/2" data-no-tooltip="" translate="no">filter_by_suffix(Items, Suffix)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Filter a list of binaries by suffix.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#filter_by_wildcard/2" data-no-tooltip="" translate="no">filter_by_wildcard(Items, Pattern)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Filter a list of binaries by wildcard pattern.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#has_prefix/2" data-no-tooltip="" translate="no">has_prefix(Text, Prefix)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Check if a string has a specific prefix.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#has_suffix/2" data-no-tooltip="" translate="no">has_suffix(Text, Suffix)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Check if a string has a specific suffix.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#implementation/0" data-no-tooltip="" translate="no">implementation()</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Get the current implementation mode.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#is_nif_loaded/0" data-no-tooltip="" translate="no">is_nif_loaded()</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Check if the NIF is loaded (Enterprise mode).</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#is_valid_regex/1" data-no-tooltip="" translate="no">is_valid_regex(Pattern)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Validate that a pattern is a valid regex.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#match_indices/2" data-no-tooltip="" translate="no">match_indices(Items, Pattern)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Return indices of items matching a wildcard pattern.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#regex_match/2" data-no-tooltip="" translate="no">regex_match(Text, RegexPattern)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Check if a string matches a regex pattern.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#wildcard_match/2" data-no-tooltip="" translate="no">wildcard_match(Text, Pattern)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Check if a string matches a wildcard pattern.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#wildcard_to_regex/1" data-no-tooltip="" translate="no">wildcard_to_regex(Pattern)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Convert a wildcard pattern to a regex pattern.</p></div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h1>
+    <div class="functions-list">
+<section class="detail" id="count_matches/2">
+
+  <div class="detail-header">
+    <a href="#count_matches/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">count_matches(Items, Pattern)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L276" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> count_matches(Items :: [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()], Pattern :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>().</pre>
+
+      </div>
+
+<p>Count items matching a wildcard pattern.</p>
+  </section>
+</section>
+<section class="detail" id="filter_by_prefix/2">
+
+  <div class="detail-header">
+    <a href="#filter_by_prefix/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">filter_by_prefix(Items, Prefix)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L252" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> filter_by_prefix(Items :: [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()], Prefix :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()].</pre>
+
+      </div>
+
+<p>Filter a list of binaries by prefix.</p>
+  </section>
+</section>
+<section class="detail" id="filter_by_regex/2">
+
+  <div class="detail-header">
+    <a href="#filter_by_regex/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">filter_by_regex(Items, RegexPattern)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L244" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> filter_by_regex(Items :: [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()], RegexPattern :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()].</pre>
+
+      </div>
+
+<p>Filter a list of binaries by regex pattern.</p>
+  </section>
+</section>
+<section class="detail" id="filter_by_suffix/2">
+
+  <div class="detail-header">
+    <a href="#filter_by_suffix/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">filter_by_suffix(Items, Suffix)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L260" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> filter_by_suffix(Items :: [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()], Suffix :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()].</pre>
+
+      </div>
+
+<p>Filter a list of binaries by suffix.</p>
+  </section>
+</section>
+<section class="detail" id="filter_by_wildcard/2">
+
+  <div class="detail-header">
+    <a href="#filter_by_wildcard/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">filter_by_wildcard(Items, Pattern)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L236" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> filter_by_wildcard(Items :: [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()], Pattern :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()].</pre>
+
+      </div>
+
+<p>Filter a list of binaries by wildcard pattern.</p>
+  </section>
+</section>
+<section class="detail" id="has_prefix/2">
+
+  <div class="detail-header">
+    <a href="#has_prefix/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">has_prefix(Text, Prefix)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L208" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> has_prefix(Text :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), Prefix :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
+
+      </div>
+
+<p>Check if a string has a specific prefix.</p>
+  </section>
+</section>
+<section class="detail" id="has_suffix/2">
+
+  <div class="detail-header">
+    <a href="#has_suffix/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">has_suffix(Text, Suffix)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L216" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> has_suffix(Text :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), Suffix :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
+
+      </div>
+
+<p>Check if a string has a specific suffix.</p>
+  </section>
+</section>
+<section class="detail" id="implementation/0">
+
+  <div class="detail-header">
+    <a href="#implementation/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">implementation()</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L161" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> implementation() -> nif | erlang.</pre>
+
+      </div>
+
+<p>Get the current implementation mode.</p>
+  </section>
+</section>
+<section class="detail" id="is_nif_loaded/0">
+
+  <div class="detail-header">
+    <a href="#is_nif_loaded/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">is_nif_loaded()</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L156" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> is_nif_loaded() -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
+
+      </div>
+
+<p>Check if the NIF is loaded (Enterprise mode).</p>
+  </section>
+</section>
+<section class="detail" id="is_valid_regex/1">
+
+  <div class="detail-header">
+    <a href="#is_valid_regex/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">is_valid_regex(Pattern)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L224" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> is_valid_regex(Pattern :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
+
+      </div>
+
+<p>Validate that a pattern is a valid regex.</p>
+  </section>
+</section>
+<section class="detail" id="match_indices/2">
+
+  <div class="detail-header">
+    <a href="#match_indices/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">match_indices(Items, Pattern)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L268" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> match_indices(Items :: [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()], Pattern :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()].</pre>
+
+      </div>
+
+<p>Return indices of items matching a wildcard pattern.</p>
+  </section>
+</section>
+<section class="detail" id="regex_match/2">
+
+  <div class="detail-header">
+    <a href="#regex_match/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">regex_match(Text, RegexPattern)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L200" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> regex_match(Text :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), RegexPattern :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
+
+      </div>
+
+<p>Check if a string matches a regex pattern.</p>
+  </section>
+</section>
+<section class="detail" id="wildcard_match/2">
+
+  <div class="detail-header">
+    <a href="#wildcard_match/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">wildcard_match(Text, Pattern)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L192" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> wildcard_match(Text :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), Pattern :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
+
+      </div>
+
+<p>Check if a string matches a wildcard pattern.</p>
+  </section>
+</section>
+<section class="detail" id="wildcard_to_regex/1">
+
+  <div class="detail-header">
+    <a href="#wildcard_to_regex/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">wildcard_to_regex(Pattern)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/esdb_filter_nif.erl#L177" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> wildcard_to_regex(Pattern :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>().</pre>
+
+      </div>
+
+<p>Convert a wildcard pattern to a regex pattern.</p><p>Wildcards: - <code>*</code> matches any sequence of characters - <code>?</code> matches any single character</p>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/reckon_db/1.0.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/reckon_db/1.0.0">Hex Preview</a>
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="reckon_db.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.38.2) for the
+
+          <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="boxGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e94560;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c73e54;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="boxGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f3460;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0a2540;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="boxGrad3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#533483;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3d2666;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="4" stdDeviation="4" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bgGrad)"/>
+
+  <!-- Title -->
+  <text x="400" y="40" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="24" font-weight="bold">reckon-db Architecture</text>
+
+  <!-- System Supervisor Box -->
+  <rect x="50" y="70" width="700" height="500" rx="10" fill="none" stroke="#e94560" stroke-width="2" stroke-dasharray="5,5"/>
+  <text x="70" y="95" fill="#e94560" font-family="Arial, sans-serif" font-size="14" font-weight="bold">reckon_db_system_sup (rest_for_one)</text>
+
+  <!-- Core Supervisor -->
+  <rect x="80" y="110" width="320" height="300" rx="8" fill="url(#boxGrad2)" filter="url(#shadow)"/>
+  <text x="100" y="135" fill="#fff" font-family="Arial, sans-serif" font-size="12" font-weight="bold">reckon_db_core_sup (one_for_all)</text>
+
+  <!-- Persistence -->
+  <rect x="95" y="150" width="140" height="120" rx="5" fill="url(#boxGrad1)" filter="url(#shadow)"/>
+  <text x="105" y="170" fill="#fff" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Persistence</text>
+  <text x="105" y="190" fill="#fff" font-family="Arial, sans-serif" font-size="9">reckon_db_store</text>
+  <text x="105" y="205" fill="#fff" font-family="Arial, sans-serif" font-size="9">streams_sup</text>
+  <text x="105" y="220" fill="#fff" font-family="Arial, sans-serif" font-size="9">snapshots_store</text>
+  <text x="105" y="235" fill="#fff" font-family="Arial, sans-serif" font-size="9">subscriptions_store</text>
+  <text x="105" y="250" fill="#fff" font-family="Arial, sans-serif" font-size="9">writers/readers</text>
+
+  <!-- Notification -->
+  <rect x="245" y="150" width="140" height="120" rx="5" fill="url(#boxGrad3)" filter="url(#shadow)"/>
+  <text x="255" y="170" fill="#fff" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Notification</text>
+  <text x="255" y="190" fill="#fff" font-family="Arial, sans-serif" font-size="9">leader_tracker</text>
+  <text x="255" y="205" fill="#fff" font-family="Arial, sans-serif" font-size="9">leader</text>
+  <text x="255" y="220" fill="#fff" font-family="Arial, sans-serif" font-size="9">emitter_sup</text>
+  <text x="255" y="235" fill="#fff" font-family="Arial, sans-serif" font-size="9">emitter_pool</text>
+
+  <!-- Store Manager -->
+  <rect x="95" y="280" width="290" height="40" rx="5" fill="#2d4a6d" filter="url(#shadow)"/>
+  <text x="165" y="305" fill="#fff" font-family="Arial, sans-serif" font-size="10">reckon_db_store_mgr</text>
+
+  <!-- Store (Khepri/Ra) -->
+  <rect x="95" y="330" width="290" height="60" rx="5" fill="#1e3a5f" filter="url(#shadow)"/>
+  <text x="175" y="355" fill="#fff" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Khepri / Ra</text>
+  <text x="155" y="375" fill="#aaa" font-family="Arial, sans-serif" font-size="10">Raft Consensus Storage</text>
+
+  <!-- Cluster Supervisor -->
+  <rect x="420" y="110" width="160" height="200" rx="8" fill="url(#boxGrad2)" filter="url(#shadow)"/>
+  <text x="435" y="135" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Cluster Sup</text>
+  <text x="430" y="155" fill="#888" font-family="Arial, sans-serif" font-size="9">(cluster mode only)</text>
+
+  <rect x="435" y="170" width="130" height="30" rx="4" fill="#e94560"/>
+  <text x="455" y="190" fill="#fff" font-family="Arial, sans-serif" font-size="9">discovery</text>
+
+  <rect x="435" y="210" width="130" height="30" rx="4" fill="#533483"/>
+  <text x="445" y="230" fill="#fff" font-family="Arial, sans-serif" font-size="9">store_coordinator</text>
+
+  <rect x="435" y="250" width="130" height="30" rx="4" fill="#2d4a6d"/>
+  <text x="452" y="270" fill="#fff" font-family="Arial, sans-serif" font-size="9">node_monitor</text>
+
+  <!-- Gateway -->
+  <rect x="600" y="110" width="130" height="100" rx="8" fill="url(#boxGrad3)" filter="url(#shadow)"/>
+  <text x="615" y="135" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Gateway Sup</text>
+  <rect x="615" y="150" width="100" height="40" rx="4" fill="#e94560"/>
+  <text x="625" y="175" fill="#fff" font-family="Arial, sans-serif" font-size="9">gateway_worker</text>
+
+  <!-- Telemetry -->
+  <rect x="420" y="330" width="310" height="60" rx="8" fill="url(#boxGrad2)" filter="url(#shadow)"/>
+  <text x="510" y="355" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">BEAM Telemetry</text>
+  <text x="470" y="375" fill="#aaa" font-family="Arial, sans-serif" font-size="9">Logger • OpenTelemetry • Prometheus</text>
+
+  <!-- Event Flow -->
+  <rect x="80" y="420" width="650" height="140" rx="8" fill="#0a2540" filter="url(#shadow)"/>
+  <text x="355" y="445" text-anchor="middle" fill="#e94560" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Event Flow</text>
+
+  <!-- Flow boxes -->
+  <rect x="100" y="460" width="80" height="40" rx="5" fill="#e94560"/>
+  <text x="116" y="485" fill="#fff" font-family="Arial, sans-serif" font-size="9">Client</text>
+
+  <rect x="210" y="460" width="100" height="40" rx="5" fill="#533483"/>
+  <text x="225" y="485" fill="#fff" font-family="Arial, sans-serif" font-size="9">streams:append</text>
+
+  <rect x="340" y="460" width="80" height="40" rx="5" fill="#0f3460"/>
+  <text x="355" y="485" fill="#fff" font-family="Arial, sans-serif" font-size="9">Writer</text>
+
+  <rect x="450" y="460" width="100" height="40" rx="5" fill="#1e3a5f"/>
+  <text x="468" y="485" fill="#fff" font-family="Arial, sans-serif" font-size="9">Khepri/Ra</text>
+
+  <rect x="580" y="460" width="80" height="40" rx="5" fill="#533483"/>
+  <text x="595" y="485" fill="#fff" font-family="Arial, sans-serif" font-size="9">Trigger</text>
+
+  <rect x="580" y="510" width="80" height="40" rx="5" fill="#e94560"/>
+  <text x="592" y="535" fill="#fff" font-family="Arial, sans-serif" font-size="9">Emitters</text>
+
+  <!-- Arrows -->
+  <path d="M180 480 L205 480" stroke="#fff" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M310 480 L335 480" stroke="#fff" stroke-width="2" fill="none"/>
+  <path d="M420 480 L445 480" stroke="#fff" stroke-width="2" fill="none"/>
+  <path d="M550 480 L575 480" stroke="#fff" stroke-width="2" fill="none"/>
+  <path d="M620 500 L620 507" stroke="#fff" stroke-width="2" fill="none"/>
+
+  <!-- Legend -->
+  <text x="100" y="575" fill="#888" font-family="Arial, sans-serif" font-size="10">Supervision Strategies: rest_for_one (ordered startup) • one_for_all (restart together) • one_for_one (independent)</text>
+</svg>

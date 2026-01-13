@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.38.2">
+    <meta name="project" content="reckon_db v1.0.0">
+
+
+    <title>reckon_db_telemetry — reckon_db v1.0.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
+
+    <script defer src="dist/sidebar_items-8BBF0070.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-DPJLHKSM.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="readme.html" class="sidebar-projectName" translate="no">
+reckon_db
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v1.0.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of reckon_db</span>
+            <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </label>
+          <button type="submit" class="search-button" aria-label="Submit Search" tabindex="-1">
+            <i class="ri-search-2-line ri-lg" aria-hidden="true"></i>
+          </button>
+          <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+            <i class="ri-close-line ri-lg" title="Cancel search"></i>
+          </button>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">reckon_db_telemetry</span> 
+      <small class="app-vsn" translate="no">(reckon_db v1.0.0)</small>
+
+    </h1>
+
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_telemetry.erl#L20" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>Telemetry handler for reckon-db</p><p>Provides logging handler for telemetry events and utilities for attaching/detaching handlers. Additional handlers (e.g., OpenTelemetry) can be added for datacenter deployments.</p><h3 id="module-usage" class="section-heading"><a href="#module-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Usage">Usage</a></span></h3><p>Attach the default logger handler: ok = reckon_db_telemetry:attach_default_handler().</p><p>Attach a custom handler: ok = reckon_db_telemetry:attach(my_handler, fun my_module:handle/4, #{}).</p><p>Emit an event: reckon_db_telemetry:emit(?STREAM_WRITE_STOP, #{duration =&gt; 1000}, #{store_id =&gt; my_store}).</p>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h1>
+<div class="summary-functions summary">
+  <h2>
+    <a href="#functions">Functions</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#attach/3" data-no-tooltip="" translate="no">attach(HandlerId, HandlerFun, Config)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Attach a custom handler for all reckon_db events</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#attach_default_handler/0" data-no-tooltip="" translate="no">attach_default_handler()</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Attach the default logger handler for all reckon_db events</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#detach/1" data-no-tooltip="" translate="no">detach(HandlerId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Detach a handler by ID</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#detach_default_handler/0" data-no-tooltip="" translate="no">detach_default_handler()</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Detach the default logger handler</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#emit/3" data-no-tooltip="" translate="no">emit(Event, Measurements, Metadata)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Emit a telemetry event</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#handle_event/4" data-no-tooltip="" translate="no">handle_event(Event, Measurements, Meta, Config)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Handle telemetry events (logger handler)</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#span/3" data-no-tooltip="" translate="no">span(EventPrefix, Metadata, Fun)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Execute a function with start/stop telemetry Emits start event before, stop event after (with duration)</p></div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h1>
+    <div class="functions-list">
+<section class="detail" id="attach/3">
+
+  <div class="detail-header">
+    <a href="#attach/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">attach(HandlerId, HandlerFun, Config)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_telemetry.erl#L59" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> attach(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+             fun((<a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_name/0">telemetry:event_name</a>(),
+                  <a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_measurements/0">telemetry:event_measurements</a>(),
+                  <a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_metadata/0">telemetry:event_metadata</a>(),
+                  <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()) ->
+                     ok),
+             <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()) ->
+                ok | {error, already_exists}.</pre>
+
+      </div>
+
+<p>Attach a custom handler for all reckon_db events</p>
+  </section>
+</section>
+<section class="detail" id="attach_default_handler/0">
+
+  <div class="detail-header">
+    <a href="#attach_default_handler/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">attach_default_handler()</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_telemetry.erl#L43" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> attach_default_handler() -> ok | {error, already_exists}.</pre>
+
+      </div>
+
+<p>Attach the default logger handler for all reckon_db events</p>
+  </section>
+</section>
+<section class="detail" id="detach/1">
+
+  <div class="detail-header">
+    <a href="#detach/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">detach(HandlerId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_telemetry.erl#L65" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> detach(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()) -> ok | {error, not_found}.</pre>
+
+      </div>
+
+<p>Detach a handler by ID</p>
+  </section>
+</section>
+<section class="detail" id="detach_default_handler/0">
+
+  <div class="detail-header">
+    <a href="#detach_default_handler/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">detach_default_handler()</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_telemetry.erl#L52" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> detach_default_handler() -> ok | {error, not_found}.</pre>
+
+      </div>
+
+<p>Detach the default logger handler</p>
+  </section>
+</section>
+<section class="detail" id="emit/3">
+
+  <div class="detail-header">
+    <a href="#emit/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">emit(Event, Measurements, Metadata)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_telemetry.erl#L70" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> emit(<a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_name/0">telemetry:event_name</a>(), <a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_measurements/0">telemetry:event_measurements</a>(), <a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_metadata/0">telemetry:event_metadata</a>()) -> ok.</pre>
+
+      </div>
+
+<p>Emit a telemetry event</p>
+  </section>
+</section>
+<section class="detail" id="handle_event/4">
+
+  <div class="detail-header">
+    <a href="#handle_event/4" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">handle_event(Event, Measurements, Meta, Config)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_telemetry.erl#L92" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> handle_event(<a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_name/0">telemetry:event_name</a>(),
+                   <a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_measurements/0">telemetry:event_measurements</a>(),
+                   <a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_metadata/0">telemetry:event_metadata</a>(),
+                   <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()) ->
+                      ok.</pre>
+
+      </div>
+
+<p>Handle telemetry events (logger handler)</p>
+  </section>
+</section>
+<section class="detail" id="span/3">
+
+  <div class="detail-header">
+    <a href="#span/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">span(EventPrefix, Metadata, Fun)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_telemetry.erl#L77" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> span(<a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_prefix/0">telemetry:event_prefix</a>(), <a href="https://hexdocs.pm/telemetry/telemetry.html#t:event_metadata/0">telemetry:event_metadata</a>(), fun(() -> Result)) -> Result
+              when Result :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>().</pre>
+
+      </div>
+
+<p>Execute a function with start/stop telemetry Emits start event before, stop event after (with duration)</p>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/reckon_db/1.0.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/reckon_db/1.0.0">Hex Preview</a>
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="reckon_db.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.38.2) for the
+
+          <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.38.2">
+    <meta name="project" content="reckon_db v1.0.0">
+
+
+    <title>API Reference — reckon_db v1.0.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
+
+    <script defer src="dist/sidebar_items-8BBF0070.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-DPJLHKSM.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="readme.html" class="sidebar-projectName" translate="no">
+reckon_db
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v1.0.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-extra" id="main" data-type="extras">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of reckon_db</span>
+            <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </label>
+          <button type="submit" class="search-button" aria-label="Submit Search" tabindex="-1">
+            <i class="ri-search-2-line ri-lg" aria-hidden="true"></i>
+          </button>
+          <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+            <i class="ri-close-line ri-lg" title="Cancel search"></i>
+          </button>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>API Reference <small class="app-vsn">reckon_db v#1.0.0</small></h1>
+
+      <a href="https://github.com/reckon-db-org/reckon-db" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+    <section class="details-list">
+      <h2 id="modules" class="section-heading">Modules</h2>
+      <div class="summary">
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="esdb_aggregate_nif.html" translate="no">esdb_aggregate_nif</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Optimized event aggregation operations for reckon-db.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="esdb_archive_nif.html" translate="no">esdb_archive_nif</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Optimized archive compression for reckon-db.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="esdb_capability_verifier.html" translate="no">esdb_capability_verifier</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Server-side capability token verification for reckon-db.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="esdb_crypto_nif.html" translate="no">esdb_crypto_nif</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Optimized cryptographic operations for reckon-db.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="esdb_filter_nif.html" translate="no">esdb_filter_nif</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Optimized pattern matching and filtering operations for reckon-db.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="esdb_graph_nif.html" translate="no">esdb_graph_nif</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Optimized graph operations for causation analysis in reckon-db.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="esdb_hash_nif.html" translate="no">esdb_hash_nif</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Optimized hashing operations for reckon-db.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="esdb_revocation.html" translate="no">esdb_revocation</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Token revocation management for reckon-db.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_aggregator.html" translate="no">reckon_db_aggregator</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Event aggregator for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_app.html" translate="no">reckon_db_app</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Application behaviour for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_archive_backend.html" translate="no">reckon_db_archive_backend</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Archive backend behaviour for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_archive_file.html" translate="no">reckon_db_archive_file</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>File-based archive backend for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_backpressure.html" translate="no">reckon_db_backpressure</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Backpressure management for reckon-db subscriptions</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_causation.html" translate="no">reckon_db_causation</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Causation and correlation tracking for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_cluster_sup.html" translate="no">reckon_db_cluster_sup</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Cluster supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_config.html" translate="no">reckon_db_config</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Configuration management for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_consistency_checker.html" translate="no">reckon_db_consistency_checker</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Cluster consistency checker for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_core_sup.html" translate="no">reckon_db_core_sup</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Core supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_discovery.html" translate="no">reckon_db_discovery</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Cluster discovery for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_emitter.html" translate="no">reckon_db_emitter</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Emitter worker for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_emitter_group.html" translate="no">reckon_db_emitter_group</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Emitter group management for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_emitter_pool.html" translate="no">reckon_db_emitter_pool</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Emitter pool supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_emitter_sup.html" translate="no">reckon_db_emitter_sup</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Emitter supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_filters.html" translate="no">reckon_db_filters</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Khepri event filters for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_gateway_sup.html" translate="no">reckon_db_gateway_sup</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Gateway supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_gateway_worker.html" translate="no">reckon_db_gateway_worker</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Gateway worker for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_health_prober.html" translate="no">reckon_db_health_prober</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Active health prober for reckon-db cluster nodes</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_leader.html" translate="no">reckon_db_leader</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Leader worker for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_leader_sup.html" translate="no">reckon_db_leader_sup</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Leader supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_leader_tracker.html" translate="no">reckon_db_leader_tracker</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Leader tracker for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_links.html" translate="no">reckon_db_links</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Stream linking and simple projections for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_memory.html" translate="no">reckon_db_memory</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Memory pressure monitoring for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_naming.html" translate="no">reckon_db_naming</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Process naming utilities for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_node_monitor.html" translate="no">reckon_db_node_monitor</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Node monitor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_notification_sup.html" translate="no">reckon_db_notification_sup</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Notification supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_persistence_sup.html" translate="no">reckon_db_persistence_sup</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Persistence supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_persistence_worker.html" translate="no">reckon_db_persistence_worker</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Persistence worker for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_scavenge.html" translate="no">reckon_db_scavenge</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Scavenging and archival for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_schema.html" translate="no">reckon_db_schema</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Schema registry and upcasting for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_snapshots.html" translate="no">reckon_db_snapshots</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Snapshots API facade for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_snapshots_store.html" translate="no">reckon_db_snapshots_store</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Snapshots store for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_store.html" translate="no">reckon_db_store</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Khepri store lifecycle management for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_store_coordinator.html" translate="no">reckon_db_store_coordinator</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Store coordinator for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_store_mgr.html" translate="no">reckon_db_store_mgr</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Store manager for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_streams.html" translate="no">reckon_db_streams</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Streams API facade for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_streams_reader.html" translate="no">reckon_db_streams_reader</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Streams reader worker for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_streams_sup.html" translate="no">reckon_db_streams_sup</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Streams supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_streams_writer.html" translate="no">reckon_db_streams_writer</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Streams writer worker for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_subscriptions.html" translate="no">reckon_db_subscriptions</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Subscriptions API facade for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_subscriptions_store.html" translate="no">reckon_db_subscriptions_store</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Subscriptions store for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_sup.html" translate="no">reckon_db_sup</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Top-level supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_system_sup.html" translate="no">reckon_db_system_sup</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Per-store system supervisor for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_telemetry.html" translate="no">reckon_db_telemetry</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Telemetry handler for reckon-db</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_temporal.html" translate="no">reckon_db_temporal</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Temporal queries for reckon-db.</p></div>
+
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="reckon_db_tracker_group.html" translate="no">reckon_db_tracker_group</a>
+
+  </div>
+
+    <div class="summary-synopsis"><p>Tracker group management for reckon-db</p></div>
+
+</div>
+
+      </div>
+    </section>
+
+
+</div>
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/reckon_db/1.0.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/reckon_db/1.0.0">Hex Preview</a>
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="reckon_db.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.38.2) for the
+
+          <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>
