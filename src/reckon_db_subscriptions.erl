@@ -29,7 +29,8 @@
     ack/4,
     get/2,
     list/1,
-    exists/2
+    exists/2,
+    setup_tracking/2
 ]).
 
 %%====================================================================
@@ -161,6 +162,20 @@ list(StoreId) ->
 -spec exists(atom(), binary()) -> boolean().
 exists(StoreId, Key) ->
     reckon_db_subscriptions_store:exists(StoreId, Key).
+
+%% @doc Setup subscription tracking for a process
+%%
+%% Joins the tracker group for subscriptions, allowing the process
+%% to receive notifications about subscription lifecycle events
+%% (created, updated, deleted).
+%%
+%% The process will receive messages in the format:
+%% - {feature_created, subscriptions, Data}
+%% - {feature_updated, subscriptions, Data}
+%% - {feature_deleted, subscriptions, Data}
+-spec setup_tracking(atom(), pid()) -> ok.
+setup_tracking(StoreId, Pid) ->
+    reckon_db_tracker_group:join(StoreId, subscriptions, Pid).
 
 %% @doc Acknowledge event delivery for a subscription
 %%

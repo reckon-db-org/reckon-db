@@ -31,9 +31,13 @@
 %%====================================================================
 
 %% @doc Start the store worker
+%% IMPORTANT: We use store_worker_name/1 for gen_server registration to avoid
+%% conflicting with Khepri's internal naming. Khepri uses the StoreId for
+%% its Ra cluster and process registration.
 -spec start_link(store_config()) -> {ok, pid()} | {error, term()}.
 start_link(#store_config{store_id = StoreId} = Config) ->
-    gen_server:start_link({local, StoreId}, ?MODULE, Config, []).
+    WorkerName = reckon_db_naming:store_worker_name(StoreId),
+    gen_server:start_link({local, WorkerName}, ?MODULE, Config, []).
 
 %% @doc Get the store name (for use with khepri operations)
 -spec get_store(atom()) -> atom().
@@ -153,11 +157,12 @@ terminate(Reason, #state{store_id = StoreId, started_at = StartedAt}) ->
 -spec start_khepri_store(atom(), string(), single | cluster) -> ok | {error, term()}.
 start_khepri_store(StoreId, DataDir, single) ->
     %% Single node mode - simple khepri start
-    KhepriOpts = #{
-        data_dir => DataDir,
-        store_id => StoreId
-    },
-    case khepri:start(StoreId, KhepriOpts) of
+    %% IMPORTANT: First argument MUST be DataDir (string/binary), not StoreId (atom).
+    %% When khepri:start/2 receives a path as first arg, it auto-creates the Ra system.
+    %% When it receives an atom, it assumes that Ra system already exists and fails
+    %% with :system_not_started if it doesn't.
+    Timeout = application:get_env(reckon_db, default_timeout, ?DEFAULT_TIMEOUT),
+    case khepri:start(DataDir, StoreId, Timeout) of
         {ok, _} -> ok;
         {error, {already_started, _}} -> ok;
         Error -> Error
@@ -165,6 +170,10 @@ start_khepri_store(StoreId, DataDir, single) ->
 
 start_khepri_store(StoreId, DataDir, cluster) ->
     %% Cluster mode - start with Ra cluster configuration
+    %% IMPORTANT: First argument MUST be DataDir (string/binary), not StoreId (atom).
+    %% When khepri:start/2 receives a path as first arg, it auto-creates the Ra system.
+    %% When it receives an atom, it assumes that Ra system already exists and fails
+    %% with :system_not_started if it doesn't.
     RaServerConfig = #{
         cluster_name => StoreId,
         id => {StoreId, node()},
@@ -174,11 +183,10 @@ start_khepri_store(StoreId, DataDir, cluster) ->
         machine => {module, khepri_machine, #{store_id => StoreId}}
     },
     KhepriOpts = #{
-        data_dir => DataDir,
         store_id => StoreId,
         ra_server_config => RaServerConfig
     },
-    case khepri:start(StoreId, KhepriOpts) of
+    case khepri:start(DataDir, KhepriOpts) of
         {ok, _} -> ok;
         {error, {already_started, _}} -> ok;
         Error -> Error

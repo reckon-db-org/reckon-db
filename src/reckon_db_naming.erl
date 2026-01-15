@@ -22,6 +22,7 @@
 
     %% Worker names
     store_name/1,
+    store_worker_name/1,
     store_mgr_name/1,
     subscriptions_store_name/1,
     snapshots_store_name/1,
@@ -101,6 +102,13 @@ leader_sup_name(StoreId) ->
 -spec store_name(atom()) -> atom().
 store_name(StoreId) ->
     StoreId.
+
+%% @doc Store worker name (the gen_server that starts Khepri)
+%% NOTE: This is different from store_name/1 (Khepri operations) and
+%% store_mgr_name/1 (store lifecycle coordination).
+-spec store_worker_name(atom()) -> atom().
+store_worker_name(StoreId) ->
+    make_name("reckon_db_store_", StoreId).
 
 %% @doc Store manager worker name
 -spec store_mgr_name(atom()) -> atom().
