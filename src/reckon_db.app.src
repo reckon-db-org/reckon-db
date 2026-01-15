@@ -1,6 +1,6 @@
 {application, reckon_db, [
     {description, "BEAM-native Event Store built on Khepri/Ra"},
-    {vsn, "1.0.1"},
+    {vsn, "1.0.2"},
     {registered, []},
     {mod, {reckon_db_app, []}},
     {applications, [
