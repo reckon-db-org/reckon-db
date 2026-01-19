@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.38.2">
-    <meta name="project" content="reckon_db v1.0.0">
+    <meta name="project" content="reckon_db v1.0.2">
 
 
-    <title>reckon_db_backpressure — reckon_db v1.0.0</title>
+    <title>reckon_db_backpressure — reckon_db v1.0.2</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-8BBF0070.js"></script>
+    <script defer src="dist/sidebar_items-FE2ADC19.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.0.0
+          v1.0.2
         </div>
       </div>
     </div>
@@ -76,11 +76,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_backpressure</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.0.0)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.0.2)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L25" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L25" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -89,13 +89,13 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Backpressure management for reckon-db subscriptions</p><p>Provides queue-based backpressure handling to prevent memory explosion when subscribers are slower than event producers.</p><p>Features: - Configurable queue size limits - Multiple overflow strategies (drop_oldest, drop_newest, block, error) - Pull mode for explicit demand - Warning thresholds with telemetry</p><p>Usage:</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="p" data-group-id="5897924194-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Queue</span><span class="p" data-group-id="5897924194-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">new</span><span class="p" data-group-id="5897924194-2">(</span><span class="p" data-group-id="5897924194-3">#{</span><span class="w">
+<p>Backpressure management for reckon-db subscriptions</p><p>Provides queue-based backpressure handling to prevent memory explosion when subscribers are slower than event producers.</p><p>Features: - Configurable queue size limits - Multiple overflow strategies (drop_oldest, drop_newest, block, error) - Pull mode for explicit demand - Warning thresholds with telemetry</p><p>Usage:</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="p" data-group-id="1922181240-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Queue</span><span class="p" data-group-id="1922181240-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">new</span><span class="p" data-group-id="1922181240-2">(</span><span class="p" data-group-id="1922181240-3">#{</span><span class="w">
       </span><span class="ss">max_queue</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="mi">1000</span><span class="p">,</span><span class="w">
       </span><span class="ss">strategy</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="ss">drop_oldest</span><span class="p">,</span><span class="w">
       </span><span class="ss">warning_threshold</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="mi">800</span><span class="w">
-  </span><span class="p" data-group-id="5897924194-3">}</span><span class="p" data-group-id="5897924194-2">)</span><span class="p">,</span><span class="w">
-  </span><span class="p" data-group-id="5897924194-4">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Queue2</span><span class="p" data-group-id="5897924194-4">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">enqueue</span><span class="p" data-group-id="5897924194-5">(</span><span class="n">Queue</span><span class="p">,</span><span class="w"> </span><span class="n">Event</span><span class="p" data-group-id="5897924194-5">)</span><span class="p">,</span><span class="w">
-  </span><span class="p" data-group-id="5897924194-6">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Events</span><span class="p">,</span><span class="w"> </span><span class="n">Queue3</span><span class="p" data-group-id="5897924194-6">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">dequeue</span><span class="p" data-group-id="5897924194-7">(</span><span class="n">Queue2</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p" data-group-id="5897924194-7">)</span><span class="p">.</span></code></pre>
+  </span><span class="p" data-group-id="1922181240-3">}</span><span class="p" data-group-id="1922181240-2">)</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="1922181240-4">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Queue2</span><span class="p" data-group-id="1922181240-4">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">enqueue</span><span class="p" data-group-id="1922181240-5">(</span><span class="n">Queue</span><span class="p">,</span><span class="w"> </span><span class="n">Event</span><span class="p" data-group-id="1922181240-5">)</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="1922181240-6">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Events</span><span class="p">,</span><span class="w"> </span><span class="n">Queue3</span><span class="p" data-group-id="1922181240-6">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">dequeue</span><span class="p" data-group-id="1922181240-7">(</span><span class="n">Queue2</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p" data-group-id="1922181240-7">)</span><span class="p">.</span></code></pre>
     </section>
 
 </div>
@@ -301,7 +301,7 @@ reckon_db
       <h1 class="signature" translate="no">bp_opts/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L65" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L65" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -335,7 +335,7 @@ reckon_db
       <h1 class="signature" translate="no">bp_queue/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L64" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L64" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -372,7 +372,7 @@ reckon_db
       <h1 class="signature" translate="no">event/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L70" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L70" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -410,7 +410,7 @@ reckon_db
       <h1 class="signature" translate="no">mode/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L50" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L50" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -438,7 +438,7 @@ reckon_db
       <h1 class="signature" translate="no">strategy/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L49" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L49" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -478,7 +478,7 @@ reckon_db
       <h1 class="signature" translate="no">add_demand(Bp_queue, Count)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L201" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L201" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -506,7 +506,7 @@ reckon_db
       <h1 class="signature" translate="no">dequeue(Queue, Count)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L146" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L146" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -534,7 +534,7 @@ reckon_db
       <h1 class="signature" translate="no">dequeue_all(Queue)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L156" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L156" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -562,7 +562,7 @@ reckon_db
       <h1 class="signature" translate="no">enqueue(Queue, Event)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L109" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L109" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -590,7 +590,7 @@ reckon_db
       <h1 class="signature" translate="no">enqueue_many(Queue, Rest)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L134" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L134" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -618,7 +618,7 @@ reckon_db
       <h1 class="signature" translate="no">get_demand(Bp_queue)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L208" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L208" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -646,7 +646,7 @@ reckon_db
       <h1 class="signature" translate="no">info(Bp_queue)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L181" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L181" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -674,7 +674,7 @@ reckon_db
       <h1 class="signature" translate="no">is_empty(Bp_queue)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L171" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L171" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -702,7 +702,7 @@ reckon_db
       <h1 class="signature" translate="no">is_full(Bp_queue)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L176" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L176" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -730,7 +730,7 @@ reckon_db
       <h1 class="signature" translate="no">new(Opts)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L82" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L82" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -758,7 +758,7 @@ reckon_db
       <h1 class="signature" translate="no">set_demand(Queue, Demand)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L196" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L196" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -786,7 +786,7 @@ reckon_db
       <h1 class="signature" translate="no">size(Bp_queue)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.0/src/reckon_db_backpressure.erl#L166" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_backpressure.erl#L166" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -812,9 +812,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.0.0" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.0.2" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.0.0">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.0.2">Hex Preview</a>
 
           </span>
 

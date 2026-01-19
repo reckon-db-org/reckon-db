@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-01-19
+
+### Changed
+
+- **Dependencies**: Updated reckon_gater from exact `1.0.0` to `~> 1.0.3` to include
+  critical double-wrapping bugfix
+
+## [1.0.2] - 2026-01-09
+
+### Fixed
+
+- **Documentation**: Minor documentation improvements
+
 ## [1.0.0] - 2026-01-03
 
 ### Changed
