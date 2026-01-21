@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.38.2">
-    <meta name="project" content="reckon_db v1.1.0">
+    <meta name="project" content="reckon_db v1.2.0">
 
 
-    <title>esdb_crypto_nif — reckon_db v1.1.0</title>
+    <title>esdb_crypto_nif — reckon_db v1.2.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-B1D808EB.js"></script>
+    <script defer src="dist/sidebar_items-36A01327.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.1.0
+          v1.2.0
         </div>
       </div>
     </div>
@@ -76,11 +76,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">esdb_crypto_nif</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.1.0)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.2.0)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/esdb_crypto_nif.erl#L33" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/esdb_crypto_nif.erl#L33" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -90,14 +90,14 @@ reckon_db
 
     <section id="moduledoc">
 <p>Optimized cryptographic operations for reckon-db.</p><p>This module provides high-performance implementations of cryptographic operations used throughout reckon-db. It supports two modes:</p><ul><li><b>Enterprise mode</b>: Uses Rust NIFs for maximum performance</li><li><b>Community mode</b>: Uses pure Erlang fallbacks (fully functional)</li></ul><p>The mode is automatically detected at startup based on whether the NIF library is available. Community edition users (hex.pm) will always use the Erlang fallbacks, which provide identical functionality.</p><h3 id="module-usage" class="section-heading"><a href="#module-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Usage">Usage</a></span></h3><p>All functions work identically regardless of which implementation is active:</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Verify Ed25519 signature</span><span class="w">
-  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_crypto_nif</span><span class="p">:</span><span class="nf">verify_ed25519</span><span class="p" data-group-id="5915633393-1">(</span><span class="n">Message</span><span class="p">,</span><span class="w"> </span><span class="n">Signature</span><span class="p">,</span><span class="w"> </span><span class="n">PublicKey</span><span class="p" data-group-id="5915633393-1">)</span><span class="p">.</span><span class="w">
+  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_crypto_nif</span><span class="p">:</span><span class="nf">verify_ed25519</span><span class="p" data-group-id="3776193876-1">(</span><span class="n">Message</span><span class="p">,</span><span class="w"> </span><span class="n">Signature</span><span class="p">,</span><span class="w"> </span><span class="n">PublicKey</span><span class="p" data-group-id="3776193876-1">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Generate token CID (SHA256 + base64)</span><span class="w">
-  </span><span class="n">CID</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_crypto_nif</span><span class="p">:</span><span class="nf">hash_sha256_base64</span><span class="p" data-group-id="5915633393-2">(</span><span class="n">Data</span><span class="p" data-group-id="5915633393-2">)</span><span class="p">.</span><span class="w">
+  </span><span class="n">CID</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_crypto_nif</span><span class="p">:</span><span class="nf">hash_sha256_base64</span><span class="p" data-group-id="3776193876-2">(</span><span class="n">Data</span><span class="p" data-group-id="3776193876-2">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Check which mode is active</span><span class="w">
-  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_crypto_nif</span><span class="p">:</span><span class="nf">is_nif_loaded</span><span class="p" data-group-id="5915633393-3">(</span><span class="p" data-group-id="5915633393-3">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
-  </span><span class="ss">false</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_crypto_nif</span><span class="p">:</span><span class="nf">is_nif_loaded</span><span class="p" data-group-id="5915633393-4">(</span><span class="p" data-group-id="5915633393-4">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
+  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_crypto_nif</span><span class="p">:</span><span class="nf">is_nif_loaded</span><span class="p" data-group-id="3776193876-3">(</span><span class="p" data-group-id="3776193876-3">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
+  </span><span class="ss">false</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_crypto_nif</span><span class="p">:</span><span class="nf">is_nif_loaded</span><span class="p" data-group-id="3776193876-4">(</span><span class="p" data-group-id="3776193876-4">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
     </section>
 
 </div>
@@ -217,7 +217,7 @@ reckon_db
       <h1 class="signature" translate="no">base64_decode_urlsafe(Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/esdb_crypto_nif.erl#L206" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/esdb_crypto_nif.erl#L206" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -245,7 +245,7 @@ reckon_db
       <h1 class="signature" translate="no">base64_encode_urlsafe(Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/esdb_crypto_nif.erl#L195" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/esdb_crypto_nif.erl#L195" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -273,7 +273,7 @@ reckon_db
       <h1 class="signature" translate="no">hash_sha256(Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/esdb_crypto_nif.erl#L174" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/esdb_crypto_nif.erl#L174" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -301,7 +301,7 @@ reckon_db
       <h1 class="signature" translate="no">hash_sha256_base64(Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/esdb_crypto_nif.erl#L187" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/esdb_crypto_nif.erl#L187" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -329,7 +329,7 @@ reckon_db
       <h1 class="signature" translate="no">implementation()</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/esdb_crypto_nif.erl#L139" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/esdb_crypto_nif.erl#L139" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -357,7 +357,7 @@ reckon_db
       <h1 class="signature" translate="no">is_nif_loaded()</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/esdb_crypto_nif.erl#L132" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/esdb_crypto_nif.erl#L132" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -385,7 +385,7 @@ reckon_db
       <h1 class="signature" translate="no">secure_compare(A, B)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/esdb_crypto_nif.erl#L224" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/esdb_crypto_nif.erl#L224" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -413,7 +413,7 @@ reckon_db
       <h1 class="signature" translate="no">verify_ed25519(Message, Signature, PublicKey)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/esdb_crypto_nif.erl#L164" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/esdb_crypto_nif.erl#L164" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -439,9 +439,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.1.0" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.2.0" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.1.0">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.2.0">Hex Preview</a>
 
           </span>
 

@@ -8,7 +8,7 @@
     <meta name="project" content="reckon_db v1.2.0">
 
 
-    <title>reckon_db_store — reckon_db v1.2.0</title>
+    <title>reckon_db — reckon_db v1.2.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
@@ -75,12 +75,12 @@ reckon_db
 <div id="top-content">
   <div class="heading-with-actions top-heading">
     <h1>
-      <span translate="no">reckon_db_store</span> 
+      <span translate="no">reckon_db</span> 
       <small class="app-vsn" translate="no">(reckon_db v1.2.0)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db_store.erl#L10" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db.erl#L13" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -89,7 +89,7 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Khepri store lifecycle management for reckon-db</p><p>Manages the Khepri store instance, including: - Starting and stopping the store - Cluster formation (in cluster mode) - Health checks</p>
+<p>Facade module for reckon-db event store</p><p>Provides a convenient API for common reckon-db operations. This module delegates to the appropriate internal modules.</p><h3 id="module-store-discovery" class="section-heading"><a href="#module-store-discovery" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Store_Discovery">Store Discovery</a></span></h3><p>The list_stores/0 function returns all stores known across the cluster, discovered via the distributed store registry.</p>
     </section>
 
 </div>
@@ -126,17 +126,17 @@ reckon_db
 
       </div>
 
-        <div class="summary-synopsis"><p>Get the current leader node for the store</p></div>
+        <div class="summary-synopsis"><p>Get the current leader node for a store (cluster mode)</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#get_store/1" data-no-tooltip="" translate="no">get_store(StoreId)</a>
+        <a href="#get_store_info/1" data-no-tooltip="" translate="no">get_store_info(StoreId)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Get the store name (for use with khepri operations)</p></div>
+        <div class="summary-synopsis"><p>Get detailed information about a specific store</p></div>
 
     </div>
 
@@ -146,17 +146,57 @@ reckon_db
 
       </div>
 
-        <div class="summary-synopsis"><p>Check if the store is ready</p></div>
+        <div class="summary-synopsis"><p>Check if a store is ready for operations</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#start_link/1" data-no-tooltip="" translate="no">start_link(Store_config)</a>
+        <a href="#list_stores/0" data-no-tooltip="" translate="no">list_stores()</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Start the store worker IMPORTANT: We use store_worker_name/1 for gen_server registration to avoid conflicting with Khepri's internal naming. Khepri uses the StoreId for its Ra cluster and process registration.</p></div>
+        <div class="summary-synopsis"><p>List all stores known in the cluster</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#list_stores_on_node/1" data-no-tooltip="" translate="no">list_stores_on_node(Node)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>List stores running on a specific node</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#start_store/1" data-no-tooltip="" translate="no">start_store(StoreIdOrConfig)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Start a store dynamically</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#stop_store/1" data-no-tooltip="" translate="no">stop_store(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Stop a running store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#which_stores/0" data-no-tooltip="" translate="no">which_stores()</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Get list of stores running on this node (from supervisor)</p></div>
 
     </div>
 
@@ -231,7 +271,7 @@ reckon_db
       <h1 class="signature" translate="no">get_leader(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db_store.erl#L58" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db.erl#L103" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -246,20 +286,20 @@ reckon_db
 
       </div>
 
-<p>Get the current leader node for the store</p>
+<p>Get the current leader node for a store (cluster mode)</p>
   </section>
 </section>
-<section class="detail" id="get_store/1">
+<section class="detail" id="get_store_info/1">
 
   <div class="detail-header">
-    <a href="#get_store/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#get_store_info/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">get_store(StoreId)</h1>
+      <h1 class="signature" translate="no">get_store_info(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db_store.erl#L44" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db.erl#L59" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -270,11 +310,11 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> get_store(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+          <pre translate="no"><span class="attribute">-spec</span> get_store_info(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()} | {error, not_found}.</pre>
 
       </div>
 
-<p>Get the store name (for use with khepri operations)</p>
+<p>Get detailed information about a specific store</p>
   </section>
 </section>
 <section class="detail" id="is_ready/1">
@@ -287,7 +327,7 @@ reckon_db
       <h1 class="signature" translate="no">is_ready(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db_store.erl#L49" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db.erl#L98" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -302,20 +342,20 @@ reckon_db
 
       </div>
 
-<p>Check if the store is ready</p>
+<p>Check if a store is ready for operations</p>
   </section>
 </section>
-<section class="detail" id="start_link/1">
+<section class="detail" id="list_stores/0">
 
   <div class="detail-header">
-    <a href="#start_link/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#list_stores/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">start_link(Store_config)</h1>
+      <h1 class="signature" translate="no">list_stores()</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db_store.erl#L38" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db.erl#L54" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -326,11 +366,123 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> start_link(<a href="#t:store_config/0">store_config</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> list_stores() -> {ok, [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Start the store worker IMPORTANT: We use store_worker_name/1 for gen_server registration to avoid conflicting with Khepri's internal naming. Khepri uses the StoreId for its Ra cluster and process registration.</p>
+<p>List all stores known in the cluster</p><p>Returns a list of maps containing store information including: - store_id: The store identifier - node: The node where the store is running - mode: single or cluster - data_dir: Data directory path - timeout: Default operation timeout - registered_at: Timestamp when store was registered</p><p>This queries the distributed store registry which maintains an eventually consistent view of all stores across all nodes.</p>
+  </section>
+</section>
+<section class="detail" id="list_stores_on_node/1">
+
+  <div class="detail-header">
+    <a href="#list_stores_on_node/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">list_stores_on_node(Node)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db.erl#L64" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> list_stores_on_node(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:node/0">node</a>()) -> {ok, [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>List stores running on a specific node</p>
+  </section>
+</section>
+<section class="detail" id="start_store/1">
+
+  <div class="detail-header">
+    <a href="#start_store/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">start_store(StoreIdOrConfig)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db.erl#L76" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> start_store(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>() | <a href="#t:store_config/0">store_config</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Start a store dynamically</p><p>The store must be configured in the application environment, or a store_config record can be provided directly.</p>
+  </section>
+</section>
+<section class="detail" id="stop_store/1">
+
+  <div class="detail-header">
+    <a href="#stop_store/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">stop_store(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db.erl#L81" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> stop_store(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Stop a running store</p>
+  </section>
+</section>
+<section class="detail" id="which_stores/0">
+
+  <div class="detail-header">
+    <a href="#which_stores/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">which_stores()</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.0/src/reckon_db.erl#L89" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> which_stores() -> [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()].</pre>
+
+      </div>
+
+<p>Get list of stores running on this node (from supervisor)</p><p>Unlike list_stores/0 which returns all cluster stores from the registry, this returns only stores supervised by the local supervisor.</p>
   </section>
 </section>
 

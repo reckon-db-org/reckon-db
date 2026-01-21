@@ -73,16 +73,29 @@ init([]) ->
         period => 60
     },
 
+    %% Store registry must start first (before any stores)
+    RegistryChild = #{
+        id => reckon_db_store_registry,
+        start => {reckon_db_store_registry, start_link, []},
+        restart => permanent,
+        shutdown => 5000,
+        type => worker,
+        modules => [reckon_db_store_registry]
+    },
+
     %% Get configured stores from application environment
     StoreConfigs = reckon_db_config:get_all_store_configs(),
 
     %% Create child specs for each store
-    Children = lists:map(
+    StoreChildren = lists:map(
         fun(#store_config{store_id = StoreId} = Config) ->
             store_child_spec(StoreId, Config)
         end,
         StoreConfigs
     ),
+
+    %% Registry first, then stores
+    Children = [RegistryChild | StoreChildren],
 
     {ok, {SupFlags, Children}}.
 

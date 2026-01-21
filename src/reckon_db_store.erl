@@ -103,6 +103,9 @@ init(#store_config{store_id = StoreId, data_dir = DataDir, mode = Mode} = Config
 
             logger:info("Khepri store ~p started in ~p mode", [StoreId, Mode]),
 
+            %% Announce store to the distributed registry
+            ok = reckon_db_store_registry:announce_store(StoreId, Config),
+
             State = #state{
                 store_id = StoreId,
                 config = Config,
@@ -132,6 +135,9 @@ handle_info(_Info, State) ->
 %% @private
 terminate(Reason, #state{store_id = StoreId, started_at = StartedAt}) ->
     Uptime = erlang:system_time(millisecond) - StartedAt,
+
+    %% Unannounce store from the distributed registry
+    catch reckon_db_store_registry:unannounce_store(StoreId),
 
     %% Emit telemetry
     telemetry:execute(
