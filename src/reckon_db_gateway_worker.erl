@@ -95,6 +95,12 @@ handle_call({read_by_event_types, _StoreId, EventTypes, BatchSize}, _From,
     Result = reckon_db_streams:read_by_event_types(StoreId, EventTypes, BatchSize),
     {reply, Result, State};
 
+%% Read events by tags (native Khepri filtering with ANY/ALL matching)
+handle_call({read_by_tags, _StoreId, Tags, Match, BatchSize}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_streams:read_by_tags(StoreId, Tags, Match, BatchSize),
+    {reply, Result, State};
+
 %% Get subscription by name (for checkpoint retrieval)
 handle_call({get_subscription, _StoreId, SubscriptionName}, _From,
             #state{store_id = StoreId} = State) ->

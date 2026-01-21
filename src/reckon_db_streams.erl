@@ -22,6 +22,7 @@
     read/5,
     read_all/4,
     read_by_event_types/3,
+    read_by_tags/4,
     get_version/2,
     exists/2,
     list_streams/1,
@@ -42,6 +43,7 @@
     event_type := binary(),
     data := map() | binary(),
     metadata => map(),
+    tags => [binary()],
     event_id => binary()
 }.
 
@@ -215,6 +217,102 @@ read_by_event_types(StoreId, EventTypes, BatchSize) when is_list(EventTypes) ->
             Error
     end.
 
+%% @doc Read all events matching tags from all streams.
+%%
+%% Tags provide a mechanism for cross-stream querying without affecting
+%% stream-based concurrency control. This is useful for the process-centric
+%% model where you want to find all events related to specific participants.
+%%
+%% == Match Modes ==
+%%
+%% `any' (default): Returns events containing ANY of the specified tags (union).
+%%   Example: `read_by_tags(Store, [<<"student:456">>, <<"student:789">>], any, 100)'
+%%   Returns events for either student.
+%%
+%% `all': Returns events containing ALL of the specified tags (intersection).
+%%   Example: `read_by_tags(Store, [<<"student:456">>, <<"course:CS101">>], all, 100)'
+%%   Returns only events tagged with both student 456 AND course CS101.
+%%
+%% == Parameters ==
+%%
+%%   StoreId   - The store identifier
+%%   Tags      - List of tag binaries to match
+%%   Match     - `any' | `all' (matching strategy)
+%%   BatchSize - Maximum number of events to return
+%%
+%% == Returns ==
+%%
+%% Events sorted by epoch_us (global ordering).
+-spec read_by_tags(atom(), [binary()], any | all, pos_integer()) ->
+    {ok, [event()]} | {error, term()}.
+read_by_tags(StoreId, Tags, Match, BatchSize) when is_list(Tags), is_atom(Match) ->
+    %% Query all events from all streams and filter by tags in Erlang.
+    %% Khepri's pattern matching doesn't easily support list membership checks,
+    %% so we fetch events with data and filter client-side.
+    %%
+    %% For large stores, consider maintaining a separate tag index.
+    Path = [streams,
+            ?KHEPRI_WILDCARD_STAR,  %% Any stream ID
+            #if_all{conditions = [
+                ?KHEPRI_WILDCARD_STAR,  %% Any version
+                #if_has_data{has_data = true}
+            ]}],
+
+    case khepri:get_many(StoreId, Path) of
+        {ok, Results} when is_map(Results) ->
+            %% Convert results to events
+            AllEvents = [convert_result_to_event(PathKey, Value)
+                         || {PathKey, Value} <- maps:to_list(Results)],
+            ValidEvents = [E || E <- AllEvents, E =/= undefined],
+
+            %% Filter by tag match mode (only events with tags list)
+            FilteredEvents = filter_events_by_tags(ValidEvents, Tags, Match),
+
+            %% Sort by epoch_us for global ordering
+            SortedEvents = lists:sort(
+                fun(#event{epoch_us = E1}, #event{epoch_us = E2}) -> E1 =< E2 end,
+                FilteredEvents
+            ),
+
+            %% Apply batch size limit
+            LimitedEvents = lists:sublist(SortedEvents, BatchSize),
+            {ok, LimitedEvents};
+        {ok, _} ->
+            {ok, []};
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private Filter events by tags according to match mode
+%% Empty search tags always returns empty (no criteria = no results)
+-spec filter_events_by_tags([event()], [binary()], any | all) -> [event()].
+filter_events_by_tags(_Events, [], _Match) ->
+    [];
+filter_events_by_tags(Events, Tags, any) ->
+    %% Return events that have ANY of the tags (union)
+    TagSet = sets:from_list(Tags),
+    lists:filter(
+        fun(#event{tags = EventTags}) when is_list(EventTags), EventTags =/= [] ->
+            EventTagSet = sets:from_list(EventTags),
+            sets:size(sets:intersection(TagSet, EventTagSet)) > 0;
+           (_) ->
+            false
+        end,
+        Events
+    );
+filter_events_by_tags(Events, Tags, all) ->
+    %% Return events that have ALL of the tags (intersection)
+    TagSet = sets:from_list(Tags),
+    lists:filter(
+        fun(#event{tags = EventTags}) when is_list(EventTags), EventTags =/= [] ->
+            EventTagSet = sets:from_list(EventTags),
+            sets:is_subset(TagSet, EventTagSet);
+           (_) ->
+            false
+        end,
+        Events
+    ).
+
 %% @private Convert a Khepri result to an event, adding stream_id from path
 -spec convert_result_to_event([atom() | binary()], term()) -> event() | undefined.
 convert_result_to_event([streams, StreamId | _], Event) when is_record(Event, event) ->
@@ -342,6 +440,7 @@ create_event_record(Event, StreamId, Version, Timestamp, EpochUs) ->
     EventType = maps:get(event_type, Event),
     Data = maps:get(data, Event),
     Metadata = maps:get(metadata, Event, #{}),
+    Tags = maps:get(tags, Event, undefined),
     DataContentType = maps:get(data_content_type, Event, ?CONTENT_TYPE_JSON),
     MetadataContentType = maps:get(metadata_content_type, Event, ?CONTENT_TYPE_JSON),
 
@@ -352,6 +451,7 @@ create_event_record(Event, StreamId, Version, Timestamp, EpochUs) ->
         version = Version,
         data = Data,
         metadata = Metadata,
+        tags = Tags,
         timestamp = Timestamp,
         epoch_us = EpochUs,
         data_content_type = DataContentType,
@@ -429,6 +529,7 @@ map_to_event(Map) ->
         version = maps:get(version, Map, 0),
         data = maps:get(data, Map, #{}),
         metadata = maps:get(metadata, Map, #{}),
+        tags = maps:get(tags, Map, undefined),
         timestamp = maps:get(timestamp, Map, 0),
         epoch_us = maps:get(epoch_us, Map, 0),
         data_content_type = maps:get(data_content_type, Map, ?CONTENT_TYPE_JSON),
