@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-C13C6AD1.js"></script>
+    <script defer src="dist/sidebar_items-B1D808EB.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -89,13 +89,13 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Backpressure management for reckon-db subscriptions</p><p>Provides queue-based backpressure handling to prevent memory explosion when subscribers are slower than event producers.</p><p>Features: - Configurable queue size limits - Multiple overflow strategies (drop_oldest, drop_newest, block, error) - Pull mode for explicit demand - Warning thresholds with telemetry</p><p>Usage:</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="p" data-group-id="6093029528-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Queue</span><span class="p" data-group-id="6093029528-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">new</span><span class="p" data-group-id="6093029528-2">(</span><span class="p" data-group-id="6093029528-3">#{</span><span class="w">
+<p>Backpressure management for reckon-db subscriptions</p><p>Provides queue-based backpressure handling to prevent memory explosion when subscribers are slower than event producers.</p><p>Features: - Configurable queue size limits - Multiple overflow strategies (drop_oldest, drop_newest, block, error) - Pull mode for explicit demand - Warning thresholds with telemetry</p><p>Usage:</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="p" data-group-id="2653513938-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Queue</span><span class="p" data-group-id="2653513938-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">new</span><span class="p" data-group-id="2653513938-2">(</span><span class="p" data-group-id="2653513938-3">#{</span><span class="w">
       </span><span class="ss">max_queue</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="mi">1000</span><span class="p">,</span><span class="w">
       </span><span class="ss">strategy</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="ss">drop_oldest</span><span class="p">,</span><span class="w">
       </span><span class="ss">warning_threshold</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="mi">800</span><span class="w">
-  </span><span class="p" data-group-id="6093029528-3">}</span><span class="p" data-group-id="6093029528-2">)</span><span class="p">,</span><span class="w">
-  </span><span class="p" data-group-id="6093029528-4">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Queue2</span><span class="p" data-group-id="6093029528-4">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">enqueue</span><span class="p" data-group-id="6093029528-5">(</span><span class="n">Queue</span><span class="p">,</span><span class="w"> </span><span class="n">Event</span><span class="p" data-group-id="6093029528-5">)</span><span class="p">,</span><span class="w">
-  </span><span class="p" data-group-id="6093029528-6">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Events</span><span class="p">,</span><span class="w"> </span><span class="n">Queue3</span><span class="p" data-group-id="6093029528-6">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">dequeue</span><span class="p" data-group-id="6093029528-7">(</span><span class="n">Queue2</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p" data-group-id="6093029528-7">)</span><span class="p">.</span></code></pre>
+  </span><span class="p" data-group-id="2653513938-3">}</span><span class="p" data-group-id="2653513938-2">)</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="2653513938-4">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Queue2</span><span class="p" data-group-id="2653513938-4">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">enqueue</span><span class="p" data-group-id="2653513938-5">(</span><span class="n">Queue</span><span class="p">,</span><span class="w"> </span><span class="n">Event</span><span class="p" data-group-id="2653513938-5">)</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="2653513938-6">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Events</span><span class="p">,</span><span class="w"> </span><span class="n">Queue3</span><span class="p" data-group-id="2653513938-6">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_backpressure</span><span class="p">:</span><span class="nf">dequeue</span><span class="p" data-group-id="2653513938-7">(</span><span class="n">Queue2</span><span class="p">,</span><span class="w"> </span><span class="mi">10</span><span class="p" data-group-id="2653513938-7">)</span><span class="p">.</span></code></pre>
     </section>
 
 </div>
@@ -372,7 +372,7 @@ reckon_db
       <h1 class="signature" translate="no">event/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/docs/checkouts/reckon_gater/include/esdb_gater_types.hrl#L76" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/default/lib/reckon_gater/include/esdb_gater_types.hrl#L76" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 

@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-C13C6AD1.js"></script>
+    <script defer src="dist/sidebar_items-B1D808EB.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -89,7 +89,7 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Server-side capability token verification for reckon-db.</p><p>Verifies UCAN-inspired capability tokens for authorization decisions. Tokens are created client-side (reckon-gater) and verified server-side here.</p><p>Verification steps:</p><ol><li>Decode token (JWT or binary format, auto-detected)</li><li>Verify Ed25519 signature using issuer's public key from DID</li><li>Check token is not expired (exp less than now)</li><li>Check token is active (nbf less than or equal to now, if present)</li><li>Check token is not revoked (via gossip list)</li><li>Match resource URI against request</li><li>Match action against permitted actions</li></ol><p><em>See also: </em><a href="esdb_capability.html">esdb_capability</a>, <a href="esdb_identity.html">esdb_identity</a>.</p>
+<p>Server-side capability token verification for reckon-db.</p><p>Verifies UCAN-inspired capability tokens for authorization decisions. Tokens are created client-side (reckon-gater) and verified server-side here.</p><p>Verification steps:</p><ol><li>Decode token (JWT or binary format, auto-detected)</li><li>Verify Ed25519 signature using issuer's public key from DID</li><li>Check token is not expired (exp less than now)</li><li>Check token is active (nbf less than or equal to now, if present)</li><li>Check token is not revoked (via gossip list)</li><li>Match resource URI against request</li><li>Match action against permitted actions</li></ol><p><em>See also: </em><a href="https://hexdocs.pm/reckon_gater/esdb_capability.html">esdb_capability</a>, <a href="https://hexdocs.pm/reckon_gater/esdb_identity.html">esdb_identity</a>.</p>
     </section>
 
 </div>
@@ -245,7 +245,7 @@ reckon_db
       <h1 class="signature" translate="no">capability/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/docs/checkouts/reckon_gater/include/esdb_capability_types.hrl#L61" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/default/lib/reckon_gater/include/esdb_capability_types.hrl#L61" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -285,7 +285,7 @@ reckon_db
       <h1 class="signature" translate="no">capability_error/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/docs/checkouts/reckon_gater/include/esdb_capability_types.hrl#L162" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/default/lib/reckon_gater/include/esdb_capability_types.hrl#L162" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -322,7 +322,7 @@ reckon_db
       <h1 class="signature" translate="no">capability_grant/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/docs/checkouts/reckon_gater/include/esdb_capability_types.hrl#L71" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/default/lib/reckon_gater/include/esdb_capability_types.hrl#L71" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -350,7 +350,7 @@ reckon_db
       <h1 class="signature" translate="no">verification_result/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/docs/checkouts/reckon_gater/include/esdb_capability_types.hrl#L185" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/default/lib/reckon_gater/include/esdb_capability_types.hrl#L185" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
