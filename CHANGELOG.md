@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-01-21
+
+### Fixed
+
+- **Documentation**: Corrected asset paths for hexdocs SVG rendering
+  - Changed `../assets/` to `assets/` in all guides
+
 ## [1.2.0] - 2026-01-21
 
 ### Added
