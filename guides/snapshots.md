@@ -6,7 +6,7 @@ Snapshots are periodic captures of aggregate state that optimize event replay pe
 
 In event sourcing, current state is derived by replaying all events. Snapshots dramatically improve recovery performance:
 
-![Snapshot Recovery Performance](../assets/snapshot_recovery.svg)
+![Snapshot Recovery Performance](assets/snapshot_recovery.svg)
 
 ### When to Use Snapshots
 

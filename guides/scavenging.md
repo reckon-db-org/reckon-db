@@ -15,7 +15,7 @@ The `reckon_db_scavenge` module provides:
 
 ## Architecture
 
-![Scavenge Lifecycle](../assets/scavenge_lifecycle.svg)
+![Scavenge Lifecycle](assets/scavenge_lifecycle.svg)
 
 ## Event Lifecycle
 

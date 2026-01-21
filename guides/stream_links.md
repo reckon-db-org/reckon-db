@@ -18,7 +18,7 @@ The `reckon_db_links` module provides:
 
 ## Architecture
 
-![Stream Links Architecture](../assets/stream_links.svg)
+![Stream Links Architecture](assets/stream_links.svg)
 
 ## What is a Stream Link?
 

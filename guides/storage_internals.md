@@ -13,7 +13,7 @@ reckon-db uses **Khepri** as its storage layer. Khepri is a tree-like key-value 
 
 ## Architecture
 
-![Khepri Storage Paths](../assets/khepri_paths.svg)
+![Khepri Storage Paths](assets/khepri_paths.svg)
 
 ## Khepri Path Structure
 

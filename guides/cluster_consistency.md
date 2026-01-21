@@ -8,7 +8,7 @@ Distributed event stores face fundamental challenges from the CAP theorem. recko
 
 ## Architecture
 
-![Consistency Checker Architecture](../assets/consistency_checker.svg)
+![Consistency Checker Architecture](assets/consistency_checker.svg)
 
 ## The Split-Brain Problem
 
@@ -20,7 +20,7 @@ Split-brain occurs when network partitions cause nodes to form independent clust
 - **Lost events** - Events written to minority partition may be discarded on merge
 - **Inconsistent state** - Projections built from divergent streams
 
-![Split-Brain Detection](../assets/split_brain_detection.svg)
+![Split-Brain Detection](assets/split_brain_detection.svg)
 
 ### How reckon-db Prevents Split-Brain
 
@@ -154,7 +154,7 @@ Checks if sufficient nodes are available for operations.
 
 The `reckon_db_health_prober` module implements active health checks for faster failure detection.
 
-![Health Probing Flow](../assets/health_probing.svg)
+![Health Probing Flow](assets/health_probing.svg)
 
 ### Why Active Probing?
 

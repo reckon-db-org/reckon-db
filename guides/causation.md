@@ -17,7 +17,7 @@ The `reckon_db_causation` module provides:
 
 ## Architecture
 
-![Causation Graph](../assets/causation_graph.svg)
+![Causation Graph](assets/causation_graph.svg)
 
 ## Metadata Convention
 

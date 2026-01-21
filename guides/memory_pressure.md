@@ -18,7 +18,7 @@ The `reckon_db_memory` module provides:
 
 ## Architecture
 
-![Memory Pressure Levels](../assets/memory_levels.svg)
+![Memory Pressure Levels](assets/memory_levels.svg)
 
 ## Pressure Levels
 

@@ -19,7 +19,7 @@ The `reckon_db_schema` module provides:
 
 ## Architecture
 
-![Schema Upcasting Flow](../assets/schema_upcasting.svg)
+![Schema Upcasting Flow](assets/schema_upcasting.svg)
 
 ## Schema Registration
 

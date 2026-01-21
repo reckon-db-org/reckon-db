@@ -2,7 +2,7 @@
 
 Event Sourcing is an architectural pattern where the state of an application is determined by a sequence of events. Instead of storing just the current state, you store the complete history of state changes as immutable events.
 
-![Event Sourcing vs CRUD](../assets/event_sourcing.svg)
+![Event Sourcing vs CRUD](assets/event_sourcing.svg)
 
 ## What is Event Sourcing?
 
@@ -52,7 +52,7 @@ lists:foreach(fun(E) -> update_projection(E) end, Events).
 ### Decoupled Systems
 Events can be consumed by multiple subscribers independently:
 
-![Event Fan-Out](../assets/event_fanout.svg)
+![Event Fan-Out](assets/event_fanout.svg)
 
 ## Event Sourcing with reckon-db
 

@@ -14,7 +14,7 @@ The `reckon_db_temporal` module provides three core operations:
 
 ## Architecture
 
-![Temporal Query Flow](../assets/temporal_query_flow.svg)
+![Temporal Query Flow](assets/temporal_query_flow.svg)
 
 ## How Temporal Filtering Works
 

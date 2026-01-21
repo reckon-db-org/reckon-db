@@ -2,13 +2,13 @@
 
 Subscriptions enable real-time event delivery to consumers. When events are written to streams, subscribers receive notifications automatically, enabling reactive architectures and event-driven systems.
 
-![Subscription Types](../assets/subscriptions.svg)
+![Subscription Types](assets/subscriptions.svg)
 
 ## How Subscriptions Work
 
 reckon-db uses Khepri triggers for guaranteed event delivery:
 
-![Subscription Flow](../assets/subscription_flow.svg)
+![Subscription Flow](assets/subscription_flow.svg)
 
 **Key guarantee**: Triggers only fire AFTER events are committed via Raft consensus. Subscribers never receive events that don't exist.
 

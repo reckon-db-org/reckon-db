@@ -2,7 +2,7 @@
 
 This guide explores three distinct approaches to event sourcing, each with different mental models, trade-offs, and use cases. Understanding these paradigms helps you choose the right approach for your domain.
 
-![Three Paradigms Overview](../assets/event_sourcing_paradigms.svg)
+![Three Paradigms Overview](assets/event_sourcing_paradigms.svg)
 
 ## The Three Paradigms
 
@@ -158,7 +158,7 @@ reckon_db:append(<<"enrollments">>, [Event], {query, Query, LastPosition}).
 
 > "An event stream is an ordered log of facts that represent a business process. The aggregate is the 'dossier' - accumulated context passed from desk to desk, gradually filling with facts."
 
-![The Dossier Metaphor](../assets/dossier_metaphor.svg)
+![The Dossier Metaphor](assets/dossier_metaphor.svg)
 
 ### The Dossier Metaphor
 
