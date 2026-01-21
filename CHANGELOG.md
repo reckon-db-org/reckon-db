@@ -15,16 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `reckon_db_store_registry` GenServer with pg-based distributed membership
   - Automatic store announcement/unannouncement on start/stop
   - Cross-node store visibility via broadcast mechanism
-  - `reckon_db:list_stores/0` - List all stores in the cluster
-  - `reckon_db:get_store_info/1` - Get detailed info about a specific store
-  - `reckon_db:list_stores_on_node/1` - List stores on a specific node
-  - `reckon_db:which_stores/0` - List stores on local supervisor
+  - `list_stores/0` - List all stores in the cluster
+  - `get_store_info/1` - Get detailed info about a specific store
+  - `list_stores_on_node/1` - List stores on a specific node
   - 11 new unit tests for store registry
-
-- **Facade Module**: New `reckon_db.erl` module providing clean public API
-  - Store discovery API (list_stores, get_store_info)
-  - Store lifecycle API (start_store, stop_store)
-  - Store status API (is_ready, get_leader)
+  - Gateway worker calls registry directly (no facade layer)
 
 ## [1.1.1] - 2026-01-21
 

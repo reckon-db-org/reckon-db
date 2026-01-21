@@ -185,7 +185,7 @@ handle_call({check_raft_log_consistency, _StoreId}, _From,
 
 %% List stores
 handle_call({list_stores}, _From, State) ->
-    Result = reckon_db:list_stores(),
+    Result = reckon_db_store_registry:list_stores(),
     {reply, Result, State};
 
 %%====================================================================

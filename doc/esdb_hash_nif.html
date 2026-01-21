@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-36A01327.js"></script>
+    <script defer src="dist/sidebar_items-BCF13423.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -90,17 +90,17 @@ reckon_db
 
     <section id="moduledoc">
 <p>Optimized hashing operations for reckon-db.</p><p>This module provides high-performance hash implementations:</p><ul><li><b>xxHash64</b>: Extremely fast 64-bit hash</li><li><b>xxHash3</b>: Even faster, modern 64-bit hash with SIMD</li><li><b>Partition hash</b>: For consistent stream/subscription routing</li><li><b>FNV-1a</b>: Fast for small keys</li></ul><p>The mode is automatically detected at startup based on whether the NIF library is available. Community edition users (hex.pm) will always use the Erlang fallbacks, which provide identical functionality.</p><h3 id="module-usage" class="section-heading"><a href="#module-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Usage">Usage</a></span></h3><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Fast hash for routing</span><span class="w">
-  </span><span class="n">Partition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_hash_nif</span><span class="p">:</span><span class="nf">partition_hash</span><span class="p" data-group-id="7992033679-1">(</span><span class="n">StreamId</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p" data-group-id="7992033679-1">)</span><span class="p">.</span><span class="w">
+  </span><span class="n">Partition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_hash_nif</span><span class="p">:</span><span class="nf">partition_hash</span><span class="p" data-group-id="6488212547-1">(</span><span class="n">StreamId</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p" data-group-id="6488212547-1">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Stream-specific routing</span><span class="w">
-  </span><span class="n">Partition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_hash_nif</span><span class="p">:</span><span class="nf">stream_partition</span><span class="p" data-group-id="7992033679-2">(</span><span class="n">StoreId</span><span class="p">,</span><span class="w"> </span><span class="n">StreamId</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p" data-group-id="7992033679-2">)</span><span class="p">.</span><span class="w">
+  </span><span class="n">Partition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_hash_nif</span><span class="p">:</span><span class="nf">stream_partition</span><span class="p" data-group-id="6488212547-2">(</span><span class="n">StoreId</span><span class="p">,</span><span class="w"> </span><span class="n">StreamId</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p" data-group-id="6488212547-2">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Raw xxHash for checksums</span><span class="w">
-  </span><span class="n">Hash</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_hash_nif</span><span class="p">:</span><span class="nf">xxhash64</span><span class="p" data-group-id="7992033679-3">(</span><span class="n">Data</span><span class="p" data-group-id="7992033679-3">)</span><span class="p">.</span><span class="w">
+  </span><span class="n">Hash</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_hash_nif</span><span class="p">:</span><span class="nf">xxhash64</span><span class="p" data-group-id="6488212547-3">(</span><span class="n">Data</span><span class="p" data-group-id="6488212547-3">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Check which mode is active</span><span class="w">
-  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_hash_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="7992033679-4">(</span><span class="p" data-group-id="7992033679-4">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
-  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_hash_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="7992033679-5">(</span><span class="p" data-group-id="7992033679-5">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
+  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_hash_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="6488212547-4">(</span><span class="p" data-group-id="6488212547-4">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
+  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_hash_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="6488212547-5">(</span><span class="p" data-group-id="6488212547-5">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
     </section>
 
 </div>
