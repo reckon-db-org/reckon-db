@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.38.2">
-    <meta name="project" content="reckon_db v1.0.3">
+    <meta name="project" content="reckon_db v1.1.0">
 
 
-    <title>reckon_db_streams — reckon_db v1.0.3</title>
+    <title>reckon_db_streams — reckon_db v1.1.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-C80A5784.js"></script>
+    <script defer src="dist/sidebar_items-C13C6AD1.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.0.3
+          v1.1.0
         </div>
       </div>
     </div>
@@ -76,11 +76,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_streams</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.0.3)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.1.0)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L12" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L12" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -224,6 +224,16 @@ reckon_db
 
     </div>
 
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#read_by_tags/4" data-no-tooltip="" translate="no">read_by_tags(StoreId, Tags, Match, BatchSize)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Read all events matching tags from all streams.</p></div>
+
+    </div>
+
 </div>
 
   </section>
@@ -247,7 +257,7 @@ reckon_db
       <h1 class="signature" translate="no">direction/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L48" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L50" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -275,7 +285,7 @@ reckon_db
       <h1 class="signature" translate="no">event/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L70" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/docs/checkouts/reckon_gater/include/esdb_gater_types.hrl#L76" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -293,6 +303,7 @@ reckon_db
                  version :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
                  data :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
                  metadata :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
+                 tags :: [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()] | undefined,
                  timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
                  epoch_us :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
                  data_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
@@ -313,7 +324,7 @@ reckon_db
       <h1 class="signature" translate="no">new_event/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L41" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L42" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -325,7 +336,11 @@ reckon_db
       <div class="specs">
 
           <pre translate="no"><span class="attribute">-type</span> new_event() ::
-          #{event_type := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), data := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), metadata => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(), event_id => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+          #{event_type := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            data := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            metadata => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
+            tags => [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()],
+            event_id => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
 
       </div>
 
@@ -354,7 +369,7 @@ reckon_db
       <h1 class="signature" translate="no">append(StoreId, StreamId, ExpectedVersion, Events)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L66" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L68" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -382,7 +397,7 @@ reckon_db
       <h1 class="signature" translate="no">append(StoreId, StreamId, ExpectedVersion, Events, Opts)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L71" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L73" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -411,7 +426,7 @@ reckon_db
       <h1 class="signature" translate="no">delete(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L279" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L377" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -439,7 +454,7 @@ reckon_db
       <h1 class="signature" translate="no">exists(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L244" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L342" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -467,7 +482,7 @@ reckon_db
       <h1 class="signature" translate="no">get_version(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L234" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L332" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -495,7 +510,7 @@ reckon_db
       <h1 class="signature" translate="no">list_streams(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L254" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L352" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -523,7 +538,7 @@ reckon_db
       <h1 class="signature" translate="no">read(StoreId, StreamId, StartVersion, Count, Direction)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L116" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L118" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -552,7 +567,7 @@ reckon_db
       <h1 class="signature" translate="no">read_all(StoreId, StreamId, BatchSize, Direction)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L147" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L149" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -580,7 +595,7 @@ reckon_db
       <h1 class="signature" translate="no">read_by_event_types(StoreId, EventTypes, BatchSize)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_streams.erl#L163" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L165" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -598,6 +613,34 @@ reckon_db
 <p>Read all events of specific types from all streams using Khepri native filtering.</p><p>This function uses Khepri's built-in #if_data_matches condition to filter events by type at the database level, avoiding loading all events into memory.</p><p>Parameters: StoreId - The store identifier EventTypes - List of event type binaries to match BatchSize - Maximum number of events to return (for pagination)</p><p>Returns events sorted by epoch_us (global ordering).</p>
   </section>
 </section>
+<section class="detail" id="read_by_tags/4">
+
+  <div class="detail-header">
+    <a href="#read_by_tags/4" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">read_by_tags(StoreId, Tags, Match, BatchSize)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_streams.erl#L248" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> read_by_tags(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()], any | all, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>()) -> {ok, [<a href="#t:event/0">event</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Read all events matching tags from all streams.</p><p>Tags provide a mechanism for cross-stream querying without affecting stream-based concurrency control. This is useful for the process-centric model where you want to find all events related to specific participants.</p><h3 id="read_by_tags/4-match-modes" class="section-heading"><a href="#read_by_tags/4-match-modes" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Match_Modes">Match Modes</a></span></h3><p><code>any</code> (default): Returns events containing ANY of the specified tags (union). Example: <code>read_by_tags(Store, [&lt;&lt;&quot;student:456&quot;&gt;&gt;, &lt;&lt;&quot;student:789&quot;&gt;&gt;], any, 100)</code> Returns events for either student.</p><p><code>all</code>: Returns events containing ALL of the specified tags (intersection). Example: <code>read_by_tags(Store, [&lt;&lt;&quot;student:456&quot;&gt;&gt;, &lt;&lt;&quot;course:CS101&quot;&gt;&gt;], all, 100)</code> Returns only events tagged with both student 456 AND course CS101.</p><h3 id="read_by_tags/4-parameters" class="section-heading"><a href="#read_by_tags/4-parameters" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Parameters">Parameters</a></span></h3><p>StoreId - The store identifier Tags - List of tag binaries to match Match - <code>any</code> | <code>all</code> (matching strategy) BatchSize - Maximum number of events to return</p><h3 id="read_by_tags/4-returns" class="section-heading"><a href="#read_by_tags/4-returns" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Returns">Returns</a></span></h3><p>Events sorted by epoch_us (global ordering).</p>
+  </section>
+</section>
 
     </div>
   </section>
@@ -606,9 +649,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.0.3" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.1.0" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.0.3">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.1.0">Hex Preview</a>
 
           </span>
 

@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.38.2">
-    <meta name="project" content="reckon_db v1.0.3">
+    <meta name="project" content="reckon_db v1.1.0">
 
 
-    <title>reckon_db_subscriptions — reckon_db v1.0.3</title>
+    <title>reckon_db_subscriptions — reckon_db v1.1.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-C80A5784.js"></script>
+    <script defer src="dist/sidebar_items-C13C6AD1.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.0.3
+          v1.1.0
         </div>
       </div>
     </div>
@@ -76,11 +76,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_subscriptions</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.0.3)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.1.0)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L18" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L18" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -257,7 +257,7 @@ reckon_db
       <h1 class="signature" translate="no">event/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L70" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/docs/checkouts/reckon_gater/include/esdb_gater_types.hrl#L76" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -275,6 +275,7 @@ reckon_db
                  version :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
                  data :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
                  metadata :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
+                 tags :: [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()] | undefined,
                  timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
                  epoch_us :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
                  data_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
@@ -295,7 +296,7 @@ reckon_db
       <h1 class="signature" translate="no">subscribe_opts/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L40" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L40" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -327,7 +328,7 @@ reckon_db
       <h1 class="signature" translate="no">subscription/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L111" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/docs/checkouts/reckon_gater/include/esdb_gater_types.hrl#L126" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -364,7 +365,7 @@ reckon_db
       <h1 class="signature" translate="no">subscription_type/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L76" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/docs/checkouts/reckon_gater/include/esdb_gater_types.hrl#L91" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -375,7 +376,7 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-type</span> subscription_type() :: stream | event_type | event_pattern | event_payload.</pre>
+          <pre translate="no"><span class="attribute">-type</span> subscription_type() :: stream | event_type | event_pattern | event_payload | tags.</pre>
 
       </div>
 
@@ -404,7 +405,7 @@ reckon_db
       <h1 class="signature" translate="no">ack(StoreId, SubscriptionName, StreamId, EventNumber)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L195" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L195" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -432,7 +433,7 @@ reckon_db
       <h1 class="signature" translate="no">exists(StoreId, Key)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L163" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L163" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -460,7 +461,7 @@ reckon_db
       <h1 class="signature" translate="no">get(StoreId, Key)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L150" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L150" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -488,7 +489,7 @@ reckon_db
       <h1 class="signature" translate="no">list(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L158" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L158" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -516,7 +517,7 @@ reckon_db
       <h1 class="signature" translate="no">setup_tracking(StoreId, Pid)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L177" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L177" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -544,7 +545,7 @@ reckon_db
       <h1 class="signature" translate="no">subscribe(StoreId, Type, Selector, SubscriptionName)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L64" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L64" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -573,7 +574,7 @@ reckon_db
       <h1 class="signature" translate="no">subscribe(StoreId, Type, Selector, SubscriptionName, Opts)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L75" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L75" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -602,7 +603,7 @@ reckon_db
       <h1 class="signature" translate="no">unsubscribe(StoreId, Key)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L129" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L129" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -630,7 +631,7 @@ reckon_db
       <h1 class="signature" translate="no">unsubscribe(StoreId, Type, SubscriptionName)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_subscriptions.erl#L139" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_subscriptions.erl#L139" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -656,9 +657,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.0.3" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.1.0" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.0.3">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.1.0">Hex Preview</a>
 
           </span>
 

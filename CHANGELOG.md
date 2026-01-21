@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-01-21
+
+### Added
+
+- **Tag-Based Querying**: Cross-stream event queries using tags
+  - `read_by_tags/4` - Query events by tags across all streams
+  - Support for `any` (union) and `all` (intersection) matching modes
+  - Tags field added to event records and storage
+  - 15 new unit tests for tag filtering
+  - Tags are for QUERY purposes only, NOT for concurrency control
+
+### Changed
+
+- **Dependencies**: Updated reckon_gater from `~> 1.0.3` to `~> 1.1.0` for tags support
+
 ## [1.0.3] - 2026-01-19
 
 ### Changed

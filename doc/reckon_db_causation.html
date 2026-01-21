@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.38.2">
-    <meta name="project" content="reckon_db v1.0.3">
+    <meta name="project" content="reckon_db v1.1.0">
 
 
-    <title>reckon_db_causation — reckon_db v1.0.3</title>
+    <title>reckon_db_causation — reckon_db v1.1.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-C80A5784.js"></script>
+    <script defer src="dist/sidebar_items-C13C6AD1.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.0.3
+          v1.1.0
         </div>
       </div>
     </div>
@@ -76,11 +76,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_causation</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.0.3)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.1.0)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_causation.erl#L25" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_causation.erl#L25" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -89,11 +89,11 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Causation and correlation tracking for reckon-db</p><p>Provides functionality to trace event lineage: - Causation ID: Links an event to its direct cause - Correlation ID: Groups related events in a business process/saga - Actor ID: Identifies who/what triggered the event</p><p>Standard metadata fields (convention):</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="p" data-group-id="9449574016-1">#{</span><span class="w">
-      </span><span class="ss">causation_id</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">binary</span><span class="p" data-group-id="9449574016-2">(</span><span class="p" data-group-id="9449574016-2">)</span><span class="p">,</span><span class="w">     </span><span class="c1">%% ID of event/command that caused this</span><span class="w">
-      </span><span class="ss">correlation_id</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">binary</span><span class="p" data-group-id="9449574016-3">(</span><span class="p" data-group-id="9449574016-3">)</span><span class="p">,</span><span class="w">   </span><span class="c1">%% Business process/saga ID</span><span class="w">
-      </span><span class="ss">actor_id</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">binary</span><span class="p" data-group-id="9449574016-4">(</span><span class="p" data-group-id="9449574016-4">)</span><span class="w">          </span><span class="c1">%% Who/what triggered this</span><span class="w">
-  </span><span class="p" data-group-id="9449574016-1">}</span></code></pre><p>Use cases: - Debugging distributed event flows - Audit trails - Saga/process manager state reconstruction - Dependency analysis</p>
+<p>Causation and correlation tracking for reckon-db</p><p>Provides functionality to trace event lineage: - Causation ID: Links an event to its direct cause - Correlation ID: Groups related events in a business process/saga - Actor ID: Identifies who/what triggered the event</p><p>Standard metadata fields (convention):</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="p" data-group-id="5919750146-1">#{</span><span class="w">
+      </span><span class="ss">causation_id</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">binary</span><span class="p" data-group-id="5919750146-2">(</span><span class="p" data-group-id="5919750146-2">)</span><span class="p">,</span><span class="w">     </span><span class="c1">%% ID of event/command that caused this</span><span class="w">
+      </span><span class="ss">correlation_id</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">binary</span><span class="p" data-group-id="5919750146-3">(</span><span class="p" data-group-id="5919750146-3">)</span><span class="p">,</span><span class="w">   </span><span class="c1">%% Business process/saga ID</span><span class="w">
+      </span><span class="ss">actor_id</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">binary</span><span class="p" data-group-id="5919750146-4">(</span><span class="p" data-group-id="5919750146-4">)</span><span class="w">          </span><span class="c1">%% Who/what triggered this</span><span class="w">
+  </span><span class="p" data-group-id="5919750146-1">}</span></code></pre><p>Use cases: - Debugging distributed event flows - Audit trails - Saga/process manager state reconstruction - Dependency analysis</p>
     </section>
 
 </div>
@@ -215,7 +215,7 @@ reckon_db
       <h1 class="signature" translate="no">causation_graph/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_causation.erl#L44" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_causation.erl#L44" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -244,7 +244,7 @@ reckon_db
       <h1 class="signature" translate="no">event/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L70" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/_build/docs/checkouts/reckon_gater/include/esdb_gater_types.hrl#L76" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -262,6 +262,7 @@ reckon_db
                  version :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
                  data :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
                  metadata :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
+                 tags :: [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()] | undefined,
                  timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
                  epoch_us :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
                  data_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
@@ -294,7 +295,7 @@ reckon_db
       <h1 class="signature" translate="no">build_graph(StoreId, Id)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_causation.erl#L135" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_causation.erl#L135" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -322,7 +323,7 @@ reckon_db
       <h1 class="signature" translate="no">get_cause(StoreId, EventId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_causation.erl#L74" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_causation.erl#L74" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -350,7 +351,7 @@ reckon_db
       <h1 class="signature" translate="no">get_chain(StoreId, EventId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_causation.erl#L99" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_causation.erl#L99" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -378,7 +379,7 @@ reckon_db
       <h1 class="signature" translate="no">get_correlated(StoreId, CorrelationId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_causation.erl#L119" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_causation.erl#L119" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -406,7 +407,7 @@ reckon_db
       <h1 class="signature" translate="no">get_effects(StoreId, EventId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_causation.erl#L60" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_causation.erl#L60" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -434,7 +435,7 @@ reckon_db
       <h1 class="signature" translate="no">to_dot(_)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_causation.erl#L156" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.1.0/src/reckon_db_causation.erl#L156" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -460,9 +461,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.0.3" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.1.0" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.0.3">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.1.0">Hex Preview</a>
 
           </span>
 
