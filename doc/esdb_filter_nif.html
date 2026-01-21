@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.38.2">
-    <meta name="project" content="reckon_db v1.0.2">
+    <meta name="project" content="reckon_db v1.0.3">
 
 
-    <title>esdb_filter_nif — reckon_db v1.0.2</title>
+    <title>esdb_filter_nif — reckon_db v1.0.3</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-FE2ADC19.js"></script>
+    <script defer src="dist/sidebar_items-C80A5784.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.0.2
+          v1.0.3
         </div>
       </div>
     </div>
@@ -76,11 +76,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">esdb_filter_nif</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.0.2)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.0.3)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L40" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L40" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -90,14 +90,14 @@ reckon_db
 
     <section id="moduledoc">
 <p>Optimized pattern matching and filtering operations for reckon-db.</p><p>This module provides high-performance pattern matching implementations:</p><ul><li><b>Wildcard matching</b>: Fast * and ? pattern matching</li><li><b>Regex matching</b>: Compiled regex pattern matching</li><li><b>Prefix/Suffix matching</b>: Optimized start/end checks</li><li><b>Batch filtering</b>: Filter lists by patterns efficiently</li></ul><p>The mode is automatically detected at startup based on whether the NIF library is available. Community edition users (hex.pm) will always use the Erlang fallbacks, which provide identical functionality.</p><h3 id="module-wildcard-patterns" class="section-heading"><a href="#module-wildcard-patterns" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Wildcard_Patterns">Wildcard Patterns</a></span></h3><p>Wildcards supported:</p><ul><li><code>*</code> matches any sequence of characters (including empty)</li><li><code>?</code> matches any single character</li></ul><h3 id="module-usage" class="section-heading"><a href="#module-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Usage">Usage</a></span></h3><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Check if a stream matches a pattern</span><span class="w">
-  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">wildcard_match</span><span class="p" data-group-id="0790608584-1">(</span><span class="p" data-group-id="0790608584-2">&lt;&lt;</span><span class="s">&quot;orders-123&quot;</span><span class="p" data-group-id="0790608584-2">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="0790608584-3">&lt;&lt;</span><span class="s">&quot;orders-*&quot;</span><span class="p" data-group-id="0790608584-3">&gt;&gt;</span><span class="p" data-group-id="0790608584-1">)</span><span class="p">.</span><span class="w">
+  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">wildcard_match</span><span class="p" data-group-id="6722845849-1">(</span><span class="p" data-group-id="6722845849-2">&lt;&lt;</span><span class="s">&quot;orders-123&quot;</span><span class="p" data-group-id="6722845849-2">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6722845849-3">&lt;&lt;</span><span class="s">&quot;orders-*&quot;</span><span class="p" data-group-id="6722845849-3">&gt;&gt;</span><span class="p" data-group-id="6722845849-1">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Filter streams by pattern</span><span class="w">
-  </span><span class="n">Matching</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">filter_by_wildcard</span><span class="p" data-group-id="0790608584-4">(</span><span class="n">Streams</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="0790608584-5">&lt;&lt;</span><span class="s">&quot;user-*&quot;</span><span class="p" data-group-id="0790608584-5">&gt;&gt;</span><span class="p" data-group-id="0790608584-4">)</span><span class="p">.</span><span class="w">
+  </span><span class="n">Matching</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">filter_by_wildcard</span><span class="p" data-group-id="6722845849-4">(</span><span class="n">Streams</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6722845849-5">&lt;&lt;</span><span class="s">&quot;user-*&quot;</span><span class="p" data-group-id="6722845849-5">&gt;&gt;</span><span class="p" data-group-id="6722845849-4">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Check which mode is active</span><span class="w">
-  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="0790608584-6">(</span><span class="p" data-group-id="0790608584-6">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
-  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="0790608584-7">(</span><span class="p" data-group-id="0790608584-7">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
+  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="6722845849-6">(</span><span class="p" data-group-id="6722845849-6">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
+  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_filter_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="6722845849-7">(</span><span class="p" data-group-id="6722845849-7">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
     </section>
 
 </div>
@@ -277,7 +277,7 @@ reckon_db
       <h1 class="signature" translate="no">count_matches(Items, Pattern)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L276" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L276" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -305,7 +305,7 @@ reckon_db
       <h1 class="signature" translate="no">filter_by_prefix(Items, Prefix)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L252" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L252" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -333,7 +333,7 @@ reckon_db
       <h1 class="signature" translate="no">filter_by_regex(Items, RegexPattern)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L244" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L244" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -361,7 +361,7 @@ reckon_db
       <h1 class="signature" translate="no">filter_by_suffix(Items, Suffix)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L260" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L260" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -389,7 +389,7 @@ reckon_db
       <h1 class="signature" translate="no">filter_by_wildcard(Items, Pattern)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L236" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L236" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -417,7 +417,7 @@ reckon_db
       <h1 class="signature" translate="no">has_prefix(Text, Prefix)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L208" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L208" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -445,7 +445,7 @@ reckon_db
       <h1 class="signature" translate="no">has_suffix(Text, Suffix)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L216" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L216" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -473,7 +473,7 @@ reckon_db
       <h1 class="signature" translate="no">implementation()</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L161" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L161" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -501,7 +501,7 @@ reckon_db
       <h1 class="signature" translate="no">is_nif_loaded()</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L156" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L156" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -529,7 +529,7 @@ reckon_db
       <h1 class="signature" translate="no">is_valid_regex(Pattern)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L224" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L224" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -557,7 +557,7 @@ reckon_db
       <h1 class="signature" translate="no">match_indices(Items, Pattern)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L268" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L268" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -585,7 +585,7 @@ reckon_db
       <h1 class="signature" translate="no">regex_match(Text, RegexPattern)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L200" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L200" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -613,7 +613,7 @@ reckon_db
       <h1 class="signature" translate="no">wildcard_match(Text, Pattern)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L192" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L192" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -641,7 +641,7 @@ reckon_db
       <h1 class="signature" translate="no">wildcard_to_regex(Pattern)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_filter_nif.erl#L177" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_filter_nif.erl#L177" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -667,9 +667,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.0.2" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.0.3" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.0.2">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.0.3">Hex Preview</a>
 
           </span>
 

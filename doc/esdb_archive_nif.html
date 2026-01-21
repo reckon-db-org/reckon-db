@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.38.2">
-    <meta name="project" content="reckon_db v1.0.2">
+    <meta name="project" content="reckon_db v1.0.3">
 
 
-    <title>esdb_archive_nif — reckon_db v1.0.2</title>
+    <title>esdb_archive_nif — reckon_db v1.0.3</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-FE2ADC19.js"></script>
+    <script defer src="dist/sidebar_items-C80A5784.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.0.2
+          v1.0.3
         </div>
       </div>
     </div>
@@ -76,11 +76,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">esdb_archive_nif</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.0.2)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.0.3)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L42" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L42" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -90,17 +90,17 @@ reckon_db
 
     <section id="moduledoc">
 <p>Optimized archive compression for reckon-db.</p><p>This module provides high-performance compression implementations:</p><ul><li><b>LZ4</b>: Fastest compression/decompression (real-time use)</li><li><b>Zstd</b>: Best compression ratio (cold storage)</li><li><b>Zlib</b>: Standard compatibility (Erlang term_to_binary)</li></ul><p>The mode is automatically detected at startup based on whether the NIF library is available. Community edition users (hex.pm) will always use the Erlang fallbacks, which provide identical functionality.</p><h3 id="module-algorithm-selection" class="section-heading"><a href="#module-algorithm-selection" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Algorithm_Selection">Algorithm Selection</a></span></h3><p>| Algorithm | Speed | Ratio | Use Case | |-----------|-------|-------|----------| | LZ4 | Fastest | ~2.5:1 | Hot archives, real-time | | Zstd | Fast | ~4:1 | Cold archives, storage | | Zlib | Moderate | ~3:1 | Compatibility |</p><h3 id="module-usage" class="section-heading"><a href="#module-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Usage">Usage</a></span></h3><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Compress with LZ4 (fastest)</span><span class="w">
-  </span><span class="p" data-group-id="6655488231-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Compressed</span><span class="p" data-group-id="6655488231-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_archive_nif</span><span class="p">:</span><span class="nf">compress</span><span class="p" data-group-id="6655488231-2">(</span><span class="n">Data</span><span class="p">,</span><span class="w"> </span><span class="ss">lz4</span><span class="p" data-group-id="6655488231-2">)</span><span class="p">.</span><span class="w">
+  </span><span class="p" data-group-id="8964172018-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Compressed</span><span class="p" data-group-id="8964172018-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_archive_nif</span><span class="p">:</span><span class="nf">compress</span><span class="p" data-group-id="8964172018-2">(</span><span class="n">Data</span><span class="p">,</span><span class="w"> </span><span class="ss">lz4</span><span class="p" data-group-id="8964172018-2">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Compress with Zstd level 3 (good balance)</span><span class="w">
-  </span><span class="p" data-group-id="6655488231-3">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Compressed</span><span class="p" data-group-id="6655488231-3">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_archive_nif</span><span class="p">:</span><span class="nf">compress</span><span class="p" data-group-id="6655488231-4">(</span><span class="n">Data</span><span class="p">,</span><span class="w"> </span><span class="ss">zstd</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p" data-group-id="6655488231-4">)</span><span class="p">.</span><span class="w">
+  </span><span class="p" data-group-id="8964172018-3">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Compressed</span><span class="p" data-group-id="8964172018-3">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_archive_nif</span><span class="p">:</span><span class="nf">compress</span><span class="p" data-group-id="8964172018-4">(</span><span class="n">Data</span><span class="p">,</span><span class="w"> </span><span class="ss">zstd</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p" data-group-id="8964172018-4">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Decompress</span><span class="w">
-  </span><span class="p" data-group-id="6655488231-5">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Original</span><span class="p" data-group-id="6655488231-5">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_archive_nif</span><span class="p">:</span><span class="nf">decompress</span><span class="p" data-group-id="6655488231-6">(</span><span class="n">Compressed</span><span class="p">,</span><span class="w"> </span><span class="ss">lz4</span><span class="p" data-group-id="6655488231-6">)</span><span class="p">.</span><span class="w">
+  </span><span class="p" data-group-id="8964172018-5">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Original</span><span class="p" data-group-id="8964172018-5">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_archive_nif</span><span class="p">:</span><span class="nf">decompress</span><span class="p" data-group-id="8964172018-6">(</span><span class="n">Compressed</span><span class="p">,</span><span class="w"> </span><span class="ss">lz4</span><span class="p" data-group-id="8964172018-6">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Check which mode is active</span><span class="w">
-  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_archive_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="6655488231-7">(</span><span class="p" data-group-id="6655488231-7">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
-  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_archive_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="6655488231-8">(</span><span class="p" data-group-id="6655488231-8">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
+  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_archive_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="8964172018-7">(</span><span class="p" data-group-id="8964172018-7">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
+  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_archive_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="8964172018-8">(</span><span class="p" data-group-id="8964172018-8">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
     </section>
 
 </div>
@@ -290,7 +290,7 @@ reckon_db
       <h1 class="signature" translate="no">compress(Data, Algorithm)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L168" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L168" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -318,7 +318,7 @@ reckon_db
       <h1 class="signature" translate="no">compress(Data, Algorithm, Level)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L178" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L178" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -347,7 +347,7 @@ reckon_db
       <h1 class="signature" translate="no">compress_lz4(Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L202" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L202" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -375,7 +375,7 @@ reckon_db
       <h1 class="signature" translate="no">compress_zlib(Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L271" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L271" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -403,7 +403,7 @@ reckon_db
       <h1 class="signature" translate="no">compress_zlib(Data, Level)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L276" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L276" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -431,7 +431,7 @@ reckon_db
       <h1 class="signature" translate="no">compress_zstd(Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L234" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L234" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -459,7 +459,7 @@ reckon_db
       <h1 class="signature" translate="no">compress_zstd(Data, Level)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L239" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L239" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -487,7 +487,7 @@ reckon_db
       <h1 class="signature" translate="no">compression_stats(Data, Algorithm)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L310" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L310" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -520,7 +520,7 @@ reckon_db
       <h1 class="signature" translate="no">compression_stats(Data, Algorithm, Level)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L322" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L322" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -553,7 +553,7 @@ reckon_db
       <h1 class="signature" translate="no">decompress(Data, Algorithm)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L189" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L189" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -581,7 +581,7 @@ reckon_db
       <h1 class="signature" translate="no">decompress_lz4(Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L217" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L217" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -609,7 +609,7 @@ reckon_db
       <h1 class="signature" translate="no">decompress_zlib(Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L291" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L291" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -637,7 +637,7 @@ reckon_db
       <h1 class="signature" translate="no">decompress_zstd(Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L254" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L254" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -665,7 +665,7 @@ reckon_db
       <h1 class="signature" translate="no">implementation()</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L155" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L155" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -693,7 +693,7 @@ reckon_db
       <h1 class="signature" translate="no">is_nif_loaded()</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/esdb_archive_nif.erl#L150" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/esdb_archive_nif.erl#L150" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -719,9 +719,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.0.2" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.0.3" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.0.2">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.0.3">Hex Preview</a>
 
           </span>
 

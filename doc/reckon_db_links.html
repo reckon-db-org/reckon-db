@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.38.2">
-    <meta name="project" content="reckon_db v1.0.2">
+    <meta name="project" content="reckon_db v1.0.3">
 
 
-    <title>reckon_db_links — reckon_db v1.0.2</title>
+    <title>reckon_db_links — reckon_db v1.0.3</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-FE2ADC19.js"></script>
+    <script defer src="dist/sidebar_items-C80A5784.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.0.2
+          v1.0.3
         </div>
       </div>
     </div>
@@ -76,11 +76,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_links</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.0.2)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.0.3)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L27" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L27" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -90,15 +90,15 @@ reckon_db
 
     <section id="moduledoc">
 <p>Stream linking and simple projections for reckon-db</p><p>Provides derived streams from source streams: - Filter events based on predicates - Transform event data - Create materialized streams for specialized queries</p><p>Links are live - new events are automatically propagated. Link streams can be subscribed to like regular streams.</p><p>Usage:</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Create a link for high-value orders</span><span class="w">
-  </span><span class="nc">reckon_db_links</span><span class="p">:</span><span class="nf">create</span><span class="p" data-group-id="5802824077-1">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="5802824077-2">#{</span><span class="w">
-      </span><span class="ss">name</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="5802824077-3">&lt;&lt;</span><span class="s">&quot;high-value-orders&quot;</span><span class="p" data-group-id="5802824077-3">&gt;&gt;</span><span class="p">,</span><span class="w">
-      </span><span class="ss">source</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="5802824077-4">#{</span><span class="ss">type</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="ss">stream_pattern</span><span class="p">,</span><span class="w"> </span><span class="ss">pattern</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="5802824077-5">&lt;&lt;</span><span class="s">&quot;orders-*&quot;</span><span class="p" data-group-id="5802824077-5">&gt;&gt;</span><span class="p" data-group-id="5802824077-4">}</span><span class="p">,</span><span class="w">
-      </span><span class="ss">filter</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">fun</span><span class="p" data-group-id="5802824077-6">(</span><span class="n">E</span><span class="p" data-group-id="5802824077-6">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">maps</span><span class="p">:</span><span class="nf">get</span><span class="p" data-group-id="5802824077-7">(</span><span class="ss">total</span><span class="p">,</span><span class="w"> </span><span class="n">E</span><span class="o">#</span><span class="ss">event</span><span class="p">.</span><span class="ss">data</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p" data-group-id="5802824077-7">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">1000</span><span class="w"> </span><span class="k">end</span><span class="p">,</span><span class="w">
-      </span><span class="ss">transform</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">fun</span><span class="p" data-group-id="5802824077-8">(</span><span class="n">E</span><span class="p" data-group-id="5802824077-8">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="n">E</span><span class="o">#</span><span class="ss">event</span><span class="p" data-group-id="5802824077-9">{</span><span class="ss">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">E</span><span class="o">#</span><span class="ss">event</span><span class="p">.</span><span class="ss">data</span><span class="p" data-group-id="5802824077-10">#{</span><span class="ss">flagged</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="ss">true</span><span class="p" data-group-id="5802824077-10">}</span><span class="p" data-group-id="5802824077-9">}</span><span class="w"> </span><span class="k">end</span><span class="w">
-  </span><span class="p" data-group-id="5802824077-2">}</span><span class="p" data-group-id="5802824077-1">)</span><span class="p">.</span><span class="w">
+  </span><span class="nc">reckon_db_links</span><span class="p">:</span><span class="nf">create</span><span class="p" data-group-id="3806603119-1">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="3806603119-2">#{</span><span class="w">
+      </span><span class="ss">name</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="3806603119-3">&lt;&lt;</span><span class="s">&quot;high-value-orders&quot;</span><span class="p" data-group-id="3806603119-3">&gt;&gt;</span><span class="p">,</span><span class="w">
+      </span><span class="ss">source</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="3806603119-4">#{</span><span class="ss">type</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="ss">stream_pattern</span><span class="p">,</span><span class="w"> </span><span class="ss">pattern</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="3806603119-5">&lt;&lt;</span><span class="s">&quot;orders-*&quot;</span><span class="p" data-group-id="3806603119-5">&gt;&gt;</span><span class="p" data-group-id="3806603119-4">}</span><span class="p">,</span><span class="w">
+      </span><span class="ss">filter</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">fun</span><span class="p" data-group-id="3806603119-6">(</span><span class="n">E</span><span class="p" data-group-id="3806603119-6">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">maps</span><span class="p">:</span><span class="nf">get</span><span class="p" data-group-id="3806603119-7">(</span><span class="ss">total</span><span class="p">,</span><span class="w"> </span><span class="n">E</span><span class="o">#</span><span class="ss">event</span><span class="p">.</span><span class="ss">data</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p" data-group-id="3806603119-7">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">1000</span><span class="w"> </span><span class="k">end</span><span class="p">,</span><span class="w">
+      </span><span class="ss">transform</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nf">fun</span><span class="p" data-group-id="3806603119-8">(</span><span class="n">E</span><span class="p" data-group-id="3806603119-8">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="n">E</span><span class="o">#</span><span class="ss">event</span><span class="p" data-group-id="3806603119-9">{</span><span class="ss">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">E</span><span class="o">#</span><span class="ss">event</span><span class="p">.</span><span class="ss">data</span><span class="p" data-group-id="3806603119-10">#{</span><span class="ss">flagged</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="ss">true</span><span class="p" data-group-id="3806603119-10">}</span><span class="p" data-group-id="3806603119-9">}</span><span class="w"> </span><span class="k">end</span><span class="w">
+  </span><span class="p" data-group-id="3806603119-2">}</span><span class="p" data-group-id="3806603119-1">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Subscribe to linked stream</span><span class="w">
-  </span><span class="nc">reckon_db_subscriptions</span><span class="p">:</span><span class="nf">subscribe</span><span class="p" data-group-id="5802824077-11">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="ss">stream</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="5802824077-12">&lt;&lt;</span><span class="s">&quot;$link:high-value-orders&quot;</span><span class="p" data-group-id="5802824077-12">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="p">.</span><span class="p">.</span><span class="p" data-group-id="5802824077-11">)</span><span class="p">.</span></code></pre>
+  </span><span class="nc">reckon_db_subscriptions</span><span class="p">:</span><span class="nf">subscribe</span><span class="p" data-group-id="3806603119-11">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="ss">stream</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="3806603119-12">&lt;&lt;</span><span class="s">&quot;$link:high-value-orders&quot;</span><span class="p" data-group-id="3806603119-12">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="p">.</span><span class="p">.</span><span class="p" data-group-id="3806603119-11">)</span><span class="p">.</span></code></pre>
     </section>
 
 </div>
@@ -262,7 +262,7 @@ reckon_db
       <h1 class="signature" translate="no">event/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L70" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/_build/default/checkouts/reckon_gater/include/esdb_gater_types.hrl#L70" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -300,7 +300,7 @@ reckon_db
       <h1 class="signature" translate="no">filter_fun/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L53" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L53" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -328,7 +328,7 @@ reckon_db
       <h1 class="signature" translate="no">link_info/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L64" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L64" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -361,7 +361,7 @@ reckon_db
       <h1 class="signature" translate="no">link_spec/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L56" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L56" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -394,7 +394,7 @@ reckon_db
       <h1 class="signature" translate="no">source_spec/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L47" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L47" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -423,7 +423,7 @@ reckon_db
       <h1 class="signature" translate="no">transform_fun/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L54" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L54" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -463,7 +463,7 @@ reckon_db
       <h1 class="signature" translate="no">create(StoreId, Spec)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L110" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L110" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -491,7 +491,7 @@ reckon_db
       <h1 class="signature" translate="no">delete(StoreId, Name)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L139" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L139" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -519,7 +519,7 @@ reckon_db
       <h1 class="signature" translate="no">get(StoreId, Name)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L154" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L154" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -547,7 +547,7 @@ reckon_db
       <h1 class="signature" translate="no">info(StoreId, Name)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L222" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L222" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -575,7 +575,7 @@ reckon_db
       <h1 class="signature" translate="no">list(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L167" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L167" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -603,7 +603,7 @@ reckon_db
       <h1 class="signature" translate="no">start(StoreId, Name)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L185" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L185" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -631,7 +631,7 @@ reckon_db
       <h1 class="signature" translate="no">stop(StoreId, Name)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.2/src/reckon_db_links.erl#L210" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.0.3/src/reckon_db_links.erl#L210" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -657,9 +657,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.0.2" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.0.3" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.0.2">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.0.3">Hex Preview</a>
 
           </span>
 
