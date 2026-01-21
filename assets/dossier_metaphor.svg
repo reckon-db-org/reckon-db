@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 550">
+  <defs>
+    <linearGradient id="bgDossier" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <filter id="shadowD" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4ade80"/>
+    </marker>
+  </defs>
+
+  <rect width="850" height="550" fill="url(#bgDossier)"/>
+
+  <!-- Title -->
+  <text x="425" y="35" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="22" font-weight="bold">The Dossier Metaphor</text>
+  <text x="425" y="55" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="12">Process-Centric Event Sourcing</text>
+
+  <!-- Main dossier container -->
+  <rect x="25" y="75" width="800" height="350" rx="10" fill="#0f3460" filter="url(#shadowD)"/>
+
+  <!-- Stream label -->
+  <text x="425" y="100" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="14" font-weight="bold">Stream: loan-application-2024-0042</text>
+
+  <!-- Desk 1 -->
+  <rect x="45" y="120" width="140" height="130" rx="5" fill="#1e3a5f"/>
+  <rect x="55" y="130" width="120" height="25" rx="3" fill="#4ade80"/>
+  <text x="115" y="147" text-anchor="middle" fill="#000" font-family="Arial, sans-serif" font-size="10" font-weight="bold">DESK 1: Intake</text>
+  <text x="115" y="170" text-anchor="middle" fill="#fff" font-family="monospace" font-size="8">ApplicationSubmitted</text>
+  <rect x="55" y="180" width="120" height="60" rx="3" fill="#2d4a6d"/>
+  <text x="115" y="195" text-anchor="middle" fill="#aaa" font-family="Arial, sans-serif" font-size="8">Dossier gains:</text>
+  <text x="115" y="210" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="7">applicant_name</text>
+  <text x="115" y="222" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="7">requested_amount</text>
+  <text x="115" y="234" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="7">submission_date</text>
+
+  <!-- Arrow 1-2 -->
+  <line x1="185" y1="185" x2="210" y2="185" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Desk 2 -->
+  <rect x="215" y="120" width="140" height="130" rx="5" fill="#1e3a5f"/>
+  <rect x="225" y="130" width="120" height="25" rx="3" fill="#60a5fa"/>
+  <text x="285" y="147" text-anchor="middle" fill="#000" font-family="Arial, sans-serif" font-size="10" font-weight="bold">DESK 2: Credit</text>
+  <text x="285" y="170" text-anchor="middle" fill="#fff" font-family="monospace" font-size="8">CreditScoreRetrieved</text>
+  <rect x="225" y="180" width="120" height="60" rx="3" fill="#2d4a6d"/>
+  <text x="285" y="195" text-anchor="middle" fill="#aaa" font-family="Arial, sans-serif" font-size="8">Dossier gains:</text>
+  <text x="285" y="210" text-anchor="middle" fill="#60a5fa" font-family="monospace" font-size="7">credit_score: 720</text>
+  <text x="285" y="222" text-anchor="middle" fill="#60a5fa" font-family="monospace" font-size="7">debt_to_income: 28%</text>
+  <text x="285" y="234" text-anchor="middle" fill="#60a5fa" font-family="monospace" font-size="7">credit_report_id</text>
+
+  <!-- Arrow 2-3 -->
+  <line x1="355" y1="185" x2="380" y2="185" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Desk 3 -->
+  <rect x="385" y="120" width="140" height="130" rx="5" fill="#1e3a5f"/>
+  <rect x="395" y="130" width="120" height="25" rx="3" fill="#f59e0b"/>
+  <text x="455" y="147" text-anchor="middle" fill="#000" font-family="Arial, sans-serif" font-size="10" font-weight="bold">DESK 3: Underwrite</text>
+  <text x="455" y="170" text-anchor="middle" fill="#fff" font-family="monospace" font-size="8">UnderwritingDecision</text>
+  <rect x="395" y="180" width="120" height="60" rx="3" fill="#2d4a6d"/>
+  <text x="455" y="195" text-anchor="middle" fill="#aaa" font-family="Arial, sans-serif" font-size="8">Dossier gains:</text>
+  <text x="455" y="210" text-anchor="middle" fill="#f59e0b" font-family="monospace" font-size="7">decision: APPROVED</text>
+  <text x="455" y="222" text-anchor="middle" fill="#f59e0b" font-family="monospace" font-size="7">conditions: [...]</text>
+  <text x="455" y="234" text-anchor="middle" fill="#f59e0b" font-family="monospace" font-size="7">underwriter_id</text>
+
+  <!-- Arrow 3-4 -->
+  <line x1="525" y1="185" x2="550" y2="185" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Desk 4 -->
+  <rect x="555" y="120" width="140" height="130" rx="5" fill="#1e3a5f"/>
+  <rect x="565" y="130" width="120" height="25" rx="3" fill="#a78bfa"/>
+  <text x="625" y="147" text-anchor="middle" fill="#000" font-family="Arial, sans-serif" font-size="10" font-weight="bold">DESK 4: Docs</text>
+  <text x="625" y="170" text-anchor="middle" fill="#fff" font-family="monospace" font-size="8">DocumentsVerified</text>
+  <rect x="565" y="180" width="120" height="60" rx="3" fill="#2d4a6d"/>
+  <text x="625" y="195" text-anchor="middle" fill="#aaa" font-family="Arial, sans-serif" font-size="8">Dossier gains:</text>
+  <text x="625" y="210" text-anchor="middle" fill="#a78bfa" font-family="monospace" font-size="7">docs_verified: true</text>
+  <text x="625" y="222" text-anchor="middle" fill="#a78bfa" font-family="monospace" font-size="7">missing_docs: []</text>
+  <text x="625" y="234" text-anchor="middle" fill="#a78bfa" font-family="monospace" font-size="7">verifier_id</text>
+
+  <!-- Arrow 4-5 -->
+  <line x1="695" y1="185" x2="720" y2="185" stroke="#4ade80" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Desk 5 -->
+  <rect x="725" y="120" width="90" height="130" rx="5" fill="#1e3a5f"/>
+  <rect x="735" y="130" width="70" height="25" rx="3" fill="#4ade80"/>
+  <text x="770" y="147" text-anchor="middle" fill="#000" font-family="Arial, sans-serif" font-size="9" font-weight="bold">DESK 5</text>
+  <text x="770" y="170" text-anchor="middle" fill="#fff" font-family="monospace" font-size="7">LoanDisbursed</text>
+  <rect x="735" y="180" width="70" height="60" rx="3" fill="#14532d"/>
+  <text x="770" y="200" text-anchor="middle" fill="#4ade80" font-family="Arial, sans-serif" font-size="8">COMPLETE</text>
+  <text x="770" y="220" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="7">$150,000</text>
+  <text x="770" y="235" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="7">disbursed</text>
+
+  <!-- The Dossier visualization -->
+  <rect x="45" y="265" width="770" height="145" rx="5" fill="#1a1a2e"/>
+  <text x="425" y="285" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="12" font-weight="bold">THE DOSSIER (Aggregate State at Any Point)</text>
+
+  <!-- Dossier content as progressive build -->
+  <rect x="60" y="295" width="145" height="100" rx="3" fill="#2d4a6d"/>
+  <text x="132" y="310" text-anchor="middle" fill="#4ade80" font-family="Arial, sans-serif" font-size="9" font-weight="bold">After Desk 1:</text>
+  <text x="132" y="328" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">applicant: "Alice"</text>
+  <text x="132" y="343" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">amount: $150,000</text>
+  <text x="132" y="358" text-anchor="middle" fill="#666" font-family="monospace" font-size="7">credit: ?</text>
+  <text x="132" y="373" text-anchor="middle" fill="#666" font-family="monospace" font-size="7">decision: ?</text>
+  <text x="132" y="388" text-anchor="middle" fill="#666" font-family="monospace" font-size="7">outcome: ?</text>
+
+  <rect x="215" y="295" width="145" height="100" rx="3" fill="#2d4a6d"/>
+  <text x="287" y="310" text-anchor="middle" fill="#60a5fa" font-family="Arial, sans-serif" font-size="9" font-weight="bold">After Desk 2:</text>
+  <text x="287" y="328" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">applicant: "Alice"</text>
+  <text x="287" y="343" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">amount: $150,000</text>
+  <text x="287" y="358" text-anchor="middle" fill="#60a5fa" font-family="monospace" font-size="7">credit: 720</text>
+  <text x="287" y="373" text-anchor="middle" fill="#666" font-family="monospace" font-size="7">decision: ?</text>
+  <text x="287" y="388" text-anchor="middle" fill="#666" font-family="monospace" font-size="7">outcome: ?</text>
+
+  <rect x="370" y="295" width="145" height="100" rx="3" fill="#2d4a6d"/>
+  <text x="442" y="310" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="9" font-weight="bold">After Desk 3:</text>
+  <text x="442" y="328" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">applicant: "Alice"</text>
+  <text x="442" y="343" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">amount: $150,000</text>
+  <text x="442" y="358" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">credit: 720</text>
+  <text x="442" y="373" text-anchor="middle" fill="#f59e0b" font-family="monospace" font-size="7">decision: APPROVED</text>
+  <text x="442" y="388" text-anchor="middle" fill="#666" font-family="monospace" font-size="7">outcome: ?</text>
+
+  <rect x="525" y="295" width="145" height="100" rx="3" fill="#2d4a6d"/>
+  <text x="597" y="310" text-anchor="middle" fill="#a78bfa" font-family="Arial, sans-serif" font-size="9" font-weight="bold">After Desk 4:</text>
+  <text x="597" y="328" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">applicant: "Alice"</text>
+  <text x="597" y="343" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">amount: $150,000</text>
+  <text x="597" y="358" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">credit: 720</text>
+  <text x="597" y="373" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">decision: APPROVED</text>
+  <text x="597" y="388" text-anchor="middle" fill="#a78bfa" font-family="monospace" font-size="7">docs_ok: true</text>
+
+  <rect x="680" y="295" width="125" height="100" rx="3" fill="#14532d"/>
+  <text x="742" y="310" text-anchor="middle" fill="#4ade80" font-family="Arial, sans-serif" font-size="9" font-weight="bold">FINAL:</text>
+  <text x="742" y="328" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="7">applicant: "Alice"</text>
+  <text x="742" y="343" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="7">amount: $150,000</text>
+  <text x="742" y="358" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="7">credit: 720</text>
+  <text x="742" y="373" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="7">decision: APPROVED</text>
+  <text x="742" y="388" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="7">DISBURSED</text>
+
+  <!-- Key insight box -->
+  <rect x="25" y="440" width="800" height="95" rx="10" fill="#14532d" filter="url(#shadowD)"/>
+  <text x="425" y="465" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">KEY INSIGHT: Temporal Auditability</text>
+  <text x="425" y="490" text-anchor="middle" fill="#4ade80" font-family="Arial, sans-serif" font-size="11">"Why was this loan approved with a credit score of 620?"</text>
+  <text x="425" y="515" text-anchor="middle" fill="#aaa" font-family="Arial, sans-serif" font-size="10">Replay the dossier: At decision time (event 3), underwriter saw credit 620, BUT debt-to-income 28% (good),</text>
+  <text x="425" y="530" text-anchor="middle" fill="#aaa" font-family="Arial, sans-serif" font-size="10">5 years at current job, and large down payment. The dossier records ALL context available at each decision.</text>
+</svg>
