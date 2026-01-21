@@ -15,7 +15,7 @@ reckon-db is an Erlang implementation of a distributed event store designed for:
 
 ## Features
 
-- Event stream CRUD with versioning and optimistic concurrency
+- Event stream operations (append, read, subscribe) with versioning and optimistic concurrency
 - Persistent subscriptions (stream, event type, pattern, payload matching)
 - Snapshot management for aggregate state
 - Emitter pools for high-throughput event delivery
