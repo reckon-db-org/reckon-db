@@ -103,6 +103,40 @@ Events are immutable facts that have happened. They should:
 }
 ```
 
+**Note:** When using evoq (the CQRS/Event Sourcing framework), events are wrapped in a full envelope with additional fields. The simplified format above shows what you provide; evoq adds `event_id`, `stream_id`, `version`, `tags`, `timestamp`, and `epoch_us`. See [evoq Event Envelope Guide](https://github.com/reckon-db-org/evoq/blob/main/guides/event_envelope.md) for complete details.
+
+#### Metadata Standardization
+
+**Required metadata fields** for all events:
+
+```erlang
+metadata => #{
+    correlation_id => <<"req-abc">>,   %% Request ID (trace across services)
+    causation_id => <<"cmd-xyz">>,     %% What caused this event
+    timestamp => erlang:system_time(millisecond)
+}
+```
+
+**Optional but recommended** for user-triggered events:
+
+```erlang
+metadata => #{
+    user_id => <<"usr-123">>,          %% Who triggered it
+    ip_address => <<"192.168.1.1">>,   %% Where from
+    user_agent => <<"...">>             %% Client info
+}
+```
+
+**Optional but recommended** for system events:
+
+```erlang
+metadata => #{
+    triggered_by => <<"system">>,
+    reason => <<"scheduled_task">>,
+    task_id => <<"task-abc">>
+}
+```
+
 ### Optimistic Concurrency
 
 reckon-db uses optimistic concurrency control to prevent conflicting writes:
