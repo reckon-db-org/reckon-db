@@ -91,7 +91,7 @@ by_event_payload(PayloadPattern) when is_map(PayloadPattern) ->
 %% Note: Khepri's pattern matching doesn't natively support list membership,
 %% so this creates a broad filter that matches all events with tags.
 %% The actual tag filtering must be done by the subscription consumer.
-%% For efficient tag-based queries, use `reckon_db_streams:read_by_tags/4`.
+%% For efficient tag-based queries, use {@link reckon_db_streams:read_by_tags/4}.
 -spec by_tags([binary()]) -> khepri_evf:tree().
 by_tags(Tags) when is_list(Tags) ->
     %% Create a filter that matches events with any tags field
