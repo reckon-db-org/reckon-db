@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-02-06
+
+### Fixed
+
+- **Subscription Filter Types**: Fixed `create_filter/2` function_clause error
+  - Added support for gater-style subscription types: `by_stream`, `by_event_type`,
+    `by_event_pattern`, `by_event_payload`, `by_tags`
+  - Maintains backward compatibility with evoq-style types
+  - Required for reckon_evoq_adapter type translation through the gater layer
+
 ## [1.2.2] - 2026-02-01
 
 ### Documentation

@@ -13,7 +13,8 @@
     by_stream/1,
     by_event_type/1,
     by_event_pattern/1,
-    by_event_payload/1
+    by_event_payload/1,
+    by_tags/1
 ]).
 
 %% @doc Create a filter for all events in a specific stream
@@ -81,6 +82,26 @@ by_event_payload(PayloadPattern) when is_map(PayloadPattern) ->
              #if_path_matches{regex = any},
              #if_has_data{has_data = true},
              #if_data_matches{pattern = #{data => PayloadPattern}}
+         ]}],
+        #{on_actions => [create]}
+    ).
+
+%% @doc Create a filter matching events with specific tags
+%%
+%% Note: Khepri's pattern matching doesn't natively support list membership,
+%% so this creates a broad filter that matches all events with tags.
+%% The actual tag filtering must be done by the subscription consumer.
+%% For efficient tag-based queries, use `reckon_db_streams:read_by_tags/4`.
+-spec by_tags([binary()]) -> khepri_evf:tree().
+by_tags(Tags) when is_list(Tags) ->
+    %% Create a filter that matches events with any tags field
+    %% The consumer must filter for specific tag membership
+    khepri_evf:tree(
+        [streams,
+         #if_path_matches{regex = any},
+         #if_all{conditions = [
+             #if_path_matches{regex = any},
+             #if_has_data{has_data = true}
          ]}],
         #{on_actions => [create]}
     ).

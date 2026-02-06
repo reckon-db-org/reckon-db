@@ -264,15 +264,29 @@ find_subscription(StoreId, Type, SubscriptionName) ->
     end.
 
 %% @private Create an event filter based on subscription type
+%%
+%% Supports both evoq-style types (stream, event_type, etc.) and
+%% gater-style types (by_stream, by_event_type, etc.) for compatibility
+%% with the reckon_evoq_adapter translation layer.
 -spec create_filter(subscription_type(), binary() | map()) -> term().
 create_filter(stream, StreamId) ->
     reckon_db_filters:by_stream(StreamId);
+create_filter(by_stream, StreamId) ->
+    reckon_db_filters:by_stream(StreamId);
 create_filter(event_type, EventType) ->
+    reckon_db_filters:by_event_type(EventType);
+create_filter(by_event_type, EventType) ->
     reckon_db_filters:by_event_type(EventType);
 create_filter(event_pattern, Pattern) ->
     reckon_db_filters:by_event_pattern(Pattern);
+create_filter(by_event_pattern, Pattern) ->
+    reckon_db_filters:by_event_pattern(Pattern);
 create_filter(event_payload, PayloadPattern) ->
-    reckon_db_filters:by_event_payload(PayloadPattern).
+    reckon_db_filters:by_event_payload(PayloadPattern);
+create_filter(by_event_payload, PayloadPattern) ->
+    reckon_db_filters:by_event_payload(PayloadPattern);
+create_filter(by_tags, Tags) ->
+    reckon_db_filters:by_tags(Tags).
 
 %% @private Setup event notification mechanism
 -spec setup_event_notification(atom(), binary(), term(), subscription()) -> ok.
