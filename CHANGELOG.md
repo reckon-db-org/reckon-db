@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-02-13
+
+### Fixed
+
+- **Stream subscription filter path mismatch**: `by_stream/1` was stripping the category
+  prefix from stream IDs (e.g., `<<"test$delivery-001">>` became `<<"delivery-001">>`),
+  creating Khepri trigger filters that never matched stored events. This caused ALL
+  stream-based subscriptions to silently fail — triggers never fired, subscribers never
+  received events. Fixed to use the full stream ID in the filter path.
+- **Event type filter record matching**: `by_event_type/1` used a map pattern
+  (`#{event_type => Type}`) to match stored events, but events are stored as `#event{}`
+  records (tuples). Map patterns cannot match records. Fixed to use proper record pattern
+  matching with `#event{event_type = Type, _ = '_'}`.
+
+### Added
+
+- **Subscription delivery integration tests**: New CT suite
+  `reckon_db_subscription_delivery_SUITE` with 5 end-to-end tests verifying the full
+  subscribe → append → trigger → emitter → deliver pipeline.
+
 ## [1.2.4] - 2026-02-13
 
 ### Fixed

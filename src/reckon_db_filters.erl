@@ -8,6 +8,7 @@
 -module(reckon_db_filters).
 
 -include_lib("khepri/include/khepri.hrl").
+-include("reckon_db.hrl").
 
 -export([
     by_stream/1,
@@ -36,11 +37,13 @@ by_stream(Stream) when is_binary(Stream) ->
     case string:chr(List, $$) of
         0 ->
             {error, invalid_stream};
-        DollarPos ->
-            StreamUuid = string:substr(List, DollarPos + 1),
+        _DollarPos ->
+            %% Use the FULL stream ID as the path component.
+            %% Streams are stored at [streams, StreamId, PaddedVersion]
+            %% where StreamId is the complete ID including category prefix.
             khepri_evf:tree(
                 [streams,
-                 list_to_binary(StreamUuid),
+                 Stream,
                  #if_all{conditions = [
                      #if_path_matches{regex = any},
                      #if_has_data{has_data = true}
@@ -50,9 +53,20 @@ by_stream(Stream) when is_binary(Stream) ->
     end.
 
 %% @doc Create a filter for events of a specific type
+%%
+%% Uses #event{} record pattern matching since events are stored as records.
 -spec by_event_type(binary()) -> khepri_evf:tree().
 by_event_type(EventType) when is_binary(EventType) ->
-    by_event_pattern(#{event_type => EventType}).
+    khepri_evf:tree(
+        [streams,
+         #if_path_matches{regex = any},
+         #if_all{conditions = [
+             #if_path_matches{regex = any},
+             #if_has_data{has_data = true},
+             #if_data_matches{pattern = #event{event_type = EventType, _ = '_'}}
+         ]}],
+        #{on_actions => [create]}
+    ).
 
 %% @doc Create a filter matching events with a specific pattern in their metadata
 %%
