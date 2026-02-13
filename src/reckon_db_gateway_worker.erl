@@ -368,10 +368,15 @@ handle_cast({remove_subscription, _StoreId, Type, _Selector, SubscriptionName}, 
 %% Save subscription
 handle_cast({save_subscription, _StoreId, Type, Selector, SubscriptionName, StartFrom, Subscriber}, State) ->
     #state{store_id = StoreId} = State,
-    reckon_db_subscriptions:subscribe(StoreId, Type, Selector, SubscriptionName, #{
+    case reckon_db_subscriptions:subscribe(StoreId, Type, Selector, SubscriptionName, #{
         start_from => StartFrom,
         subscriber => Subscriber
-    }),
+    }) of
+        {ok, _Key} -> ok;
+        {error, {already_exists, _}} -> ok;
+        {error, Reason} ->
+            logger:warning("[gateway_worker] subscription ~s failed: ~p", [SubscriptionName, Reason])
+    end,
     {noreply, State};
 
 %% Ack event

@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.38.2">
-    <meta name="project" content="reckon_db v1.2.1">
+    <meta name="project" content="reckon_db v1.2.4">
 
 
-    <title>reckon_db_filters — reckon_db v1.2.1</title>
+    <title>reckon_db_filters — reckon_db v1.2.4</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
-    <script defer src="dist/sidebar_items-06D20616.js"></script>
+    <script defer src="dist/sidebar_items-B450C809.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-DPJLHKSM.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.2.1
+          v1.2.4
         </div>
       </div>
     </div>
@@ -76,11 +76,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_filters</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.2.1)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.2.4)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.1/src/reckon_db_filters.erl#L8" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.4/src/reckon_db_filters.erl#L8" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -146,6 +146,16 @@ reckon_db
 
     </div>
 
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#by_tags/1" data-no-tooltip="" translate="no">by_tags(Tags)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Create a filter matching events with specific tags</p></div>
+
+    </div>
+
 </div>
 
   </section>
@@ -169,7 +179,7 @@ reckon_db
       <h1 class="signature" translate="no">by_event_pattern(EventPattern)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.1/src/reckon_db_filters.erl#L60" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.4/src/reckon_db_filters.erl#L61" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -197,7 +207,7 @@ reckon_db
       <h1 class="signature" translate="no">by_event_payload(PayloadPattern)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.1/src/reckon_db_filters.erl#L76" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.4/src/reckon_db_filters.erl#L77" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -225,7 +235,7 @@ reckon_db
       <h1 class="signature" translate="no">by_event_type(EventType)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.1/src/reckon_db_filters.erl#L53" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.4/src/reckon_db_filters.erl#L54" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -253,7 +263,7 @@ reckon_db
       <h1 class="signature" translate="no">by_stream(Stream)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.1/src/reckon_db_filters.erl#L23" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.4/src/reckon_db_filters.erl#L24" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -271,6 +281,34 @@ reckon_db
 <p>Create a filter for all events in a specific stream</p><p>Special case: the binary &lt;&lt;&quot;$all&quot;&gt;&gt; matches events in all streams.</p>
   </section>
 </section>
+<section class="detail" id="by_tags/1">
+
+  <div class="detail-header">
+    <a href="#by_tags/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">by_tags(Tags)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.4/src/reckon_db_filters.erl#L96" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> by_tags([<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()]) -> khepri_evf:tree().</pre>
+
+      </div>
+
+<p>Create a filter matching events with specific tags</p><p>Note: Khepri's pattern matching doesn't natively support list membership, so this creates a broad filter that matches all events with tags. The actual tag filtering must be done by the subscription consumer. For efficient tag-based queries, use <a href="reckon_db_streams.html#read_by_tags/4"><code>reckon_db_streams:read_by_tags/4</code></a>.</p>
+  </section>
+</section>
 
     </div>
   </section>
@@ -279,9 +317,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.2.1" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.2.4" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.2.1">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.2.4">Hex Preview</a>
 
           </span>
 

@@ -105,20 +105,26 @@ subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
             case reckon_db_subscriptions_store:put(StoreId, Subscription) of
                 ok ->
                     %% Setup the event notification mechanism
-                    Filter = create_filter(Type, Selector),
-                    setup_event_notification(StoreId, Key, Filter, Subscription),
+                    case create_filter(Type, Selector) of
+                        {error, FilterReason} ->
+                            %% Rollback: remove the stored subscription
+                            _ = reckon_db_subscriptions_store:delete(StoreId, Key),
+                            {error, {invalid_filter, FilterReason}};
+                        Filter ->
+                            setup_event_notification(StoreId, Key, Filter, Subscription),
 
-                    %% Notify trackers
-                    reckon_db_tracker_group:notify_created(StoreId, subscriptions, Subscription),
+                            %% Notify trackers
+                            reckon_db_tracker_group:notify_created(StoreId, subscriptions, Subscription),
 
-                    Duration = erlang:monotonic_time() - StartTime,
-                    telemetry:execute(
-                        ?SUBSCRIPTION_CREATED,
-                        #{duration => Duration},
-                        #{store_id => StoreId, subscription_key => Key}
-                    ),
+                            Duration = erlang:monotonic_time() - StartTime,
+                            telemetry:execute(
+                                ?SUBSCRIPTION_CREATED,
+                                #{duration => Duration},
+                                #{store_id => StoreId, subscription_key => Key}
+                            ),
 
-                    {ok, Key};
+                            {ok, Key}
+                    end;
                 {error, _} = Error ->
                     Error
             end

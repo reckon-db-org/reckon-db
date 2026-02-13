@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-02-13
+
+### Fixed
+
+- **Subscription Filter Error Handling**: `create_filter/2` errors no longer crash the
+  gateway worker. Invalid stream names (e.g., missing `$` separator) now return
+  `{error, {invalid_filter, Reason}}` instead of propagating to `khepri_evf:wrap/1`
+  which caused a `function_clause` crash.
+- **Gateway Worker Resilience**: `handle_cast` for `save_subscription` now matches
+  the result and logs a warning on failure instead of crashing. Previously, a single
+  invalid subscription could crash the worker and lose all 28+ pending subscription
+  messages in its queue.
+
 ## [1.2.3] - 2026-02-06
 
 ### Fixed
