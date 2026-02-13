@@ -97,12 +97,14 @@ subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
 
     %% Check if subscription already exists
     Key = reckon_db_subscriptions_store:key(Subscription),
+    %% Set id on the subscription so emitter pools use the correct key
+    SubscriptionWithId = Subscription#subscription{id = Key},
     case reckon_db_subscriptions_store:exists(StoreId, Key) of
         true ->
             {error, {already_exists, SubscriptionName}};
         false ->
             %% Store the subscription
-            case reckon_db_subscriptions_store:put(StoreId, Subscription) of
+            case reckon_db_subscriptions_store:put(StoreId, SubscriptionWithId) of
                 ok ->
                     %% Setup the event notification mechanism
                     case create_filter(Type, Selector) of
@@ -111,10 +113,10 @@ subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
                             _ = reckon_db_subscriptions_store:delete(StoreId, Key),
                             {error, {invalid_filter, FilterReason}};
                         Filter ->
-                            setup_event_notification(StoreId, Key, Filter, Subscription),
+                            setup_event_notification(StoreId, Key, Filter, SubscriptionWithId),
 
                             %% Notify trackers
-                            reckon_db_tracker_group:notify_created(StoreId, subscriptions, Subscription),
+                            reckon_db_tracker_group:notify_created(StoreId, subscriptions, SubscriptionWithId),
 
                             Duration = erlang:monotonic_time() - StartTime,
                             telemetry:execute(

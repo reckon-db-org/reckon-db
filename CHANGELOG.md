@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-02-13
+
+### Fixed
+
+- **Subscription id not populated**: `subscribe/5` created the `#subscription{}` record
+  without setting the `id` field, leaving it as `undefined`. The subscription key was
+  computed and used for Khepri storage and trigger registration, but the subscription
+  record passed to `notify_created` (and thus to the leader_tracker and emitter pool)
+  still had `id = undefined`. This caused emitter workers to join pg group
+  `{StoreId, undefined, emitters}` while Khepri triggers broadcast to
+  `{StoreId, CorrectKey, emitters}` — a different group. Events were silently dropped
+  because no emitters were found in the broadcast group. Fixed by setting
+  `Subscription#subscription{id = Key}` before passing to downstream consumers.
+
 ## [1.2.5] - 2026-02-13
 
 ### Fixed
