@@ -65,7 +65,7 @@
     gateway_pool_size = ?DEFAULT_GATEWAY_POOL_SIZE :: pos_integer(),
 
     %% Additional options
-    options :: map()
+    options = #{} :: map()
 }).
 
 -type store_config() :: #store_config{}.

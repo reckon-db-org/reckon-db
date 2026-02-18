@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-02-18
+
+### Fixed
+
+- **Persistence worker crash on undefined options**: `get_persistence_interval/1` called
+  `maps:get/3` on the `options` field of `store_config`, which crashed with `{badmap, undefined}`
+  when `options` was not explicitly set. Fixed by adding a guard clause for `is_map(Options)`
+  and a fallback clause that returns the default persistence interval. Also set the default
+  value of `options` in the `store_config` record to `#{}` (empty map) to prevent this class
+  of bug in other code paths.
+
 ## [1.2.6] - 2026-02-13
 
 ### Fixed

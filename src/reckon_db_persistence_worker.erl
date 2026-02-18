@@ -217,13 +217,15 @@ terminate(_Reason, State) ->
 
 %% @private Get persistence interval from config or application env
 -spec get_persistence_interval(store_config()) -> pos_integer().
-get_persistence_interval(#store_config{options = Options}) ->
+get_persistence_interval(#store_config{options = Options}) when is_map(Options) ->
     case maps:get(persistence_interval, Options, undefined) of
         undefined ->
             application:get_env(reckon_db, persistence_interval, ?DEFAULT_PERSISTENCE_INTERVAL);
         Interval ->
             Interval
-    end.
+    end;
+get_persistence_interval(#store_config{}) ->
+    application:get_env(reckon_db, persistence_interval, ?DEFAULT_PERSISTENCE_INTERVAL).
 
 %% @private Persist all pending stores
 -spec persist_pending_stores(sets:set(atom())) -> ok | {error, term()}.
