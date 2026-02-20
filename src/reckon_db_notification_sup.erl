@@ -1,8 +1,13 @@
 %% @doc Notification supervisor for reckon-db
 %%
-%% Manages notification-related components:
+%% Manages notification-related components using rest_for_one strategy:
 %% - LeaderSystem (leader responsibilities, tracking)
 %% - EmitterSystem (event distribution workers)
+%% - SubscriptionHealthMonitor (periodic health checks)
+%%
+%% rest_for_one ensures that if LeaderSystem crashes, EmitterSystem and
+%% HealthMonitor are also restarted, preventing stale emitter pools from
+%% outliving their leader tracking infrastructure.
 %%
 %% @author rgfaber
 
@@ -35,14 +40,15 @@ start_link(#store_config{store_id = StoreId} = Config) ->
 -spec init(store_config()) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init(#store_config{store_id = StoreId} = Config) ->
     SupFlags = #{
-        strategy => one_for_one,
+        strategy => rest_for_one,
         intensity => 5,
         period => 30
     },
 
     Children = [
         leader_sup_spec(Config),
-        emitter_sup_spec(Config)
+        emitter_sup_spec(Config),
+        health_monitor_spec(Config)
     ],
 
     logger:debug("Starting notification supervisor for store ~p", [StoreId]),
@@ -75,4 +81,16 @@ emitter_sup_spec(#store_config{store_id = StoreId} = Config) ->
         shutdown => infinity,
         type => supervisor,
         modules => [reckon_db_emitter_sup]
+    }.
+
+%% @private
+-spec health_monitor_spec(store_config()) -> supervisor:child_spec().
+health_monitor_spec(#store_config{store_id = StoreId} = Config) ->
+    #{
+        id => reckon_db_naming:health_monitor_name(StoreId),
+        start => {reckon_db_subscription_health, start_link, [Config]},
+        restart => permanent,
+        shutdown => 5000,
+        type => worker,
+        modules => [reckon_db_subscription_health]
     }.

@@ -8,7 +8,7 @@
     <meta name="project" content="reckon_db v1.2.7">
 
 
-    <title>reckon_db_leader — reckon_db v1.2.7</title>
+    <title>reckon_db_subscription_health — reckon_db v1.2.7</title>
 
     <link rel="stylesheet" href="dist/html-erlang-DQDXQC7W.css" />
 
@@ -75,12 +75,12 @@ reckon_db
 <div id="top-content">
   <div class="heading-with-actions top-heading">
     <h1>
-      <span translate="no">reckon_db_leader</span> 
+      <span translate="no">reckon_db_subscription_health</span> 
       <small class="app-vsn" translate="no">(reckon_db v1.2.7)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_leader.erl#L12" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_subscription_health.erl#L13" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -89,7 +89,7 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Leader worker for reckon-db</p><p>Handles leader responsibilities when this node is the Raft leader.</p><p>Responsibilities: - Save default subscriptions (like $all stream) - Start emitter pools for active subscriptions - Coordinate leader-specific tasks</p>
+<p>Subscription health monitor for reckon-db</p><p>Periodic health checks that detect and clean up: - Stale subscriptions: subscriber process is dead - Orphaned emitter pools: pool running without a subscription - Missing emitter pools: subscription exists but no pool on leader</p><p>Runs as a child of notification_sup (after leader_sup and emitter_sup). Only performs cleanup when this node is the Ra leader.</p>
     </section>
 
 </div>
@@ -138,16 +138,6 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#activate/1" data-no-tooltip="" translate="no">activate(StoreId)</a>
-
-      </div>
-
-        <div class="summary-synopsis"><p>Activate leader responsibilities Called when this node becomes the cluster leader.</p></div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
         <a href="#handle_call/3" data-no-tooltip="" translate="no">handle_call(Request, From, State)</a>
 
       </div>
@@ -172,19 +162,19 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#init/1" data-no-tooltip="" translate="no">init(Store_config)</a>
+        <a href="#health_check/1" data-no-tooltip="" translate="no">health_check(StoreId)</a>
 
       </div>
+
+        <div class="summary-synopsis"><p>Run an on-demand health check and return the report</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#is_active/1" data-no-tooltip="" translate="no">is_active(StoreId)</a>
+        <a href="#init/1" data-no-tooltip="" translate="no">init(Store_config)</a>
 
       </div>
-
-        <div class="summary-synopsis"><p>Check if leader is currently active</p></div>
 
     </div>
 
@@ -330,34 +320,6 @@ reckon_db
       <span class="text">Functions</span>
     </h1>
     <div class="functions-list">
-<section class="detail" id="activate/1">
-
-  <div class="detail-header">
-    <a href="#activate/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">activate(StoreId)</h1>
-
-
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_leader.erl#L44" class="icon-action" rel="help" aria-label="View Source">
-          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
-        </a>
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-      <div class="specs">
-
-          <pre translate="no"><span class="attribute">-spec</span> activate(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
-
-      </div>
-
-<p>Activate leader responsibilities Called when this node becomes the cluster leader.</p>
-  </section>
-</section>
 <section class="detail" id="handle_call/3">
 
   <div class="detail-header">
@@ -368,7 +330,7 @@ reckon_db
       <h1 class="signature" translate="no">handle_call(Request, From, State)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_leader.erl#L86" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_subscription_health.erl#L86" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -390,7 +352,7 @@ reckon_db
       <h1 class="signature" translate="no">handle_cast(Msg, State)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_leader.erl#L96" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_subscription_health.erl#L93" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -412,7 +374,7 @@ reckon_db
       <h1 class="signature" translate="no">handle_info(Info, State)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_leader.erl#L126" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_subscription_health.erl#L96" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -422,6 +384,34 @@ reckon_db
   <section class="docstring">
 
 
+  </section>
+</section>
+<section class="detail" id="health_check/1">
+
+  <div class="detail-header">
+    <a href="#health_check/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">health_check(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_subscription_health.erl#L56" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> health_check(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Run an on-demand health check and return the report</p>
   </section>
 </section>
 <section class="detail" id="init/1">
@@ -434,7 +424,7 @@ reckon_db
       <h1 class="signature" translate="no">init(Store_config)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_leader.erl#L76" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_subscription_health.erl#L67" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -444,34 +434,6 @@ reckon_db
   <section class="docstring">
 
 
-  </section>
-</section>
-<section class="detail" id="is_active/1">
-
-  <div class="detail-header">
-    <a href="#is_active/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">is_active(StoreId)</h1>
-
-
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_leader.erl#L65" class="icon-action" rel="help" aria-label="View Source">
-          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
-        </a>
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-      <div class="specs">
-
-          <pre translate="no"><span class="attribute">-spec</span> is_active(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
-
-      </div>
-
-<p>Check if leader is currently active</p>
   </section>
 </section>
 <section class="detail" id="start_link/1">
@@ -484,7 +446,7 @@ reckon_db
       <h1 class="signature" translate="no">start_link(Store_config)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_leader.erl#L37" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_subscription_health.erl#L50" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -512,7 +474,7 @@ reckon_db
       <h1 class="signature" translate="no">terminate(Reason, State)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_leader.erl#L129" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.2.7/src/reckon_db_subscription_health.erl#L114" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 

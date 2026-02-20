@@ -33,6 +33,7 @@
     coordinator_name/1,
     node_monitor_name/1,
     gateway_worker_name/1,
+    health_monitor_name/1,
 
     %% Pool names
     writer_pool_name/1,
@@ -159,6 +160,11 @@ node_monitor_name(StoreId) ->
 -spec gateway_worker_name(atom()) -> atom().
 gateway_worker_name(StoreId) ->
     make_name("reckon_db_gateway_worker_", StoreId).
+
+%% @doc Subscription health monitor name for a store
+-spec health_monitor_name(atom()) -> atom().
+health_monitor_name(StoreId) ->
+    make_name("reckon_db_health_monitor_", StoreId).
 
 %%====================================================================
 %% Pool Names

@@ -1,8 +1,11 @@
 %% @doc Leader supervisor for reckon-db
 %%
-%% Manages leader-related components:
-%% - Leader tracker (subscription tracking)
-%% - Leader worker (leader responsibilities)
+%% Manages leader-related components using rest_for_one strategy:
+%% - Leader tracker (subscription tracking) — started first
+%% - Leader worker (leader responsibilities) — depends on tracker
+%%
+%% rest_for_one ensures that if the tracker crashes, the leader worker
+%% also restarts, re-establishing the dependency on tracking infrastructure.
 %%
 %% @author rgfaber
 
@@ -35,7 +38,7 @@ start_link(#store_config{store_id = StoreId} = Config) ->
 -spec init(store_config()) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init(#store_config{store_id = StoreId} = Config) ->
     SupFlags = #{
-        strategy => one_for_one,
+        strategy => rest_for_one,
         intensity => 5,
         period => 30
     },

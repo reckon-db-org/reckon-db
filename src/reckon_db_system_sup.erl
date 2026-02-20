@@ -56,12 +56,19 @@ init(#store_config{store_id = StoreId, mode = Mode} = Config) ->
             []
     end,
 
+    %% Node monitor (all modes) — detects Ra leader and activates
+    %% leader responsibilities. Must start after CoreSystem (store up)
+    %% and after ClusterSystem (coordinator available in cluster mode).
+    MonitorChildren = [
+        node_monitor_spec(Config)
+    ],
+
     %% Gateway children (always present, starts last)
     GatewayChildren = [
         gateway_sup_spec(Config)
     ],
 
-    Children = CoreChildren ++ ClusterChildren ++ GatewayChildren,
+    Children = CoreChildren ++ ClusterChildren ++ MonitorChildren ++ GatewayChildren,
 
     logger:info("Starting reckon-db system for store ~p in ~p mode", [StoreId, Mode]),
 
@@ -93,6 +100,20 @@ cluster_sup_spec(#store_config{store_id = StoreId} = Config) ->
         shutdown => infinity,
         type => supervisor,
         modules => [reckon_db_cluster_sup]
+    }.
+
+%% @private Node monitor — runs in all modes for leader detection.
+%% In single mode: detects Ra leader, activates LeaderWorker, stops polling.
+%% In cluster mode: continuous leader/membership monitoring.
+-spec node_monitor_spec(store_config()) -> supervisor:child_spec().
+node_monitor_spec(#store_config{store_id = StoreId} = Config) ->
+    #{
+        id => reckon_db_naming:node_monitor_name(StoreId),
+        start => {reckon_db_node_monitor, start_link, [Config]},
+        restart => permanent,
+        shutdown => 5000,
+        type => worker,
+        modules => [reckon_db_node_monitor]
     }.
 
 %% @private

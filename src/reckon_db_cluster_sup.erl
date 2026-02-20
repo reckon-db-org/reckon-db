@@ -3,7 +3,8 @@
 %% Manages cluster-related components (cluster mode only):
 %% - Discovery (UDP multicast / K8s DNS)
 %% - Store coordinator (cluster join coordination)
-%% - Node monitor (health probing)
+%%
+%% Note: Node monitor is started by system_sup for all modes.
 %%
 %% @author rgfaber
 
@@ -43,8 +44,7 @@ init(#store_config{store_id = StoreId} = Config) ->
 
     Children = [
         discovery_spec(Config),
-        coordinator_spec(Config),
-        node_monitor_spec(Config)
+        coordinator_spec(Config)
     ],
 
     logger:debug("Starting cluster supervisor for store ~p", [StoreId]),
@@ -79,14 +79,3 @@ coordinator_spec(#store_config{store_id = StoreId} = Config) ->
         modules => [reckon_db_store_coordinator]
     }.
 
-%% @private
--spec node_monitor_spec(store_config()) -> supervisor:child_spec().
-node_monitor_spec(#store_config{store_id = StoreId} = Config) ->
-    #{
-        id => reckon_db_naming:node_monitor_name(StoreId),
-        start => {reckon_db_node_monitor, start_link, [Config]},
-        restart => permanent,
-        shutdown => 5000,
-        type => worker,
-        modules => [reckon_db_node_monitor]
-    }.

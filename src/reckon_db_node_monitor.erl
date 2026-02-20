@@ -133,8 +133,19 @@ handle_info(check_leader, #state{store_id = StoreId, current_leader = PreviousLe
 
     %% Schedule next check
     case Mode of
-        cluster -> schedule_leader_check(?LEADER_CHECK_INTERVAL);
-        single -> ok
+        cluster ->
+            schedule_leader_check(?LEADER_CHECK_INTERVAL);
+        single ->
+            %% In single mode, keep retrying until leader is detected.
+            %% Ra leader election may not complete before the first check.
+            %% Once detected, no more checks needed (no leadership changes
+            %% in single-node mode).
+            case NewState#state.current_leader of
+                undefined ->
+                    schedule_leader_check(?LEADER_CHECK_INTERVAL);
+                _ ->
+                    ok
+            end
     end,
 
     {noreply, NewState};

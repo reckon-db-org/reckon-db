@@ -199,7 +199,7 @@ broadcast_to_topic(StoreId, Topic, Event) ->
     ),
     ok.
 
-%% @private Send event directly to subscriber
+%% @private Send event directly to subscriber, stop pool if subscriber is dead
 -spec send_to_subscriber(pid(), event(), atom(), binary()) -> ok.
 send_to_subscriber(Pid, Event, StoreId, SubscriptionKey) ->
     case erlang:is_process_alive(Pid) of
@@ -207,8 +207,11 @@ send_to_subscriber(Pid, Event, StoreId, SubscriptionKey) ->
             Pid ! {events, [Event]},
             ok;
         false ->
-            %% Subscriber is dead, could stop the pool here
-            logger:warning("Subscriber ~p is dead for subscription ~s in store ~p",
+            logger:warning("Subscriber ~p is dead for subscription ~s in store ~p, "
+                           "stopping emitter pool",
                           [Pid, SubscriptionKey, StoreId]),
+            %% Stop the emitter pool asynchronously to avoid blocking the
+            %% emitter worker during event delivery
+            spawn(fun() -> reckon_db_emitter_pool:stop(StoreId, SubscriptionKey) end),
             ok
     end.

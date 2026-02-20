@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-02-20
+
+### Fixed
+
+- **Leader detection in single mode**: `reckon_db_node_monitor` used a one-shot leader
+  check in single mode that never rescheduled. If Ra leader election hadn't completed
+  by the first check, the LeaderWorker never activated and emitter pools never started.
+  Fixed to retry until leader is detected, then stop polling (no leadership changes in
+  single-node mode).
+- **Node monitor placement**: Moved `reckon_db_node_monitor` from `cluster_sup` (cluster
+  mode only) to `system_sup` (all modes). The node monitor must run in single mode too
+  to detect Ra leader and activate leader responsibilities.
+- **Supervisor strategies**: Changed `notification_sup` and `leader_sup` from `one_for_one`
+  to `rest_for_one`. If `leader_sup` crashes, `emitter_sup` must restart to prevent stale
+  emitter pools running without leader coordination. If `leader_tracker` crashes,
+  `leader_worker` must restart to re-establish dependency on tracking infrastructure.
+
+### Added
+
+- **Subscription health monitor** (`reckon_db_subscription_health`): Periodic health
+  checks (default 60s) that detect and clean up stale subscriptions (dead subscriber),
+  orphaned emitter pools (pool without subscription), and missing emitter pools
+  (subscription without pool). Only performs cleanup on the Ra leader node. Includes
+  on-demand `health_check/1` API returning a health report map.
+- **Dead subscriber cleanup in emitter**: When an emitter worker detects its subscriber
+  PID is dead during event delivery, it now asynchronously stops the emitter pool
+  (matching ex-esdb's `send_or_kill_pool` pattern). Previously dead subscribers
+  accumulated silently.
+- **Emitter autostart integration tests**: New CT suite
+  `reckon_db_emitter_autostart_SUITE` with 13 end-to-end tests covering leader
+  activation, subscription lifecycle, event delivery, dead subscriber cleanup,
+  and health monitor operation.
+
 ## [1.2.7] - 2026-02-18
 
 ### Fixed
