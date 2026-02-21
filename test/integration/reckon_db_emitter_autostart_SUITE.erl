@@ -93,11 +93,8 @@ init_per_suite(Config) ->
     ok = ra:start(),
     {ok, _} = application:ensure_all_started(khepri),
 
-    %% Start pg scope for process groups
-    case pg:start(?RECKON_DB_PG_SCOPE) of
-        {ok, _} -> ok;
-        {error, {already_started, _}} -> ok
-    end,
+    %% pg scope is now supervised by reckon_db_sup (1.3.1 fix).
+    %% Do NOT start it manually — reckon_db application handles it.
 
     %% Start reckon_db application (provides reckon_db_sup)
     case application:ensure_all_started(reckon_db) of

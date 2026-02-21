@@ -37,9 +37,6 @@ stop() ->
 %% @private
 -spec start(application:start_type(), term()) -> {ok, pid()} | {error, term()}.
 start(_StartType, _StartArgs) ->
-    %% Ensure process group scope is started
-    ok = ensure_pg_scope(),
-
     %% Start telemetry handlers
     ok = start_telemetry_handlers(),
 
@@ -65,13 +62,6 @@ stop(_State) ->
 %% Internal functions
 %%====================================================================
 
-%% @private
--spec ensure_pg_scope() -> ok.
-ensure_pg_scope() ->
-    case pg:start_link(?RECKON_DB_PG_SCOPE) of
-        {ok, _Pid} -> ok;
-        {error, {already_started, _Pid}} -> ok
-    end.
 
 %% @private
 -spec start_telemetry_handlers() -> ok.

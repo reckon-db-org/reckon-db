@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-02-21
+
+### Fixed
+
+- **pg scope process dies silently**: `pg:start_link(?RECKON_DB_PG_SCOPE)` was called
+  from `reckon_db_app:start/2`, creating an unsupervised pg process linked only to the
+  application master. When it died, no supervisor restarted it, silently breaking ALL
+  event delivery (emitter workers join pg groups for subscription routing). Moved pg scope
+  startup into `reckon_db_sup:init/1` as the first supervised child with
+  `restart => permanent`, ensuring it is always restarted on failure.
+
 ## [1.3.0] - 2026-02-20
 
 ### Fixed

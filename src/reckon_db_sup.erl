@@ -73,7 +73,20 @@ init([]) ->
         period => 60
     },
 
-    %% Store registry must start first (before any stores)
+    %% pg scope must start first — emitters, trackers, and stream
+    %% workers all use pg groups under this scope for event delivery.
+    %% Previously started unsupervised from reckon_db_app:start/2,
+    %% which caused it to die silently, breaking all event delivery.
+    PgScopeChild = #{
+        id => reckon_db_pg_scope,
+        start => {pg, start_link, [?RECKON_DB_PG_SCOPE]},
+        restart => permanent,
+        shutdown => 5000,
+        type => worker,
+        modules => [pg]
+    },
+
+    %% Store registry must start before any stores
     RegistryChild = #{
         id => reckon_db_store_registry,
         start => {reckon_db_store_registry, start_link, []},
@@ -94,8 +107,8 @@ init([]) ->
         StoreConfigs
     ),
 
-    %% Registry first, then stores
-    Children = [RegistryChild | StoreChildren],
+    %% pg scope first, then registry, then stores
+    Children = [PgScopeChild, RegistryChild | StoreChildren],
 
     {ok, {SupFlags, Children}}.
 
