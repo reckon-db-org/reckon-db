@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.3.1] - 2026-02-21
+## [1.3.2] - 2026-02-21
 
 ### Fixed
 
@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   event delivery (emitter workers join pg groups for subscription routing). Moved pg scope
   startup into `reckon_db_sup:init/1` as the first supervised child with
   `restart => permanent`, ensuring it is always restarted on failure.
+
+### Added
+
+- `reckon_db_pg_scope_SUITE` integration tests verifying pg scope supervision,
+  automatic restart after crash, and full event delivery after scope restart.
 
 ## [1.3.0] - 2026-02-20
 
