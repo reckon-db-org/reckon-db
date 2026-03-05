@@ -53,7 +53,8 @@
     dead_subscriber_stops_emitter_pool/1,
     health_monitor_reports_healthy/1,
     health_monitor_detects_missing_pool/1,
-    bare_khepri_subscribe_no_emitter_pool/1
+    bare_khepri_subscribe_no_emitter_pool/1,
+    late_subscribe_starts_pool_immediately/1
 ]).
 
 %%====================================================================
@@ -77,7 +78,8 @@ all() ->
         dead_subscriber_stops_emitter_pool,
         health_monitor_reports_healthy,
         health_monitor_detects_missing_pool,
-        bare_khepri_subscribe_no_emitter_pool
+        bare_khepri_subscribe_no_emitter_pool,
+        late_subscribe_starts_pool_immediately
     ].
 
 init_per_suite(Config) ->
@@ -571,6 +573,59 @@ bare_khepri_subscribe_no_emitter_pool(Config) ->
     %% Emitter pool should NOT be running (no emitter_sup)
     PoolName = reckon_db_emitter_pool:name(StoreId, SubKey),
     ?assertEqual(undefined, whereis(PoolName)),
+
+    %% Cleanup
+    reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
+    ok.
+
+%% @doc GIVEN a store with active leader
+%%      WHEN a new subscription is created
+%%      THEN the emitter pool exists immediately after subscribe returns
+%%           (no timer:sleep needed)
+%%
+%%      This is the regression test for the late-subscription fix.
+%%      Before the fix, setup_event_notification only persisted emitter
+%%      names and registered Khepri triggers but did NOT start the pool.
+%%      Pools were only started during leader activation (for existing
+%%      subscriptions) or by the health monitor (up to 2 minutes later).
+%%      Subscriptions created after leader activation had no pool, so
+%%      events were silently dropped until the health monitor recovered.
+late_subscribe_starts_pool_immediately(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = <<"test$late-sub-immediate">>,
+    SubName = <<"late_sub_immediate_test">>,
+
+    ok = wait_for_leader(StoreId, 10000),
+
+    %% Subscribe — pool should start synchronously within subscribe/5
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName,
+        #{subscriber => self()}
+    ),
+
+    %% NO timer:sleep here — the pool must exist immediately
+    PoolName = reckon_db_emitter_pool:name(StoreId, SubKey),
+    ?assertNotEqual(undefined, whereis(PoolName)),
+
+    %% Verify emitter workers joined the pg group (may need a brief
+    %% moment for the workers to register with pg after pool starts)
+    timer:sleep(100),
+    Members = reckon_db_emitter_group:members(StoreId, SubKey),
+    ?assert(length(Members) > 0),
+
+    %% Full delivery test: append and receive without extra sleep
+    Event = #{
+        event_type => <<"late_sub_event_v1">>,
+        data => #{<<"key">> => <<"value">>}
+    },
+    {ok, _} = reckon_db_streams:append(StoreId, StreamId, -2, [Event]),
+
+    receive
+        {events, [Received]} ->
+            ?assertEqual(<<"late_sub_event_v1">>, Received#event.event_type)
+    after 5000 ->
+        ct:fail("Late subscription did not receive event — pool not started synchronously")
+    end,
 
     %% Cleanup
     reckon_db_subscriptions:unsubscribe(StoreId, SubKey),

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-03-05
+
+### Fixed
+
+- **Late subscription event delivery**: Subscriptions registered after leader activation
+  had Khepri triggers but no emitter workers, silently dropping events until the health
+  monitor detected missing pools (up to 2 minutes). `setup_event_notification` now
+  eagerly starts the emitter pool when the emitter supervisor is available, using
+  pattern matching on `whereis/1` to avoid a `gen_server:call` deadlock when called
+  from within the leader worker during default subscription setup.
+
+### Added
+
+- `late_subscribe_starts_pool_immediately` integration test in
+  `reckon_db_emitter_autostart_SUITE` verifying that the emitter pool exists
+  immediately after `subscribe/5` returns when the leader is active.
+
+### Changed
+
+- Bumped `reckon_gater` dependency to `~> 1.1.3` (includes `debug_info` for dialyzer)
+
 ## [1.3.2] - 2026-02-21
 
 ### Fixed

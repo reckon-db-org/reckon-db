@@ -298,16 +298,39 @@ create_filter(by_tags, Tags) ->
 
 %% @private Setup event notification mechanism
 -spec setup_event_notification(atom(), binary(), term(), subscription()) -> ok.
-setup_event_notification(StoreId, SubscriptionKey, Filter, #subscription{pool_size = PoolSize}) ->
-    %% Persist emitter names for the subscription
+setup_event_notification(StoreId, SubscriptionKey, Filter, #subscription{pool_size = PoolSize} = Subscription) ->
     _Emitters = reckon_db_emitter_group:persist_emitters(StoreId, SubscriptionKey, PoolSize),
-
-    %% Register the Khepri trigger
     ok = register_trigger(StoreId, SubscriptionKey, Filter),
-
-    %% Start the emitter pool (if we have an emitter supervisor running)
-    %% This will be done by the notification supervisor when it starts
+    maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription),
     ok.
+
+%% @private Attempt to start the emitter pool eagerly.
+%%
+%% If the emitter supervisor is already running (leader activated), the pool
+%% starts immediately so late subscriptions can deliver events right away.
+%% If the supervisor is not yet running, start_emitter returns an error and
+%% the pool will be started later by leader activation or the health monitor.
+%%
+%% We avoid calling reckon_db_leader:is_active/1 here because this function
+%% may be invoked from within the leader worker itself (save_default_subscriptions),
+%% which would deadlock on the gen_server:call.
+-spec maybe_start_emitter_pool(atom(), binary(), subscription()) -> ok.
+maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription) ->
+    SupName = reckon_db_naming:emitter_sup_name(StoreId),
+    maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription, whereis(SupName)).
+
+maybe_start_emitter_pool(_StoreId, _SubscriptionKey, _Subscription, undefined) ->
+    ok;
+maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription, _SupPid) ->
+    case reckon_db_emitter_pool:start_emitter(StoreId, Subscription) of
+        {ok, _Pid} ->
+            logger:info("Started emitter pool for subscription ~s (store: ~p)",
+                       [SubscriptionKey, StoreId]);
+        {error, {already_started, _}} ->
+            ok;
+        {error, _} ->
+            ok
+    end.
 
 %% @private Register a Khepri trigger for event notification
 -spec register_trigger(atom(), binary(), term()) -> ok | {error, term()}.
