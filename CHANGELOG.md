@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-03-06
+
+### Fixed
+
+- **Per-store Ra system isolation**: Each ReckonDB store now creates its own
+  dedicated Ra system with separate WAL, segments, and DETS files. Previously,
+  all stores shared the default `khepri` Ra system, causing all event data from
+  every bounded context to be written into a single WAL file (whichever store
+  started first owned the shared WAL directory). This affected both single and
+  cluster modes.
+
 ## [1.3.3] - 2026-03-05
 
 ### Fixed
