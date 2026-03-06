@@ -159,8 +159,14 @@ check_subscriptions(StoreId, Subscriptions, RunningPools) ->
             HasPool = has_running_pool(StoreId, SubId, RunningPools),
 
             case {IsStale, HasPool} of
-                {true, _} ->
+                {true, false} ->
+                    %% Dead subscriber AND no emitter pool = truly stale
                     {[{SubId, Name} | StaleAcc], MissingAcc, HealthyAcc};
+                {true, true} ->
+                    %% Dead subscriber BUT emitter pool running =
+                    %% restarted (persisted subscription from previous BEAM).
+                    %% The pool is serving events, so treat as healthy.
+                    {StaleAcc, MissingAcc, HealthyAcc + 1};
                 {false, false} ->
                     {StaleAcc, [SubId | MissingAcc], HealthyAcc};
                 {false, true} ->

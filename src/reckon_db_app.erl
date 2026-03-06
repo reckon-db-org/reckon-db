@@ -44,7 +44,6 @@ start(_StartType, _StartArgs) ->
     case reckon_db_sup:start_link() of
         {ok, Pid} ->
             logger:info("reckon-db v~s started", [?RECKON_DB_VERSION]),
-            emit_start_telemetry(),
             {ok, Pid};
         {error, Reason} = Error ->
             logger:error("Failed to start reckon-db: ~p", [Reason]),
@@ -54,7 +53,6 @@ start(_StartType, _StartArgs) ->
 %% @private
 -spec stop(term()) -> ok.
 stop(_State) ->
-    emit_stop_telemetry(),
     logger:info("reckon-db stopped"),
     ok.
 
@@ -102,22 +100,3 @@ attach_handler(Handler) ->
     logger:warning("Unknown telemetry handler: ~p", [Handler]),
     ok.
 
-%% @private
--spec emit_start_telemetry() -> ok.
-emit_start_telemetry() ->
-    telemetry:execute(
-        ?STORE_STARTED,
-        #{system_time => erlang:system_time(millisecond)},
-        #{application => reckon_db, version => ?RECKON_DB_VERSION}
-    ),
-    ok.
-
-%% @private
--spec emit_stop_telemetry() -> ok.
-emit_stop_telemetry() ->
-    telemetry:execute(
-        ?STORE_STOPPED,
-        #{system_time => erlang:system_time(millisecond)},
-        #{application => reckon_db, reason => normal}
-    ),
-    ok.

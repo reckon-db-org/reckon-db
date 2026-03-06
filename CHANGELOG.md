@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-03-06
+
+### Fixed
+
+- **Subscription health monitor kills valid subscriptions after restart**: The health
+  monitor treated subscriptions with dead `subscriber_pid` as stale and deleted them,
+  even when the emitter pool was running and actively serving events. After a daemon
+  restart, ALL persisted subscriptions have dead PIDs (from the previous BEAM instance),
+  so the health checker would kill every domain subscription ~2 minutes after boot.
+  This left projections without event feeds and read models empty/stale.
+  Fix: subscriptions with dead `subscriber_pid` but a running emitter pool are now
+  treated as healthy (restarted subscription from a previous BEAM instance).
+
+- **App-level telemetry crashes handler on startup**: `emit_start_telemetry()` fired
+  `[reckon_db, store, started]` with app-level metadata (`#{application => reckon_db,
+  version => ...}`) instead of the expected `#{store_id := ...}`. This caused a
+  `badmatch` in `reckon_db_telemetry:handle_event/4`, which detached the entire
+  telemetry logger handler for the rest of the session. Removed the mistyped app-level
+  telemetry events (per-store telemetry in `reckon_db_store` is unaffected).
+
+- **Stale `RECKON_DB_VERSION` macro**: Updated from `"0.1.0"` to `"1.4.1"`.
+
 ## [1.4.0] - 2026-03-06
 
 ### Fixed
