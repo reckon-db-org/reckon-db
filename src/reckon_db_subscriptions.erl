@@ -135,14 +135,39 @@ finalize_subscription(StoreId, Key, Type, Selector, Subscription, StartTime) ->
 
 %% @private Re-register subscriber PID on an existing subscription.
 %% After a restart, subscriptions persist in Khepri but carry a dead PID
-%% from the previous BEAM instance. This updates the PID so the emitter
-%% delivers events to the new projection process.
+%% from the previous BEAM instance. This updates the PID AND re-registers
+%% the Khepri trigger so that new events fire the notification mechanism.
+%%
+%% Khepri triggers store Erlang funs (stored procedures) that may become
+%% stale after a BEAM restart. Re-registering ensures the trigger's proc
+%% function is fresh and the emitter group names are persisted.
 -spec reregister_subscriber(atom(), binary(), binary(), subscribe_opts()) ->
     {ok, binary()}.
 reregister_subscriber(StoreId, Key, SubscriptionName, Opts) ->
     NewPid = maps:get(subscriber, Opts, undefined),
     ok = update_subscriber_pid(StoreId, Key, SubscriptionName, NewPid),
+    %% Re-register the Khepri trigger and emitter names.
+    %% The trigger's stored proc (an Erlang fun) may be stale after restart.
+    ok = reregister_trigger(StoreId, Key),
     {ok, Key}.
+
+%% @private Re-register the Khepri trigger for an existing subscription.
+%% Reads the subscription from the store to obtain type and selector,
+%% then re-creates the filter and re-registers the trigger.
+-spec reregister_trigger(atom(), binary()) -> ok.
+reregister_trigger(StoreId, Key) ->
+    case reckon_db_subscriptions_store:get(StoreId, Key) of
+        #subscription{type = Type, selector = Selector, pool_size = PoolSize} ->
+            case create_filter(Type, Selector) of
+                {error, _} ->
+                    ok;
+                Filter ->
+                    _ = reckon_db_emitter_group:persist_emitters(StoreId, Key, PoolSize),
+                    ok = register_trigger(StoreId, Key, Filter)
+            end;
+        _ ->
+            ok
+    end.
 
 -spec update_subscriber_pid(atom(), binary(), binary(), pid() | undefined) -> ok.
 update_subscriber_pid(_StoreId, _Key, _Name, undefined) ->

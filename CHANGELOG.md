@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-03-06
+
+### Fixed
+
+- **Stale Khepri triggers after BEAM restart**: When a subscription already existed
+  in Khepri (persisted from a previous run), `reregister_subscriber` only updated
+  the subscriber PID but did NOT re-register the Khepri trigger. The trigger's stored
+  procedure (an Erlang fun/closure) becomes stale after a BEAM restart, so new events
+  written to the store would never fire the notification mechanism. This caused
+  subscription-based event delivery to silently stop working after daemon restarts.
+  Fixed: `reregister_subscriber` now also re-creates the filter and re-registers the
+  Khepri trigger, ensuring the stored procedure is fresh.
+
 ## [1.4.4] - 2026-03-06
 
 ### Fixed
