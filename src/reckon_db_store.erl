@@ -162,40 +162,72 @@ terminate(Reason, #state{store_id = StoreId, started_at = StartedAt}) ->
 %% @private
 -spec start_khepri_store(atom(), string(), single | cluster) -> ok | {error, term()}.
 start_khepri_store(StoreId, DataDir, single) ->
-    %% Single node mode - simple khepri start
-    %% IMPORTANT: First argument MUST be DataDir (string/binary), not StoreId (atom).
-    %% When khepri:start/2 receives a path as first arg, it auto-creates the Ra system.
-    %% When it receives an atom, it assumes that Ra system already exists and fails
-    %% with :system_not_started if it doesn't.
+    %% Single node mode — each store gets its own Ra system.
+    %%
+    %% Without this, khepri:start(DataDir, StoreId) uses the default 'khepri'
+    %% Ra system. The first store's DataDir becomes the WAL directory for ALL
+    %% stores, mixing event data from separate bounded contexts into one WAL.
+    %%
+    %% Fix: create a dedicated Ra system per store (named after the StoreId),
+    %% each with its own DataDir, WAL, and segments.
     Timeout = application:get_env(reckon_db, default_timeout, ?DEFAULT_TIMEOUT),
-    case khepri:start(DataDir, StoreId, Timeout) of
-        {ok, _} -> ok;
-        {error, {already_started, _}} -> ok;
-        Error -> Error
+    RaSystemName = ra_system_name(StoreId),
+    case ensure_ra_system(RaSystemName, DataDir) of
+        ok ->
+            case khepri:start(RaSystemName, StoreId, Timeout) of
+                {ok, _} -> ok;
+                {error, {already_started, _}} -> ok;
+                Error -> Error
+            end;
+        {error, _} = Error ->
+            Error
     end;
 
 start_khepri_store(StoreId, DataDir, cluster) ->
-    %% Cluster mode - start with Ra cluster configuration
-    %% IMPORTANT: First argument MUST be DataDir (string/binary), not StoreId (atom).
-    %% When khepri:start/2 receives a path as first arg, it auto-creates the Ra system.
-    %% When it receives an atom, it assumes that Ra system already exists and fails
-    %% with :system_not_started if it doesn't.
-    RaServerConfig = #{
-        cluster_name => StoreId,
-        id => {StoreId, node()},
-        uid => atom_to_binary(StoreId, utf8),
-        initial_members => [{StoreId, node()}],
-        log_init_args => #{uid => atom_to_binary(StoreId, utf8)},
-        machine => {module, khepri_machine, #{store_id => StoreId}}
+    %% Cluster mode — each store gets its own Ra system (same fix as single).
+    RaSystemName = ra_system_name(StoreId),
+    case ensure_ra_system(RaSystemName, DataDir) of
+        ok ->
+            RaServerConfig = #{
+                cluster_name => StoreId,
+                id => {StoreId, node()},
+                uid => atom_to_binary(StoreId, utf8),
+                initial_members => [{StoreId, node()}],
+                log_init_args => #{uid => atom_to_binary(StoreId, utf8)},
+                machine => {module, khepri_machine, #{store_id => StoreId}}
+            },
+            KhepriOpts = #{
+                store_id => StoreId,
+                ra_server_config => RaServerConfig
+            },
+            case khepri:start(RaSystemName, KhepriOpts) of
+                {ok, _} -> ok;
+                {error, {already_started, _}} -> ok;
+                Error -> Error
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private Derive a unique Ra system name from a store ID.
+-spec ra_system_name(atom()) -> atom().
+ra_system_name(StoreId) ->
+    list_to_atom("ra_" ++ atom_to_list(StoreId)).
+
+%% @private Start a dedicated Ra system for a store.
+-spec ensure_ra_system(atom(), string()) -> ok | {error, term()}.
+ensure_ra_system(RaSystemName, DataDir) ->
+    DefaultConfig = ra_system:default_config(),
+    RaSystemConfig = DefaultConfig#{
+        name => RaSystemName,
+        data_dir => DataDir,
+        wal_data_dir => DataDir,
+        names => ra_system:derive_names(RaSystemName)
     },
-    KhepriOpts = #{
-        store_id => StoreId,
-        ra_server_config => RaServerConfig
-    },
-    case khepri:start(DataDir, KhepriOpts) of
+    case ra_system:start(RaSystemConfig) of
         {ok, _} -> ok;
         {error, {already_started, _}} -> ok;
-        Error -> Error
+        {error, Reason} -> {error, Reason}
     end.
 
 %% @private
