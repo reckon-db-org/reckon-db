@@ -115,15 +115,7 @@ handle_info({forward_to_local, Topic, Event}, State) ->
 
 %% Handle direct events message
 handle_info({events, Events}, #state{subscriber = Subscriber} = State) when is_list(Events) ->
-    %% Forward events to subscriber if present
-    case Subscriber of
-        undefined -> ok;
-        Pid when is_pid(Pid) ->
-            case erlang:is_process_alive(Pid) of
-                true -> Pid ! {events, Events};
-                false -> ok
-            end
-    end,
+    maybe_forward_events(Subscriber, Events),
     {noreply, State};
 
 %% Handle EXIT from linked processes
@@ -156,33 +148,32 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% @private Handle event delivery to subscriber
 -spec handle_event_delivery(binary(), event(), #state{}) -> ok.
+handle_event_delivery(_Topic, _Event, #state{active = false}) ->
+    ok;
 handle_event_delivery(Topic, Event, #state{
     store_id = StoreId,
     subscription_key = SubscriptionKey,
-    subscriber = Subscriber,
-    active = Active
+    subscriber = Subscriber
 }) ->
-    case Active of
-        false ->
-            ok;
-        true ->
-            %% Emit telemetry
-            telemetry:execute(
-                ?SUBSCRIPTION_EVENT_DELIVERED,
-                #{count => 1},
-                #{store_id => StoreId, subscription_key => SubscriptionKey, topic => Topic}
-            ),
+    telemetry:execute(
+        ?SUBSCRIPTION_EVENT_DELIVERED,
+        #{count => 1},
+        #{store_id => StoreId, subscription_key => SubscriptionKey, topic => Topic}
+    ),
+    deliver_event(Subscriber, Event, StoreId, SubscriptionKey, Topic).
 
-            %% Deliver the event
-            case Subscriber of
-                undefined ->
-                    %% Broadcast to pg group for topic
-                    broadcast_to_topic(StoreId, Topic, Event);
-                Pid when is_pid(Pid) ->
-                    %% Send directly to subscriber
-                    send_to_subscriber(Pid, Event, StoreId, SubscriptionKey)
-            end
+maybe_forward_events(undefined, _Events) ->
+    ok;
+maybe_forward_events(Pid, Events) when is_pid(Pid) ->
+    case erlang:is_process_alive(Pid) of
+        true -> Pid ! {events, Events};
+        false -> ok
     end.
+
+deliver_event(undefined, Event, StoreId, _SubscriptionKey, Topic) ->
+    broadcast_to_topic(StoreId, Topic, Event);
+deliver_event(Pid, Event, StoreId, SubscriptionKey, _Topic) when is_pid(Pid) ->
+    send_to_subscriber(Pid, Event, StoreId, SubscriptionKey).
 
 %% @private Broadcast event to topic subscribers via pg
 -spec broadcast_to_topic(atom(), binary(), event()) -> ok.

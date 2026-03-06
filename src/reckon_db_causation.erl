@@ -76,12 +76,7 @@ get_cause(StoreId, EventId) ->
 
     Result = case find_event_by_id(StoreId, EventId) of
         {ok, Event} ->
-            case maps:get(causation_id, Event#event.metadata, undefined) of
-                undefined ->
-                    {error, no_cause};
-                CausationId ->
-                    find_event_by_id(StoreId, CausationId)
-            end;
+            find_cause_event(StoreId, Event);
         Error ->
             Error
     end,
@@ -133,20 +128,11 @@ get_correlated(StoreId, CorrelationId) ->
 %% Returns nodes and edges suitable for graph rendering.
 -spec build_graph(atom(), binary()) -> {ok, causation_graph()} | {error, term()}.
 build_graph(StoreId, Id) ->
-    %% Try as event_id first, then as correlation_id
     case find_event_by_id(StoreId, Id) of
         {ok, RootEvent} ->
             build_graph_from_event(StoreId, RootEvent);
         {error, not_found} ->
-            %% Try as correlation_id
-            case get_correlated(StoreId, Id) of
-                {ok, Events} when Events =/= [] ->
-                    build_graph_from_correlation(Events);
-                {ok, []} ->
-                    {error, not_found};
-                Error ->
-                    Error
-            end
+            build_graph_from_correlation_id(StoreId, Id)
     end.
 
 %% @doc Export a causation graph as DOT format for Graphviz.
@@ -186,6 +172,24 @@ to_dot(#{nodes := Nodes, edges := Edges}) ->
 %% Internal functions
 %%====================================================================
 
+find_cause_event(StoreId, Event) ->
+    case maps:get(causation_id, Event#event.metadata, undefined) of
+        undefined ->
+            {error, no_cause};
+        CausationId ->
+            find_event_by_id(StoreId, CausationId)
+    end.
+
+build_graph_from_correlation_id(StoreId, Id) ->
+    case get_correlated(StoreId, Id) of
+        {ok, Events} when Events =/= [] ->
+            build_graph_from_correlation(Events);
+        {ok, []} ->
+            {error, not_found};
+        Error ->
+            Error
+    end.
+
 %% @private Scan all streams for events matching metadata field
 -spec scan_for_metadata(atom(), atom(), binary()) -> {ok, [event()]} | {error, term()}.
 scan_for_metadata(StoreId, Field, Value) ->
@@ -215,18 +219,13 @@ scan_for_metadata(StoreId, Field, Value) ->
 scan_stream_for_metadata(StoreId, StreamId, Field, Value) ->
     case reckon_db_streams:read(StoreId, StreamId, 0, 10000, forward) of
         {ok, Events} ->
-            lists:filter(
-                fun(Event) ->
-                    case maps:get(Field, Event#event.metadata, undefined) of
-                        Value -> true;
-                        _ -> false
-                    end
-                end,
-                Events
-            );
+            [E || E <- Events, metadata_matches(E, Field, Value)];
         {error, _} ->
             []
     end.
+
+metadata_matches(Event, Field, Value) ->
+    maps:get(Field, Event#event.metadata, undefined) =:= Value.
 
 %% @private Find an event by its ID across all streams
 -spec find_event_by_id(atom(), binary()) -> {ok, event()} | {error, not_found | term()}.
@@ -255,12 +254,15 @@ find_event_in_streams(StoreId, [StreamId | Rest], EventId) ->
 scan_stream_for_event(StoreId, StreamId, EventId) ->
     case reckon_db_streams:read(StoreId, StreamId, 0, 10000, forward) of
         {ok, Events} ->
-            case lists:search(fun(E) -> E#event.event_id =:= EventId end, Events) of
-                {value, Event} -> {ok, Event};
-                false -> not_found
-            end;
+            find_event_in_list(Events, EventId);
         {error, _} ->
             not_found
+    end.
+
+find_event_in_list(Events, EventId) ->
+    case lists:search(fun(E) -> E#event.event_id =:= EventId end, Events) of
+        {value, Event} -> {ok, Event};
+        false -> not_found
     end.
 
 %% @private Build causation chain by walking backward
@@ -270,12 +272,15 @@ build_chain_backward(StoreId, Event, Acc) ->
         undefined ->
             Acc;
         CausationId ->
-            case find_event_by_id(StoreId, CausationId) of
-                {ok, CauseEvent} ->
-                    build_chain_backward(StoreId, CauseEvent, [CauseEvent | Acc]);
-                {error, _} ->
-                    Acc
-            end
+            chain_backward_step(StoreId, CausationId, Acc)
+    end.
+
+chain_backward_step(StoreId, CausationId, Acc) ->
+    case find_event_by_id(StoreId, CausationId) of
+        {ok, CauseEvent} ->
+            build_chain_backward(StoreId, CauseEvent, [CauseEvent | Acc]);
+        {error, _} ->
+            Acc
     end.
 
 %% @private Build graph starting from a single event
@@ -301,17 +306,7 @@ build_graph_from_correlation(Events) ->
     EventMap = maps:from_list([{E#event.event_id, E} || E <- Events]),
 
     Edges = lists:filtermap(
-        fun(Event) ->
-            case maps:get(causation_id, Event#event.metadata, undefined) of
-                undefined ->
-                    false;
-                CausationId ->
-                    case maps:is_key(CausationId, EventMap) of
-                        true -> {true, {CausationId, Event#event.event_id}};
-                        false -> false
-                    end
-            end
-        end,
+        fun(Event) -> causation_edge(Event, EventMap) end,
         Events
     ),
 
@@ -329,6 +324,18 @@ build_graph_from_correlation(Events) ->
         edges => Edges,
         root => RootId
     }}.
+
+causation_edge(Event, EventMap) ->
+    CausationId = maps:get(causation_id, Event#event.metadata, undefined),
+    causation_edge(CausationId, Event#event.event_id, EventMap).
+
+causation_edge(undefined, _EventId, _EventMap) ->
+    false;
+causation_edge(CausationId, EventId, EventMap) ->
+    case maps:is_key(CausationId, EventMap) of
+        true -> {true, {CausationId, EventId}};
+        false -> false
+    end.
 
 %% @private Recursively collect effects
 -spec collect_effects(atom(), event(), [event()], [{binary(), binary()}]) ->

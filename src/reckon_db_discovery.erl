@@ -209,27 +209,27 @@ handle_gossip_message(Data, #state{cluster_secret = OurSecret, store_id = StoreI
 handle_discovered_node(Node, StoreId, KnownNodes, State) ->
     case lists:member(Node, KnownNodes) of
         true ->
-            %% Already known
             State;
         false ->
             logger:info("Discovered new node: ~p (store: ~p)", [Node, StoreId]),
-            %% Try to connect
-            case net_kernel:connect_node(Node) of
-                true ->
-                    logger:info("Connected to discovered node: ~p", [Node]),
-                    telemetry:execute(
-                        ?CLUSTER_NODE_UP,
-                        #{system_time => erlang:system_time(millisecond)},
-                        #{store_id => StoreId, node => Node,
-                          member_count => length(nodes()) + 1}
-                    ),
-                    %% Trigger cluster join
-                    trigger_cluster_join(StoreId),
-                    State#state{discovered_nodes = [Node | KnownNodes]};
-                false ->
-                    logger:warning("Failed to connect to discovered node: ~p", [Node]),
-                    State
-            end
+            connect_discovered_node(Node, StoreId, KnownNodes, State)
+    end.
+
+connect_discovered_node(Node, StoreId, KnownNodes, State) ->
+    case net_kernel:connect_node(Node) of
+        true ->
+            logger:info("Connected to discovered node: ~p", [Node]),
+            telemetry:execute(
+                ?CLUSTER_NODE_UP,
+                #{system_time => erlang:system_time(millisecond)},
+                #{store_id => StoreId, node => Node,
+                  member_count => length(nodes()) + 1}
+            ),
+            trigger_cluster_join(StoreId),
+            State#state{discovered_nodes = [Node | KnownNodes]};
+        false ->
+            logger:warning("Failed to connect to discovered node: ~p", [Node]),
+            State
     end.
 
 %% @private Trigger cluster join via store coordinator

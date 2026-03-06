@@ -63,18 +63,21 @@ make_key(StoreId, StreamId, FromVersion, ToVersion) ->
 parse_key(Key) ->
     case binary:split(Key, <<"/">>, [global]) of
         [StoreIdBin, StreamId, VersionRange] ->
-            case parse_version_range(VersionRange) of
-                {ok, FromVersion, ToVersion} ->
-                    {ok, #{
-                        store_id => binary_to_atom(StoreIdBin, utf8),
-                        stream_id => StreamId,
-                        from_version => FromVersion,
-                        to_version => ToVersion
-                    }};
-                error ->
-                    {error, invalid_key}
-            end;
+            parse_key_with_range(StoreIdBin, StreamId, VersionRange);
         _ ->
+            {error, invalid_key}
+    end.
+
+parse_key_with_range(StoreIdBin, StreamId, VersionRange) ->
+    case parse_version_range(VersionRange) of
+        {ok, FromVersion, ToVersion} ->
+            {ok, #{
+                store_id => binary_to_atom(StoreIdBin, utf8),
+                stream_id => StreamId,
+                from_version => FromVersion,
+                to_version => ToVersion
+            }};
+        error ->
             {error, invalid_key}
     end.
 
@@ -83,16 +86,24 @@ parse_key(Key) ->
 parse_version_range(VersionRange) ->
     case binary:split(VersionRange, <<".archive">>) of
         [Range, <<>>] ->
-            case binary:split(Range, <<"-">>) of
-                [FromBin, ToBin] ->
-                    try
-                        {ok, binary_to_integer(FromBin), binary_to_integer(ToBin)}
-                    catch
-                        _:_ -> error
-                    end;
-                _ ->
-                    error
-            end;
+            parse_range_pair(Range);
         _ ->
             error
+    end.
+
+%% @private
+parse_range_pair(Range) ->
+    case binary:split(Range, <<"-">>) of
+        [FromBin, ToBin] ->
+            safe_to_integers(FromBin, ToBin);
+        _ ->
+            error
+    end.
+
+%% @private
+safe_to_integers(FromBin, ToBin) ->
+    try
+        {ok, binary_to_integer(FromBin), binary_to_integer(ToBin)}
+    catch
+        _:_ -> error
     end.

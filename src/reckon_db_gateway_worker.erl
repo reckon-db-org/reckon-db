@@ -494,19 +494,22 @@ version_matches(Current, Expected) when is_integer(Expected) -> Current =:= Expe
 find_subscription_by_name(StoreId, SubscriptionName) ->
     case reckon_db_subscriptions:list(StoreId) of
         {ok, Subscriptions} ->
-            case lists:filter(
-                fun(S) when is_record(S, subscription) ->
-                    S#subscription.subscription_name =:= SubscriptionName;
-                   (S) when is_map(S) ->
-                    maps:get(subscription_name, S, <<>>) =:= SubscriptionName
-                end,
-                Subscriptions
-            ) of
-                [Sub | _] -> {ok, subscription_to_map(Sub)};
-                [] -> {error, not_found}
-            end;
+            match_subscription_by_name(Subscriptions, SubscriptionName);
         {error, _} = Error ->
             Error
+    end.
+
+match_subscription_by_name(Subscriptions, SubscriptionName) ->
+    case lists:filter(
+        fun(S) when is_record(S, subscription) ->
+            S#subscription.subscription_name =:= SubscriptionName;
+           (S) when is_map(S) ->
+            maps:get(subscription_name, S, <<>>) =:= SubscriptionName
+        end,
+        Subscriptions
+    ) of
+        [Sub | _] -> {ok, subscription_to_map(Sub)};
+        [] -> {error, not_found}
     end.
 
 %% @private Convert subscription record to map

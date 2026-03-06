@@ -354,17 +354,18 @@ erlang_build_edges(Nodes) ->
     NodeIds = sets:from_list([Id || {Id, _} <- Nodes]),
     lists:filtermap(
         fun({EventId, CausationId}) ->
-            case CausationId of
-                undefined -> false;
-                _ ->
-                    case sets:is_element(CausationId, NodeIds) of
-                        true -> {true, {CausationId, EventId}};
-                        false -> false
-                    end
-            end
+            maybe_build_edge(EventId, CausationId, NodeIds)
         end,
         Nodes
     ).
+
+maybe_build_edge(_EventId, undefined, _NodeIds) ->
+    false;
+maybe_build_edge(EventId, CausationId, NodeIds) ->
+    case sets:is_element(CausationId, NodeIds) of
+        true -> {true, {CausationId, EventId}};
+        false -> false
+    end.
 
 %% @private
 -spec erlang_find_roots([binary()], [{binary(), binary()}]) -> [binary()].

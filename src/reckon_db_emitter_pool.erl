@@ -65,16 +65,17 @@ stop_emitter(StoreId, #subscription{id = SubId}) ->
 %% @doc Update an emitter pool configuration
 -spec update_emitter(atom(), subscription()) -> ok | {error, term()}.
 update_emitter(StoreId, #subscription{} = Subscription) ->
-    %% For now, restart the pool to apply changes
-    %% Future: implement hot reconfiguration
     case stop_emitter(StoreId, Subscription) of
         ok ->
-            case start_emitter(StoreId, Subscription) of
-                {ok, _Pid} -> ok;
-                Error -> Error
-            end;
+            restart_emitter(StoreId, Subscription);
         Error ->
             Error
+    end.
+
+restart_emitter(StoreId, Subscription) ->
+    case start_emitter(StoreId, Subscription) of
+        {ok, _Pid} -> ok;
+        Error -> Error
     end.
 
 %% @doc Stop an emitter pool by key (deprecated, use stop_emitter/2)

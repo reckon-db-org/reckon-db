@@ -205,11 +205,7 @@ base64_encode_urlsafe(Data) ->
     {ok, binary()} | {error, invalid_base64}.
 base64_decode_urlsafe(Data) ->
     case is_nif_loaded() of
-        true ->
-            case nif_base64_decode_urlsafe(Data) of
-                {ok, Result} -> {ok, Result};
-                {error, _} -> {error, invalid_base64}
-            end;
+        true -> nif_base64_decode_urlsafe_safe(Data);
         false -> erlang_base64_decode_urlsafe(Data)
     end.
 
@@ -225,6 +221,17 @@ secure_compare(A, B) ->
     case is_nif_loaded() of
         true -> nif_secure_compare(A, B);
         false -> erlang_secure_compare(A, B)
+    end.
+
+%%====================================================================
+%% NIF Safe Wrappers
+%%====================================================================
+
+%% @private
+nif_base64_decode_urlsafe_safe(Data) ->
+    case nif_base64_decode_urlsafe(Data) of
+        {ok, Result} -> {ok, Result};
+        {error, _} -> {error, invalid_base64}
     end.
 
 %%====================================================================

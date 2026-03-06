@@ -131,22 +131,7 @@ handle_info(check_leader, #state{store_id = StoreId, current_leader = PreviousLe
             handle_no_leader(PreviousLeader, StoreId, State)
     end,
 
-    %% Schedule next check
-    case Mode of
-        cluster ->
-            schedule_leader_check(?LEADER_CHECK_INTERVAL);
-        single ->
-            %% In single mode, keep retrying until leader is detected.
-            %% Ra leader election may not complete before the first check.
-            %% Once detected, no more checks needed (no leadership changes
-            %% in single-node mode).
-            case NewState#state.current_leader of
-                undefined ->
-                    schedule_leader_check(?LEADER_CHECK_INTERVAL);
-                _ ->
-                    ok
-            end
-    end,
+    schedule_leader_check_if_needed(Mode, NewState),
 
     {noreply, NewState};
 
@@ -179,26 +164,34 @@ terminate(_Reason, _State) ->
 %% Internal functions
 %%====================================================================
 
+schedule_leader_check_if_needed(cluster, _State) ->
+    schedule_leader_check(?LEADER_CHECK_INTERVAL);
+schedule_leader_check_if_needed(single, #state{current_leader = undefined}) ->
+    schedule_leader_check(?LEADER_CHECK_INTERVAL);
+schedule_leader_check_if_needed(single, _State) ->
+    ok.
+
 %% @private Handle nodeup in cluster mode
 -spec handle_nodeup_cluster_join(atom()) -> ok.
 handle_nodeup_cluster_join(StoreId) ->
     case reckon_db_store_coordinator:should_handle_nodeup(StoreId) of
         true ->
             logger:info("Attempting cluster join due to nodeup (store: ~p)", [StoreId]),
-            spawn(fun() ->
-                case reckon_db_store_coordinator:join_cluster(StoreId) of
-                    ok ->
-                        logger:info("Cluster join successful (store: ~p)", [StoreId]);
-                    coordinator ->
-                        logger:info("Acting as coordinator (store: ~p)", [StoreId]);
-                    _ ->
-                        ok
-                end
-            end);
+            spawn(fun() -> attempt_cluster_join(StoreId) end);
         false ->
             logger:debug("Already in cluster, ignoring nodeup (store: ~p)", [StoreId])
     end,
     ok.
+
+attempt_cluster_join(StoreId) ->
+    case reckon_db_store_coordinator:join_cluster(StoreId) of
+        ok ->
+            logger:info("Cluster join successful (store: ~p)", [StoreId]);
+        coordinator ->
+            logger:info("Acting as coordinator (store: ~p)", [StoreId]);
+        _ ->
+            ok
+    end.
 
 %% @private Handle leader detected
 -spec handle_leader_detected(node(), node() | undefined, atom(), #state{}) -> #state{}.

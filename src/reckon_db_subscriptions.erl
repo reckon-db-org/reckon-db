@@ -101,36 +101,63 @@ subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
     SubscriptionWithId = Subscription#subscription{id = Key},
     case reckon_db_subscriptions_store:exists(StoreId, Key) of
         true ->
-            {error, {already_exists, SubscriptionName}};
+            reregister_subscriber(StoreId, Key, SubscriptionName, Opts);
         false ->
-            %% Store the subscription
-            case reckon_db_subscriptions_store:put(StoreId, SubscriptionWithId) of
-                ok ->
-                    %% Setup the event notification mechanism
-                    case create_filter(Type, Selector) of
-                        {error, FilterReason} ->
-                            %% Rollback: remove the stored subscription
-                            _ = reckon_db_subscriptions_store:delete(StoreId, Key),
-                            {error, {invalid_filter, FilterReason}};
-                        Filter ->
-                            setup_event_notification(StoreId, Key, Filter, SubscriptionWithId),
-
-                            %% Notify trackers
-                            reckon_db_tracker_group:notify_created(StoreId, subscriptions, SubscriptionWithId),
-
-                            Duration = erlang:monotonic_time() - StartTime,
-                            telemetry:execute(
-                                ?SUBSCRIPTION_CREATED,
-                                #{duration => Duration},
-                                #{store_id => StoreId, subscription_key => Key}
-                            ),
-
-                            {ok, Key}
-                    end;
-                {error, _} = Error ->
-                    Error
-            end
+            store_and_setup(StoreId, Key, Type, Selector, SubscriptionWithId, StartTime)
     end.
+
+%% @private
+store_and_setup(StoreId, Key, Type, Selector, Subscription, StartTime) ->
+    case reckon_db_subscriptions_store:put(StoreId, Subscription) of
+        ok ->
+            finalize_subscription(StoreId, Key, Type, Selector, Subscription, StartTime);
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private
+finalize_subscription(StoreId, Key, Type, Selector, Subscription, StartTime) ->
+    case create_filter(Type, Selector) of
+        {error, FilterReason} ->
+            _ = reckon_db_subscriptions_store:delete(StoreId, Key),
+            {error, {invalid_filter, FilterReason}};
+        Filter ->
+            setup_event_notification(StoreId, Key, Filter, Subscription),
+            reckon_db_tracker_group:notify_created(StoreId, subscriptions, Subscription),
+            Duration = erlang:monotonic_time() - StartTime,
+            telemetry:execute(
+                ?SUBSCRIPTION_CREATED,
+                #{duration => Duration},
+                #{store_id => StoreId, subscription_key => Key}
+            ),
+            {ok, Key}
+    end.
+
+%% @private Re-register subscriber PID on an existing subscription.
+%% After a restart, subscriptions persist in Khepri but carry a dead PID
+%% from the previous BEAM instance. This updates the PID so the emitter
+%% delivers events to the new projection process.
+-spec reregister_subscriber(atom(), binary(), binary(), subscribe_opts()) ->
+    {ok, binary()}.
+reregister_subscriber(StoreId, Key, SubscriptionName, Opts) ->
+    NewPid = maps:get(subscriber, Opts, undefined),
+    ok = update_subscriber_pid(StoreId, Key, SubscriptionName, NewPid),
+    {ok, Key}.
+
+-spec update_subscriber_pid(atom(), binary(), binary(), pid() | undefined) -> ok.
+update_subscriber_pid(_StoreId, _Key, _Name, undefined) ->
+    ok;
+update_subscriber_pid(StoreId, Key, Name, Pid) when is_pid(Pid) ->
+    case reckon_db_subscriptions_store:get(StoreId, Key) of
+        {ok, Existing} ->
+            Updated = Existing#subscription{subscriber_pid = Pid},
+            _ = reckon_db_subscriptions_store:put(StoreId, Updated),
+            logger:info("Subscription ~s re-registered with new PID (store: ~p)",
+                       [Name, StoreId]);
+        {error, _} ->
+            ok
+    end,
+    ok.
 
 %% @doc Remove a subscription by key
 -spec unsubscribe(atom(), binary()) -> ok | {error, term()}.
@@ -203,20 +230,22 @@ setup_tracking(StoreId, Pid) ->
 ack(StoreId, SubscriptionName, _StreamId, EventNumber) ->
     case reckon_db_subscriptions_store:find_by_name(StoreId, SubscriptionName) of
         {ok, Key, _Subscription} ->
-            case reckon_db_subscriptions_store:update_checkpoint(StoreId, Key, EventNumber) of
-                ok ->
-                    %% Emit telemetry for checkpoint update
-                    telemetry:execute(
-                        ?SUBSCRIPTION_CHECKPOINT,
-                        #{position => EventNumber},
-                        #{store_id => StoreId, subscription_name => SubscriptionName}
-                    ),
-                    ok;
-                {error, _} = Error ->
-                    Error
-            end;
+            do_ack_checkpoint(StoreId, Key, SubscriptionName, EventNumber);
         {error, not_found} ->
             {error, {subscription_not_found, SubscriptionName}}
+    end.
+
+do_ack_checkpoint(StoreId, Key, SubscriptionName, EventNumber) ->
+    case reckon_db_subscriptions_store:update_checkpoint(StoreId, Key, EventNumber) of
+        ok ->
+            telemetry:execute(
+                ?SUBSCRIPTION_CHECKPOINT,
+                #{position => EventNumber},
+                #{store_id => StoreId, subscription_name => SubscriptionName}
+            ),
+            ok;
+        {error, _} = Error ->
+            Error
     end.
 
 %%====================================================================
@@ -255,19 +284,23 @@ do_unsubscribe(StoreId, Key, Subscription) ->
 find_subscription(StoreId, Type, SubscriptionName) ->
     case reckon_db_subscriptions_store:list(StoreId) of
         {ok, Subscriptions} ->
-            case lists:filter(
-                fun(#subscription{type = T, subscription_name = N}) ->
-                    T =:= Type andalso N =:= SubscriptionName
-                end,
-                Subscriptions
-            ) of
-                [Subscription | _] ->
-                    Key = reckon_db_subscriptions_store:key(Subscription),
-                    {ok, Key, Subscription};
-                [] ->
-                    {error, not_found}
-            end;
+            match_subscription(Type, SubscriptionName, Subscriptions);
         {error, _} ->
+            {error, not_found}
+    end.
+
+match_subscription(Type, SubscriptionName, Subscriptions) ->
+    Matching = lists:filter(
+        fun(#subscription{type = T, subscription_name = N}) ->
+            T =:= Type andalso N =:= SubscriptionName
+        end,
+        Subscriptions
+    ),
+    case Matching of
+        [Subscription | _] ->
+            Key = reckon_db_subscriptions_store:key(Subscription),
+            {ok, Key, Subscription};
+        [] ->
             {error, not_found}
     end.
 
@@ -344,14 +377,7 @@ register_trigger(StoreId, SubscriptionKey, Filter) ->
         case maps:get(path, Props, undefined) of
             undefined -> ok;
             Path ->
-                case get_event_from_path(StoreId, Path) of
-                    {ok, Event} ->
-                        reckon_db_emitter_group:broadcast(StoreId, SubscriptionKey, Event),
-                        ok;
-                    {error, Reason} ->
-                        logger:warning("Broadcasting failed for path ~p: ~p", [Path, Reason]),
-                        ok
-                end
+                broadcast_event_at_path(StoreId, SubscriptionKey, Path)
         end
     end,
 
@@ -370,6 +396,16 @@ register_trigger(StoreId, SubscriptionKey, Filter) ->
     case khepri:register_trigger(StoreId, TriggerId, Filter, ProcPath, PropOpts) of
         ok -> ok;
         {error, _} = Error -> Error
+    end.
+
+broadcast_event_at_path(StoreId, SubscriptionKey, Path) ->
+    case get_event_from_path(StoreId, Path) of
+        {ok, Event} ->
+            reckon_db_emitter_group:broadcast(StoreId, SubscriptionKey, Event),
+            ok;
+        {error, Reason} ->
+            logger:warning("Broadcasting failed for path ~p: ~p", [Path, Reason]),
+            ok
     end.
 
 %% @private Unregister a Khepri trigger

@@ -28,12 +28,15 @@ get_store_config(StoreId) ->
         [] ->
             {error, not_found};
         Stores ->
-            case proplists:get_value(StoreId, Stores) of
-                undefined ->
-                    {error, not_found};
-                StoreOpts when is_list(StoreOpts) ->
-                    {ok, parse_store_config(StoreId, StoreOpts)}
-            end
+            find_store_config(StoreId, Stores)
+    end.
+
+find_store_config(StoreId, Stores) ->
+    case proplists:get_value(StoreId, Stores) of
+        undefined ->
+            {error, not_found};
+        StoreOpts when is_list(StoreOpts) ->
+            {ok, parse_store_config(StoreId, StoreOpts)}
     end.
 
 %% @doc Get all configured store configurations

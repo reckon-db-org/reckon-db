@@ -279,22 +279,28 @@ cleanup_orphaned_pools(StoreId, Orphaned) ->
 start_missing_pools(StoreId, Missing) ->
     lists:foldl(
         fun(SubId, Count) ->
-            case reckon_db_subscriptions:get(StoreId, SubId) of
-                {ok, Subscription} ->
-                    logger:info("Starting missing emitter pool for ~s in store ~p",
-                               [SubId, StoreId]),
-                    case reckon_db_emitter_pool:start_emitter(StoreId, Subscription) of
-                        {ok, _Pid} -> Count + 1;
-                        {error, {already_started, _}} -> Count;
-                        {error, _} -> Count
-                    end;
-                {error, _} ->
-                    Count
-            end
+            Count + try_start_pool(StoreId, SubId)
         end,
         0,
         Missing
     ).
+
+try_start_pool(StoreId, SubId) ->
+    case reckon_db_subscriptions:get(StoreId, SubId) of
+        {ok, Subscription} ->
+            logger:info("Starting missing emitter pool for ~s in store ~p",
+                       [SubId, StoreId]),
+            start_emitter_for_pool(StoreId, Subscription);
+        {error, _} ->
+            0
+    end.
+
+start_emitter_for_pool(StoreId, Subscription) ->
+    case reckon_db_emitter_pool:start_emitter(StoreId, Subscription) of
+        {ok, _Pid} -> 1;
+        {error, {already_started, _}} -> 0;
+        {error, _} -> 0
+    end.
 
 %% @private Log health report if there are issues
 -spec maybe_log_report(atom(), #health_report{}, non_neg_integer()) -> ok.

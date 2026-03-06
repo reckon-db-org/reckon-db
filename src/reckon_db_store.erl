@@ -60,19 +60,20 @@ get_leader(StoreId) ->
         [] ->
             {error, not_started};
         _ ->
-            try
-                case ra:members({StoreId, node()}) of
-                    {ok, _Members, Leader} when is_tuple(Leader) ->
-                        {_LeaderName, LeaderNode} = Leader,
-                        {ok, LeaderNode};
-                    {ok, _, _} ->
-                        {error, no_leader};
-                    Error ->
-                        Error
-                end
-            catch
-                _:Reason -> {error, Reason}
-            end
+            query_ra_leader(StoreId)
+    end.
+
+%% @private
+query_ra_leader(StoreId) ->
+    try ra:members({StoreId, node()}) of
+        {ok, _Members, Leader} when is_tuple(Leader) ->
+            {ok, element(2, Leader)};
+        {ok, _, _} ->
+            {error, no_leader};
+        Error ->
+            Error
+    catch
+        _:Reason -> {error, Reason}
     end.
 
 %%====================================================================
@@ -174,11 +175,7 @@ start_khepri_store(StoreId, DataDir, single) ->
     RaSystemName = ra_system_name(StoreId),
     case ensure_ra_system(RaSystemName, DataDir) of
         ok ->
-            case khepri:start(RaSystemName, StoreId, Timeout) of
-                {ok, _} -> ok;
-                {error, {already_started, _}} -> ok;
-                Error -> Error
-            end;
+            start_khepri_single(RaSystemName, StoreId, Timeout);
         {error, _} = Error ->
             Error
     end;
@@ -188,25 +185,35 @@ start_khepri_store(StoreId, DataDir, cluster) ->
     RaSystemName = ra_system_name(StoreId),
     case ensure_ra_system(RaSystemName, DataDir) of
         ok ->
-            RaServerConfig = #{
-                cluster_name => StoreId,
-                id => {StoreId, node()},
-                uid => atom_to_binary(StoreId, utf8),
-                initial_members => [{StoreId, node()}],
-                log_init_args => #{uid => atom_to_binary(StoreId, utf8)},
-                machine => {module, khepri_machine, #{store_id => StoreId}}
-            },
-            KhepriOpts = #{
-                store_id => StoreId,
-                ra_server_config => RaServerConfig
-            },
-            case khepri:start(RaSystemName, KhepriOpts) of
-                {ok, _} -> ok;
-                {error, {already_started, _}} -> ok;
-                Error -> Error
-            end;
+            start_khepri_cluster(RaSystemName, StoreId);
         {error, _} = Error ->
             Error
+    end.
+
+start_khepri_single(RaSystemName, StoreId, Timeout) ->
+    case khepri:start(RaSystemName, StoreId, Timeout) of
+        {ok, _} -> ok;
+        {error, {already_started, _}} -> ok;
+        Error -> Error
+    end.
+
+start_khepri_cluster(RaSystemName, StoreId) ->
+    RaServerConfig = #{
+        cluster_name => StoreId,
+        id => {StoreId, node()},
+        uid => atom_to_binary(StoreId, utf8),
+        initial_members => [{StoreId, node()}],
+        log_init_args => #{uid => atom_to_binary(StoreId, utf8)},
+        machine => {module, khepri_machine, #{store_id => StoreId}}
+    },
+    KhepriOpts = #{
+        store_id => StoreId,
+        ra_server_config => RaServerConfig
+    },
+    case khepri:start(RaSystemName, KhepriOpts) of
+        {ok, _} -> ok;
+        {error, {already_started, _}} -> ok;
+        Error -> Error
     end.
 
 %% @private Derive a unique Ra system name from a store ID.

@@ -360,28 +360,27 @@ new_node_state(Node) ->
     {ok | {error, term()}, non_neg_integer()}.
 probe_node(Node, ProbeType, Timeout) ->
     StartTime = erlang:monotonic_time(microsecond),
-    Result = case ProbeType of
-        ping ->
-            case net_adm:ping(Node) of
-                pong -> ok;
-                pang -> {error, ping_failed}
-            end;
-        rpc ->
-            case rpc:call(Node, ?MODULE, health_check, [node()], Timeout) of
-                {ok, _} -> ok;
-                {badrpc, Reason} -> {error, {rpc_failed, Reason}};
-                {error, Reason} -> {error, Reason}
-            end;
-        khepri ->
-            %% For khepri probe, we verify the node can access the store
-            case rpc:call(Node, erlang, node, [], Timeout) of
-                N when is_atom(N) -> ok;
-                {badrpc, Reason} -> {error, {rpc_failed, Reason}}
-            end
-    end,
+    Result = run_probe(Node, ProbeType, Timeout),
     EndTime = erlang:monotonic_time(microsecond),
     Duration = EndTime - StartTime,
     {Result, Duration}.
+
+run_probe(Node, ping, _Timeout) ->
+    case net_adm:ping(Node) of
+        pong -> ok;
+        pang -> {error, ping_failed}
+    end;
+run_probe(Node, rpc, Timeout) ->
+    case rpc:call(Node, ?MODULE, health_check, [node()], Timeout) of
+        {ok, _} -> ok;
+        {badrpc, Reason} -> {error, {rpc_failed, Reason}};
+        {error, Reason} -> {error, Reason}
+    end;
+run_probe(Node, khepri, Timeout) ->
+    case rpc:call(Node, erlang, node, [], Timeout) of
+        N when is_atom(N) -> ok;
+        {badrpc, Reason} -> {error, {rpc_failed, Reason}}
+    end.
 
 %% @doc Health check function called via RPC
 %% Returns basic node health information
@@ -399,54 +398,52 @@ health_check(CallerNode) ->
 -spec handle_probe_result(#node_state{}, ok | {error, term()}, non_neg_integer(),
                           pos_integer(), atom(), map(), map()) ->
     {#node_state{}, 0 | 1, 0 | 1}.
-handle_probe_result(#node_state{status = PrevStatus, consecutive_failures = Failures,
-                                 node = Node} = NodeState,
-                    ProbeResult, Duration, Threshold, StoreId, FailedCb, RecoveredCb) ->
-    Now = erlang:system_time(millisecond),
-    case ProbeResult of
-        ok ->
-            %% Probe succeeded
-            NewStatus = healthy,
-            WasRecovered = (PrevStatus =:= failed),
-            UpdatedState = NodeState#node_state{
-                status = NewStatus,
-                consecutive_failures = 0,
-                last_success = Now,
-                last_probe_duration = Duration
-            },
-            %% Notify recovery if was failed
-            case WasRecovered of
-                true ->
-                    emit_node_recovered(StoreId, Node),
-                    notify_recovered_callbacks(RecoveredCb, Node);
-                false ->
-                    ok
-            end,
-            {UpdatedState, 1, 0};
+handle_probe_result(NodeState, ok, Duration, _Threshold, StoreId, _FailedCb, RecoveredCb) ->
+    handle_probe_success(NodeState, Duration, StoreId, RecoveredCb);
+handle_probe_result(NodeState, {error, _Reason}, Duration, Threshold, StoreId, FailedCb, _RecoveredCb) ->
+    handle_probe_failure(NodeState, Duration, Threshold, StoreId, FailedCb).
 
-        {error, _Reason} ->
-            %% Probe failed
-            NewFailures = Failures + 1,
-            NewStatus = case NewFailures >= Threshold of
-                true -> failed;
-                false -> suspect
-            end,
-            UpdatedState = NodeState#node_state{
-                status = NewStatus,
-                consecutive_failures = NewFailures,
-                last_failure = Now,
-                last_probe_duration = Duration
-            },
-            %% Notify failure if just crossed threshold
-            case {NewStatus, PrevStatus} of
-                {failed, Status} when Status =/= failed ->
-                    emit_node_failed(StoreId, Node, NewFailures),
-                    notify_failed_callbacks(FailedCb, Node);
-                _ ->
-                    ok
-            end,
-            {UpdatedState, 0, 1}
-    end.
+handle_probe_success(#node_state{status = PrevStatus, node = Node} = NodeState,
+                     Duration, StoreId, RecoveredCb) ->
+    Now = erlang:system_time(millisecond),
+    UpdatedState = NodeState#node_state{
+        status = healthy,
+        consecutive_failures = 0,
+        last_success = Now,
+        last_probe_duration = Duration
+    },
+    maybe_notify_recovery(PrevStatus, StoreId, Node, RecoveredCb),
+    {UpdatedState, 1, 0}.
+
+maybe_notify_recovery(failed, StoreId, Node, RecoveredCb) ->
+    emit_node_recovered(StoreId, Node),
+    notify_recovered_callbacks(RecoveredCb, Node);
+maybe_notify_recovery(_PrevStatus, _StoreId, _Node, _RecoveredCb) ->
+    ok.
+
+handle_probe_failure(#node_state{status = PrevStatus, consecutive_failures = Failures,
+                                  node = Node} = NodeState,
+                     Duration, Threshold, StoreId, FailedCb) ->
+    Now = erlang:system_time(millisecond),
+    NewFailures = Failures + 1,
+    NewStatus = failure_status(NewFailures, Threshold),
+    UpdatedState = NodeState#node_state{
+        status = NewStatus,
+        consecutive_failures = NewFailures,
+        last_failure = Now,
+        last_probe_duration = Duration
+    },
+    maybe_notify_failure(NewStatus, PrevStatus, StoreId, Node, NewFailures, FailedCb),
+    {UpdatedState, 0, 1}.
+
+failure_status(Failures, Threshold) when Failures >= Threshold -> failed;
+failure_status(_Failures, _Threshold) -> suspect.
+
+maybe_notify_failure(failed, PrevStatus, StoreId, Node, NewFailures, FailedCb) when PrevStatus =/= failed ->
+    emit_node_failed(StoreId, Node, NewFailures),
+    notify_failed_callbacks(FailedCb, Node);
+maybe_notify_failure(_NewStatus, _PrevStatus, _StoreId, _Node, _NewFailures, _FailedCb) ->
+    ok.
 
 %% @private Apply configuration changes
 -spec apply_config(probe_config(), #state{}) -> #state{}.

@@ -67,18 +67,21 @@ members(StoreId, SubscriptionId) when is_atom(StoreId) ->
 broadcast(StoreId, SubscriptionId, Event) when is_atom(StoreId) ->
     Topic = topic(StoreId, SubscriptionId),
     Members = members(StoreId, SubscriptionId),
-    case Members of
-        [] ->
-            logger:warning("No emitters for [~p]~n", [Topic]),
-            {error, no_emitters};
-        _ ->
-            EmitterPid = random_emitter(Members),
-            Message = case node(EmitterPid) =:= node() of
-                true -> forward_to_local_msg(Topic, Event);
-                false -> broadcast_msg(Topic, Event)
-            end,
-            EmitterPid ! Message,
-            ok
+    send_to_emitter(Members, Topic, Event).
+
+send_to_emitter([], Topic, _Event) ->
+    logger:warning("No emitters for [~p]~n", [Topic]),
+    {error, no_emitters};
+send_to_emitter(Members, Topic, Event) ->
+    EmitterPid = random_emitter(Members),
+    Message = emitter_message(EmitterPid, Topic, Event),
+    EmitterPid ! Message,
+    ok.
+
+emitter_message(EmitterPid, Topic, Event) ->
+    case node(EmitterPid) =:= node() of
+        true -> forward_to_local_msg(Topic, Event);
+        false -> broadcast_msg(Topic, Event)
     end.
 
 %% @doc Generate the group key for a subscription's emitters

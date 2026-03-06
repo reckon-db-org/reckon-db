@@ -185,25 +185,19 @@ list(StoreId) ->
 start(StoreId, Name) ->
     case get_link(StoreId, Name) of
         {ok, Link} ->
-            %% Update status
             update_status(StoreId, Name, running),
-
-            %% Do backfill if requested
-            case Link#link.backfill of
-                true ->
-                    backfill_link(StoreId, Link);
-                false ->
-                    ok
-            end,
-
-            %% Start subscription for new events
+            maybe_backfill_link(StoreId, Link),
             start_link_subscription(StoreId, Link),
-
             emit_telemetry(StoreId, Name, started),
             ok;
         {error, _} = Error ->
             Error
     end.
+
+maybe_backfill_link(StoreId, #link{backfill = true} = Link) ->
+    backfill_link(StoreId, Link);
+maybe_backfill_link(_StoreId, _Link) ->
+    ok.
 
 %% @doc Stop processing a link.
 -spec stop(atom(), binary()) -> ok | {error, term()}.
@@ -371,21 +365,19 @@ process_events_for_link(StoreId, Link, Events) ->
         Events
     ),
 
-    %% Write to link stream
-    case ProcessedEvents of
-        [] ->
+    append_processed_events(StoreId, Link#link.name, LinkStreamId, ProcessedEvents).
+
+append_processed_events(_StoreId, _LinkName, _LinkStreamId, []) ->
+    ok;
+append_processed_events(StoreId, LinkName, LinkStreamId, ProcessedEvents) ->
+    EventMaps = [event_to_map(E) || E <- ProcessedEvents],
+    case reckon_db_streams:append(StoreId, LinkStreamId, -2, EventMaps) of
+        {ok, _} ->
+            update_processed_count(StoreId, LinkName, length(ProcessedEvents)),
             ok;
-        _ ->
-            EventMaps = [event_to_map(E) || E <- ProcessedEvents],
-            case reckon_db_streams:append(StoreId, LinkStreamId, -2, EventMaps) of
-                {ok, _} ->
-                    update_processed_count(StoreId, Link#link.name, length(ProcessedEvents)),
-                    ok;
-                {error, _} ->
-                    ok
-            end
-    end,
-    ok.
+        {error, _} ->
+            ok
+    end.
 
 %% @private Apply filter function
 -spec apply_filter(filter_fun() | undefined, event()) -> boolean().

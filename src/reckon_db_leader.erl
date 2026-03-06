@@ -47,17 +47,18 @@ activate(StoreId) ->
         undefined ->
             {error, not_started};
         _Pid ->
-            %% First save default subscriptions synchronously
-            case gen_server:call(Name, {save_default_subscriptions, StoreId}, 10000) of
-                {ok, _} ->
-                    %% Then activate leadership asynchronously
-                    gen_server:cast(Name, {activate, StoreId}),
-                    logger:info("Leader activated (store: ~p, node: ~p)", [StoreId, node()]),
-                    ok;
-                {error, Reason} ->
-                    logger:warning("Failed to activate leader: ~p (store: ~p)", [Reason, StoreId]),
-                    {error, Reason}
-            end
+            do_activate(Name, StoreId)
+    end.
+
+do_activate(Name, StoreId) ->
+    case gen_server:call(Name, {save_default_subscriptions, StoreId}, 10000) of
+        {ok, _} ->
+            gen_server:cast(Name, {activate, StoreId}),
+            logger:info("Leader activated (store: ~p, node: ~p)", [StoreId, node()]),
+            ok;
+        {error, Reason} ->
+            logger:warning("Failed to activate leader: ~p (store: ~p)", [Reason, StoreId]),
+            {error, Reason}
     end.
 
 %% @doc Check if leader is currently active

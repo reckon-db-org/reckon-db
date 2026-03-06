@@ -55,25 +55,25 @@ init(Opts) ->
 -spec archive(#state{}, binary(), [event()]) -> {ok, #state{}} | {error, term()}.
 archive(#state{base_dir = BaseDir} = State, ArchiveKey, Events) ->
     FilePath = key_to_path(BaseDir, ArchiveKey),
-
-    %% Ensure directory exists
     case filelib:ensure_dir(FilePath) of
         ok ->
-            %% Write events as Erlang term
-            Data = #{
-                version => 1,
-                created_at => erlang:system_time(millisecond),
-                event_count => length(Events),
-                events => Events
-            },
-            case file:write_file(FilePath, term_to_binary(Data, [compressed])) of
-                ok ->
-                    {ok, State};
-                {error, Reason} ->
-                    {error, {write_failed, Reason}}
-            end;
+            write_archive(State, FilePath, Events);
         {error, Reason} ->
             {error, {failed_to_create_dir, Reason}}
+    end.
+
+write_archive(State, FilePath, Events) ->
+    Data = #{
+        version => 1,
+        created_at => erlang:system_time(millisecond),
+        event_count => length(Events),
+        events => Events
+    },
+    case file:write_file(FilePath, term_to_binary(Data, [compressed])) of
+        ok ->
+            {ok, State};
+        {error, Reason} ->
+            {error, {write_failed, Reason}}
     end.
 
 %% @doc Read events from an archive file.
@@ -82,17 +82,20 @@ read(#state{base_dir = BaseDir} = State, ArchiveKey) ->
     FilePath = key_to_path(BaseDir, ArchiveKey),
     case file:read_file(FilePath) of
         {ok, Binary} ->
-            try
-                #{events := Events} = binary_to_term(Binary),
-                {ok, Events, State}
-            catch
-                _:_ ->
-                    {error, {corrupted_archive, ArchiveKey}}
-            end;
+            decode_archive(Binary, State, ArchiveKey);
         {error, enoent} ->
             {error, {archive_not_found, ArchiveKey}};
         {error, Reason} ->
             {error, {read_failed, Reason}}
+    end.
+
+decode_archive(Binary, State, ArchiveKey) ->
+    try
+        #{events := Events} = binary_to_term(Binary),
+        {ok, Events, State}
+    catch
+        _:_ ->
+            {error, {corrupted_archive, ArchiveKey}}
     end.
 
 %% @doc List all archive keys for a stream.

@@ -338,28 +338,17 @@ format_check_result({error, Reason}) ->
 -spec determine_overall_status(#{atom() => check_detail()}) -> consistency_status().
 determine_overall_status(Checks) ->
     CheckStatuses = [maps:get(status, Detail) || {_, Detail} <- maps:to_list(Checks)],
-
-    %% Check for split-brain first (highest severity)
     MembershipData = maps:get(data, maps:get(membership, Checks, #{data => #{}}), #{}),
-    case maps:get(status, MembershipData, undefined) of
-        split_brain -> split_brain;
-        _ ->
-            %% Check for no quorum
-            QuorumData = maps:get(data, maps:get(quorum, Checks, #{data => #{}}), #{}),
-            case maps:get(has_quorum, QuorumData, true) of
-                false -> no_quorum;
-                _ ->
-                    %% Check for any errors or warnings
-                    case lists:member(error, CheckStatuses) of
-                        true -> degraded;
-                        false ->
-                            case lists:member(warning, CheckStatuses) of
-                                true -> degraded;
-                                false -> healthy
-                            end
-                    end
-            end
-    end.
+    QuorumData = maps:get(data, maps:get(quorum, Checks, #{data => #{}}), #{}),
+    IsSplitBrain = maps:get(status, MembershipData, undefined) =:= split_brain,
+    HasQuorum = maps:get(has_quorum, QuorumData, true),
+    HasErrors = lists:member(error, CheckStatuses) orelse lists:member(warning, CheckStatuses),
+    classify_health(IsSplitBrain, HasQuorum, HasErrors).
+
+classify_health(true, _, _) -> split_brain;
+classify_health(_, false, _) -> no_quorum;
+classify_health(_, _, true) -> degraded;
+classify_health(_, _, _) -> healthy.
 
 %% @private Get cluster members
 -spec get_cluster_members(atom()) -> {ok, [term()]} | {error, term()}.
@@ -558,16 +547,12 @@ analyze_raft_consistency(Stats, Leader) ->
 -spec count_available_nodes(atom(), [term()]) -> non_neg_integer().
 count_available_nodes(_StoreId, Members) ->
     Nodes = extract_nodes_from_members(Members),
-    length(lists:filter(fun(Node) ->
-        case Node of
-            N when N =:= node() -> true;
-            _ ->
-                case net_adm:ping(Node) of
-                    pong -> true;
-                    pang -> false
-                end
-        end
-    end, Nodes)).
+    length(lists:filter(fun(Node) -> is_node_available(Node) end, Nodes)).
+
+is_node_available(Node) when Node =:= node() ->
+    true;
+is_node_available(Node) ->
+    net_adm:ping(Node) =:= pong.
 
 %% @private Emit telemetry event
 -spec emit_telemetry(atom(), check_result(), consistency_status()) -> ok.

@@ -201,28 +201,16 @@ decompress(Data, zlib) ->
 -spec compress_lz4(Data :: binary()) -> {ok, binary()} | {error, term()}.
 compress_lz4(Data) ->
     case is_nif_loaded() of
-        true ->
-            try
-                Compressed = nif_compress_lz4(Data),
-                {ok, Compressed}
-            catch
-                error:Reason -> {error, Reason}
-            end;
-        false ->
-            erlang_compress_lz4(Data)
+        true -> nif_compress_lz4_safe(Data);
+        false -> erlang_compress_lz4(Data)
     end.
 
 %% @doc Decompress LZ4-compressed data.
 -spec decompress_lz4(Data :: binary()) -> {ok, binary()} | {error, term()}.
 decompress_lz4(Data) ->
     case is_nif_loaded() of
-        true ->
-            case nif_decompress_lz4(Data) of
-                {ok, Decompressed} -> {ok, Decompressed};
-                {error, _} -> {error, decompression_failed}
-            end;
-        false ->
-            erlang_decompress_lz4(Data)
+        true -> nif_decompress_lz4_safe(Data);
+        false -> erlang_decompress_lz4(Data)
     end.
 
 %%====================================================================
@@ -238,28 +226,16 @@ compress_zstd(Data) ->
 -spec compress_zstd(Data :: binary(), Level :: integer()) -> {ok, binary()} | {error, term()}.
 compress_zstd(Data, Level) ->
     case is_nif_loaded() of
-        true ->
-            try
-                Compressed = nif_compress_zstd(Data, Level),
-                {ok, Compressed}
-            catch
-                error:Reason -> {error, Reason}
-            end;
-        false ->
-            erlang_compress_zstd(Data, Level)
+        true -> nif_compress_zstd_safe(Data, Level);
+        false -> erlang_compress_zstd(Data, Level)
     end.
 
 %% @doc Decompress Zstd-compressed data.
 -spec decompress_zstd(Data :: binary()) -> {ok, binary()} | {error, term()}.
 decompress_zstd(Data) ->
     case is_nif_loaded() of
-        true ->
-            case nif_decompress_zstd(Data) of
-                {ok, Decompressed} -> {ok, Decompressed};
-                {error, _} -> {error, decompression_failed}
-            end;
-        false ->
-            erlang_decompress_zstd(Data)
+        true -> nif_decompress_zstd_safe(Data);
+        false -> erlang_decompress_zstd(Data)
     end.
 
 %%====================================================================
@@ -275,28 +251,16 @@ compress_zlib(Data) ->
 -spec compress_zlib(Data :: binary(), Level :: integer()) -> {ok, binary()} | {error, term()}.
 compress_zlib(Data, Level) ->
     case is_nif_loaded() of
-        true ->
-            try
-                Compressed = nif_compress_zlib(Data, Level),
-                {ok, Compressed}
-            catch
-                error:Reason -> {error, Reason}
-            end;
-        false ->
-            erlang_compress_zlib(Data, Level)
+        true -> nif_compress_zlib_safe(Data, Level);
+        false -> erlang_compress_zlib(Data, Level)
     end.
 
 %% @doc Decompress Zlib-compressed data.
 -spec decompress_zlib(Data :: binary()) -> {ok, binary()} | {error, term()}.
 decompress_zlib(Data) ->
     case is_nif_loaded() of
-        true ->
-            case nif_decompress_zlib(Data) of
-                {ok, Decompressed} -> {ok, Decompressed};
-                {error, _} -> {error, decompression_failed}
-            end;
-        false ->
-            erlang_decompress_zlib(Data)
+        true -> nif_decompress_zlib_safe(Data);
+        false -> erlang_decompress_zlib(Data)
     end.
 
 %%====================================================================
@@ -321,26 +285,89 @@ compression_stats(Data, Algorithm) ->
     {error, term()}.
 compression_stats(Data, Algorithm, Level) ->
     case is_nif_loaded() of
-        true ->
-            try
-                {OrigSize, CompSize, Ratio} = nif_compression_stats(Data, Algorithm, Level),
-                {ok, #{original_size => OrigSize, compressed_size => CompSize, ratio => Ratio}}
-            catch
-                error:Reason -> {error, Reason}
-            end;
-        false ->
-            case compress(Data, Algorithm, Level) of
-                {ok, Compressed} ->
-                    OrigSize = byte_size(Data),
-                    CompSize = byte_size(Compressed),
-                    Ratio = case CompSize of
-                        0 -> 0.0;
-                        _ -> OrigSize / CompSize
-                    end,
-                    {ok, #{original_size => OrigSize, compressed_size => CompSize, ratio => Ratio}};
-                {error, _} = Error ->
-                    Error
-            end
+        true -> nif_compression_stats_safe(Data, Algorithm, Level);
+        false -> erlang_compression_stats(Data, Algorithm, Level)
+    end.
+
+%% @private
+erlang_compression_stats(Data, Algorithm, Level) ->
+    case compress(Data, Algorithm, Level) of
+        {ok, Compressed} ->
+            build_stats(Data, Compressed);
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private
+build_stats(Data, Compressed) ->
+    OrigSize = byte_size(Data),
+    CompSize = byte_size(Compressed),
+    Ratio = compression_ratio(OrigSize, CompSize),
+    {ok, #{original_size => OrigSize, compressed_size => CompSize, ratio => Ratio}}.
+
+%% @private
+compression_ratio(_OrigSize, 0) -> 0.0;
+compression_ratio(OrigSize, CompSize) -> OrigSize / CompSize.
+
+%%====================================================================
+%% NIF Safe Wrappers
+%%====================================================================
+
+%% @private
+nif_compress_lz4_safe(Data) ->
+    try
+        Compressed = nif_compress_lz4(Data),
+        {ok, Compressed}
+    catch
+        error:Reason -> {error, Reason}
+    end.
+
+%% @private
+nif_decompress_lz4_safe(Data) ->
+    case nif_decompress_lz4(Data) of
+        {ok, Decompressed} -> {ok, Decompressed};
+        {error, _} -> {error, decompression_failed}
+    end.
+
+%% @private
+nif_compress_zstd_safe(Data, Level) ->
+    try
+        Compressed = nif_compress_zstd(Data, Level),
+        {ok, Compressed}
+    catch
+        error:Reason -> {error, Reason}
+    end.
+
+%% @private
+nif_decompress_zstd_safe(Data) ->
+    case nif_decompress_zstd(Data) of
+        {ok, Decompressed} -> {ok, Decompressed};
+        {error, _} -> {error, decompression_failed}
+    end.
+
+%% @private
+nif_compress_zlib_safe(Data, Level) ->
+    try
+        Compressed = nif_compress_zlib(Data, Level),
+        {ok, Compressed}
+    catch
+        error:Reason -> {error, Reason}
+    end.
+
+%% @private
+nif_decompress_zlib_safe(Data) ->
+    case nif_decompress_zlib(Data) of
+        {ok, Decompressed} -> {ok, Decompressed};
+        {error, _} -> {error, decompression_failed}
+    end.
+
+%% @private
+nif_compression_stats_safe(Data, Algorithm, Level) ->
+    try
+        {OrigSize, CompSize, Ratio} = nif_compression_stats(Data, Algorithm, Level),
+        {ok, #{original_size => OrigSize, compressed_size => CompSize, ratio => Ratio}}
+    catch
+        error:Reason -> {error, Reason}
     end.
 
 %%====================================================================

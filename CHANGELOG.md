@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-03-06
+
+### Fixed
+
+- **Subscriptions not re-registering subscriber PID after restart**: When a projection
+  re-subscribes on startup, the subscription already exists in Khepri (persisted from
+  the previous BEAM instance). Previously this returned `{error, {already_exists, _}}`
+  and the new subscriber PID was never registered. The emitter pool delivered events to
+  the dead PID from the previous run, so projections never received events and read
+  models stayed empty/stale after restart.
+  Fix: when a subscription already exists and a new `subscriber_pid` is provided,
+  update the stored subscription with the new PID and return `{ok, Key}`.
+
+### Changed
+
+- **Eliminated all deep case/if nesting across codebase**: Refactored ~50 instances of
+  depth-2+ nesting across 25 source files to max depth 1. Extracted helper functions,
+  used pattern matching on function heads, and pipeline patterns. No behavioral changes.
+
 ## [1.4.1] - 2026-03-06
 
 ### Fixed

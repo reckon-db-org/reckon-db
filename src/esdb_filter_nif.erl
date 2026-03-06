@@ -176,14 +176,7 @@ implementation() ->
 -spec wildcard_to_regex(Pattern :: binary()) -> binary().
 wildcard_to_regex(Pattern) ->
     case is_nif_loaded() of
-        true ->
-            %% NIF returns a Rust String which becomes an Erlang binary
-            Result = nif_wildcard_to_regex(Pattern),
-            if
-                is_binary(Result) -> Result;
-                is_list(Result) -> list_to_binary(Result);
-                true -> Result
-            end;
+        true -> nif_wildcard_to_regex_coerce(Pattern);
         false -> erlang_wildcard_to_regex(Pattern)
     end.
 
@@ -277,6 +270,19 @@ count_matches(Items, Pattern) ->
     case is_nif_loaded() of
         true -> nif_count_matches(Items, Pattern);
         false -> erlang_count_matches(Items, Pattern)
+    end.
+
+%%====================================================================
+%% NIF Safe Wrappers
+%%====================================================================
+
+%% @private
+nif_wildcard_to_regex_coerce(Pattern) ->
+    Result = nif_wildcard_to_regex(Pattern),
+    if
+        is_binary(Result) -> Result;
+        is_list(Result) -> list_to_binary(Result);
+        true -> Result
     end.
 
 %%====================================================================
@@ -393,18 +399,14 @@ erlang_has_prefix(Text, Prefix) ->
 
 %% @private
 -spec erlang_has_suffix(binary(), binary()) -> boolean().
+erlang_has_suffix(Text, Suffix) when byte_size(Text) < byte_size(Suffix) ->
+    false;
 erlang_has_suffix(Text, Suffix) ->
+    PrefixSize = byte_size(Text) - byte_size(Suffix),
     SuffixSize = byte_size(Suffix),
-    TextSize = byte_size(Text),
-    case TextSize >= SuffixSize of
-        true ->
-            PrefixSize = TextSize - SuffixSize,
-            case Text of
-                <<_:PrefixSize/binary, Suffix:SuffixSize/binary>> -> true;
-                _ -> false
-            end;
-        false ->
-            false
+    case Text of
+        <<_:PrefixSize/binary, Suffix:SuffixSize/binary>> -> true;
+        _ -> false
     end.
 
 %% @private

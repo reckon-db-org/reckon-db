@@ -81,19 +81,22 @@ authorize(Token, Resource, Action) ->
 authorize(Token, Resource, Action, Opts) ->
     case verify(Token, Opts) of
         {ok, Cap} ->
-            case check_permission(Cap, Resource, Action) of
-                ok ->
-                    Result = #verification_result{
-                        capability = Cap,
-                        issuer_chain = [Cap#capability.iss],
-                        resource = Resource,
-                        action = Action,
-                        verified_at = erlang:system_time(second)
-                    },
-                    {ok, Result};
-                {error, _} = Error ->
-                    Error
-            end;
+            authorize_capability(Cap, Resource, Action);
+        {error, _} = Error ->
+            Error
+    end.
+
+authorize_capability(Cap, Resource, Action) ->
+    case check_permission(Cap, Resource, Action) of
+        ok ->
+            Result = #verification_result{
+                capability = Cap,
+                issuer_chain = [Cap#capability.iss],
+                resource = Resource,
+                action = Action,
+                verified_at = erlang:system_time(second)
+            },
+            {ok, Result};
         {error, _} = Error ->
             Error
     end.
@@ -148,22 +151,19 @@ extract_token_cid(#capability{iss = Iss, aud = Aud, exp = Exp, nnc = Nnc}) ->
     {ok, capability()} | {error, capability_error()}.
 verify_capability(Cap, Opts) ->
     Now = maps:get(now, Opts, erlang:system_time(second)),
+    Steps = [
+        fun() -> check_expiration(Cap, Now) end,
+        fun() -> check_not_before(Cap, Now) end,
+        fun() -> maybe_verify_signature(Cap, Opts) end,
+        fun() -> maybe_check_revocation(Cap, Opts) end
+    ],
+    run_verification_steps(Steps, Cap).
 
-    %% Check expiration first (fast path for expired tokens)
-    case check_expiration(Cap, Now) of
-        ok ->
-            case check_not_before(Cap, Now) of
-                ok ->
-                    case maybe_verify_signature(Cap, Opts) of
-                        ok ->
-                            case maybe_check_revocation(Cap, Opts) of
-                                ok -> {ok, Cap};
-                                {error, _} = E -> E
-                            end;
-                        {error, _} = E -> E
-                    end;
-                {error, _} = E -> E
-            end;
+run_verification_steps([], Cap) ->
+    {ok, Cap};
+run_verification_steps([Step | Rest], Cap) ->
+    case Step() of
+        ok -> run_verification_steps(Rest, Cap);
         {error, _} = E -> E
     end.
 
@@ -198,21 +198,21 @@ maybe_verify_signature(Cap, _Opts) ->
 verify_signature(#capability{sig = undefined}) ->
     {error, {invalid_signature, <<"Token is not signed">>}};
 verify_signature(#capability{iss = Iss, sig = Sig} = Cap) ->
-    %% Extract public key from issuer DID
     case esdb_identity:public_key_from_did(Iss) of
         {ok, PubKey} ->
-            %% Reconstruct the message that was signed
-            Message = capability_to_signable(Cap),
-            %% Verify Ed25519 signature
-            case crypto:verify(eddsa, none, Message, Sig, [PubKey, ed25519]) of
-                true -> ok;
-                false -> {error, {invalid_signature, <<"Signature verification failed">>}}
-            end;
+            verify_ed25519_signature(Cap, Sig, PubKey);
         {error, Reason} ->
             {error, {invalid_signature, iolist_to_binary([
                 <<"Cannot extract public key from DID: ">>,
                 io_lib:format("~p", [Reason])
             ])}}
+    end.
+
+verify_ed25519_signature(Cap, Sig, PubKey) ->
+    Message = capability_to_signable(Cap),
+    case crypto:verify(eddsa, none, Message, Sig, [PubKey, ed25519]) of
+        true -> ok;
+        false -> {error, {invalid_signature, <<"Signature verification failed">>}}
     end.
 
 %% @private

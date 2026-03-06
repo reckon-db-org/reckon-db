@@ -152,18 +152,19 @@ dry_run(StoreId, StreamId, Opts) ->
 do_scavenge(StoreId, StreamId, Opts) ->
     RequireSnapshot = maps:get(require_snapshot, Opts, true),
     DryRun = maps:get(dry_run, Opts, false),
+    case check_snapshot_requirement(StoreId, StreamId, RequireSnapshot) of
+        ok ->
+            do_scavenge_with_snapshot_check(StoreId, StreamId, Opts, DryRun);
+        {error, _} = Error ->
+            Error
+    end.
 
-    %% Safety check: require snapshot unless explicitly disabled
-    case RequireSnapshot of
-        true ->
-            case reckon_db_snapshots:exists(StoreId, StreamId) of
-                true ->
-                    do_scavenge_with_snapshot_check(StoreId, StreamId, Opts, DryRun);
-                false ->
-                    {error, {no_snapshot, StreamId}}
-            end;
-        false ->
-            do_scavenge_with_snapshot_check(StoreId, StreamId, Opts, DryRun)
+check_snapshot_requirement(_StoreId, _StreamId, false) ->
+    ok;
+check_snapshot_requirement(StoreId, StreamId, true) ->
+    case reckon_db_snapshots:exists(StoreId, StreamId) of
+        true -> ok;
+        false -> {error, {no_snapshot, StreamId}}
     end.
 
 %% @private
@@ -179,34 +180,38 @@ do_scavenge_with_snapshot_check(StoreId, StreamId, Opts, DryRun) ->
                 archived => false
             }};
         {ok, Events, {FromVersion, ToVersion}} ->
-            case DryRun of
-                true ->
-                    {ok, #{
-                        stream_id => StreamId,
-                        deleted_count => length(Events),
-                        deleted_versions => {FromVersion, ToVersion},
-                        archived => false,
-                        dry_run => true
-                    }};
-                false ->
-                    %% Actually delete the events
-                    delete_event_versions(StoreId, StreamId, FromVersion, ToVersion),
-                    Archived = maps:get(archived_key, Opts, undefined) =/= undefined,
-                    Result = #{
-                        stream_id => StreamId,
-                        deleted_count => length(Events),
-                        deleted_versions => {FromVersion, ToVersion},
-                        archived => Archived
-                    },
-                    FinalResult = case maps:get(archived_key, Opts, undefined) of
-                        undefined -> Result;
-                        Key -> Result#{archive_key => Key}
-                    end,
-                    {ok, FinalResult}
-            end;
+            execute_or_preview(StoreId, StreamId, Opts, DryRun, Events, FromVersion, ToVersion);
         {error, _} = Error ->
             Error
     end.
+
+%% @private
+execute_or_preview(_StoreId, StreamId, _Opts, true, Events, FromVersion, ToVersion) ->
+    {ok, #{
+        stream_id => StreamId,
+        deleted_count => length(Events),
+        deleted_versions => {FromVersion, ToVersion},
+        archived => false,
+        dry_run => true
+    }};
+execute_or_preview(StoreId, StreamId, Opts, false, Events, FromVersion, ToVersion) ->
+    delete_event_versions(StoreId, StreamId, FromVersion, ToVersion),
+    {ok, build_scavenge_result(StreamId, Events, FromVersion, ToVersion, Opts)}.
+
+%% @private
+build_scavenge_result(StreamId, Events, FromVersion, ToVersion, Opts) ->
+    Archived = maps:get(archived_key, Opts, undefined) =/= undefined,
+    Result = #{
+        stream_id => StreamId,
+        deleted_count => length(Events),
+        deleted_versions => {FromVersion, ToVersion},
+        archived => Archived
+    },
+    maybe_add_archive_key(Result, maps:get(archived_key, Opts, undefined)).
+
+%% @private
+maybe_add_archive_key(Result, undefined) -> Result;
+maybe_add_archive_key(Result, Key) -> Result#{archive_key => Key}.
 
 %% @private Find events that should be scavenged
 -spec find_scavenge_candidates(atom(), binary(), scavenge_opts()) ->
@@ -216,51 +221,42 @@ find_scavenge_candidates(StoreId, StreamId, Opts) ->
         false ->
             {error, {stream_not_found, StreamId}};
         true ->
-            CurrentVersion = reckon_db_streams:get_version(StoreId, StreamId),
-            KeepVersions = maps:get(keep_versions, Opts, 0),
+            read_candidates(StoreId, StreamId, Opts)
+    end.
 
-            %% Determine cutoff version
-            CutoffVersion = determine_cutoff_version(StoreId, StreamId, Opts, CurrentVersion),
+%% @private
+read_candidates(StoreId, StreamId, Opts) ->
+    CurrentVersion = reckon_db_streams:get_version(StoreId, StreamId),
+    KeepVersions = maps:get(keep_versions, Opts, 0),
+    CutoffVersion = determine_cutoff_version(StoreId, StreamId, Opts, CurrentVersion),
+    SafeCutoff = min(CutoffVersion, CurrentVersion - KeepVersions),
+    read_candidates_up_to(StoreId, StreamId, SafeCutoff).
 
-            %% Ensure we keep the minimum number of versions
-            SafeCutoff = min(CutoffVersion, CurrentVersion - KeepVersions),
-
-            case SafeCutoff < 0 of
-                true ->
-                    {ok, [], {0, 0}};
-                false ->
-                    %% Read events up to the cutoff
-                    case reckon_db_streams:read(StoreId, StreamId, 0, SafeCutoff + 1, forward) of
-                        {ok, Events} ->
-                            FromVersion = 0,
-                            ToVersion = SafeCutoff,
-                            {ok, Events, {FromVersion, ToVersion}};
-                        {error, _} = Error ->
-                            Error
-                    end
-            end
+%% @private
+read_candidates_up_to(_StoreId, _StreamId, SafeCutoff) when SafeCutoff < 0 ->
+    {ok, [], {0, 0}};
+read_candidates_up_to(StoreId, StreamId, SafeCutoff) ->
+    case reckon_db_streams:read(StoreId, StreamId, 0, SafeCutoff + 1, forward) of
+        {ok, Events} ->
+            {ok, Events, {0, SafeCutoff}};
+        {error, _} = Error ->
+            Error
     end.
 
 %% @private Determine the cutoff version based on options
 -spec determine_cutoff_version(atom(), binary(), scavenge_opts(), integer()) -> integer().
-determine_cutoff_version(StoreId, StreamId, Opts, _CurrentVersion) ->
-    case maps:find(before_version, Opts) of
-        {ok, Version} ->
-            Version - 1;
-        error ->
-            case maps:find(before, Opts) of
-                {ok, Timestamp} ->
-                    %% Find version at timestamp
-                    case reckon_db_temporal:version_at(StoreId, StreamId, Timestamp) of
-                        {ok, Version} when Version >= 0 ->
-                            Version;
-                        _ ->
-                            -1
-                    end;
-                error ->
-                    %% No cutoff specified, don't delete anything
-                    -1
-            end
+determine_cutoff_version(_StoreId, _StreamId, #{before_version := Version}, _CurrentVersion) ->
+    Version - 1;
+determine_cutoff_version(StoreId, StreamId, #{before := Timestamp}, _CurrentVersion) ->
+    resolve_timestamp_cutoff(StoreId, StreamId, Timestamp);
+determine_cutoff_version(_StoreId, _StreamId, _Opts, _CurrentVersion) ->
+    -1.
+
+%% @private
+resolve_timestamp_cutoff(StoreId, StreamId, Timestamp) ->
+    case reckon_db_temporal:version_at(StoreId, StreamId, Timestamp) of
+        {ok, Version} when Version >= 0 -> Version;
+        _ -> -1
     end.
 
 %% @private Delete events from version range

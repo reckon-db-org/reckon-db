@@ -88,24 +88,25 @@
 -spec register(atom(), binary(), schema()) -> ok | {error, term()}.
 register(StoreId, EventType, Schema) when is_map(Schema) ->
     Version = maps:get(version, Schema),
-
-    %% Validate schema
     case is_integer(Version) andalso Version > 0 of
         true ->
-            SchemaRecord = Schema#{
-                event_type => EventType,
-                registered_at => erlang:system_time(millisecond)
-            },
-            Path = ?SCHEMAS_PATH ++ [StoreId, EventType],
-            case khepri:put(StoreId, Path, SchemaRecord) of
-                ok ->
-                    emit_telemetry(StoreId, EventType, registered, Version),
-                    ok;
-                {error, _} = Error ->
-                    Error
-            end;
+            store_schema(StoreId, EventType, Schema, Version);
         false ->
             {error, {invalid_version, Version}}
+    end.
+
+store_schema(StoreId, EventType, Schema, Version) ->
+    SchemaRecord = Schema#{
+        event_type => EventType,
+        registered_at => erlang:system_time(millisecond)
+    },
+    Path = ?SCHEMAS_PATH ++ [StoreId, EventType],
+    case khepri:put(StoreId, Path, SchemaRecord) of
+        ok ->
+            emit_telemetry(StoreId, EventType, registered, Version),
+            ok;
+        {error, _} = Error ->
+            Error
     end.
 
 %% @doc Unregister a schema.
@@ -164,17 +165,18 @@ upcast_event(StoreId, Event) ->
     EventType = Event#event.event_type,
     case get(StoreId, EventType) of
         {ok, Schema} ->
-            CurrentVersion = maps:get(version, Schema),
-            EventVersion = get_event_version(Event),
-
-            case EventVersion < CurrentVersion of
-                true ->
-                    upcast_to_version(Event, Schema, EventVersion, CurrentVersion, StoreId);
-                false ->
-                    Event
-            end;
+            maybe_upcast_to_current(Event, Schema, StoreId);
         {error, not_found} ->
-            %% No schema registered, return unchanged
+            Event
+    end.
+
+maybe_upcast_to_current(Event, Schema, StoreId) ->
+    CurrentVersion = maps:get(version, Schema),
+    EventVersion = get_event_version(Event),
+    case EventVersion < CurrentVersion of
+        true ->
+            upcast_to_version(Event, Schema, EventVersion, CurrentVersion, StoreId);
+        false ->
             Event
     end.
 
@@ -184,17 +186,15 @@ validate(StoreId, Event) ->
     EventType = Event#event.event_type,
     case get(StoreId, EventType) of
         {ok, Schema} ->
-            case maps:get(validator, Schema, undefined) of
-                undefined ->
-                    %% No validator, always valid
-                    ok;
-                ValidatorFun when is_function(ValidatorFun, 1) ->
-                    ValidatorFun(Event#event.data)
-            end;
+            run_validator(maps:get(validator, Schema, undefined), Event);
         {error, not_found} ->
-            %% No schema, implicitly valid
             ok
     end.
+
+run_validator(undefined, _Event) ->
+    ok;
+run_validator(ValidatorFun, Event) when is_function(ValidatorFun, 1) ->
+    ValidatorFun(Event#event.data).
 
 %%====================================================================
 %% Internal functions
