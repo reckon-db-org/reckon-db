@@ -148,15 +148,14 @@ reregister_subscriber(StoreId, Key, SubscriptionName, Opts) ->
 update_subscriber_pid(_StoreId, _Key, _Name, undefined) ->
     ok;
 update_subscriber_pid(StoreId, Key, Name, Pid) when is_pid(Pid) ->
-    case reckon_db_subscriptions_store:get(StoreId, Key) of
-        {ok, Existing} ->
-            Updated = Existing#subscription{subscriber_pid = Pid},
-            _ = reckon_db_subscriptions_store:put(StoreId, Updated),
-            logger:info("Subscription ~s re-registered with new PID (store: ~p)",
-                       [Name, StoreId]);
-        {error, _} ->
-            ok
-    end,
+    do_update_pid(reckon_db_subscriptions_store:get(StoreId, Key), StoreId, Key, Name, Pid).
+
+do_update_pid(undefined, _StoreId, _Key, _Name, _Pid) ->
+    ok;
+do_update_pid(Existing, StoreId, _Key, Name, Pid) when is_record(Existing, subscription) ->
+    Updated = Existing#subscription{subscriber_pid = Pid},
+    _ = reckon_db_subscriptions_store:put(StoreId, Updated),
+    logger:info("Subscription ~s re-registered with new PID (store: ~p)", [Name, StoreId]),
     ok.
 
 %% @doc Remove a subscription by key

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-03-06
+
+### Fixed
+
+- **Crash in `update_subscriber_pid` on re-subscribe**: `reckon_db_subscriptions_store:get/2`
+  returns `subscription() | undefined`, not `{ok, subscription()} | {error, _}`. The
+  re-registration code from v1.4.2 pattern-matched on `{ok, Existing}` which caused a
+  `case_clause` crash, killing the gateway worker and preventing all subscriptions from
+  being set up on that store. Fixed: match on the record directly with `is_record` guard.
+
 ## [1.4.2] - 2026-03-06
 
 ### Fixed
