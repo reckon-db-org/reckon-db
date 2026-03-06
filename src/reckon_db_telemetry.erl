@@ -125,7 +125,9 @@ handle_event(?STREAM_READ_STOP, Measurements, Meta, _Config) ->
 
 %% Subscription events
 handle_event(?SUBSCRIPTION_CREATED, _Measurements, Meta, _Config) ->
-    #{store_id := StoreId, subscription_id := SubId, type := Type} = Meta,
+    StoreId = maps:get(store_id, Meta, unknown),
+    SubId = maps:get(subscription_id, Meta, maps:get(subscription_name, Meta, <<>>)),
+    Type = maps:get(type, Meta, unknown),
     logger:info("Subscription created: store=~p id=~s type=~p",
                [StoreId, SubId, Type]),
     ok;

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-03-06
+
+### Fixed
+
+- **Telemetry handler crash on subscription created**: `handle_event(?SUBSCRIPTION_CREATED, ...)`
+  pattern-matched on `#{subscription_id := _}` but the metadata from `subscribe/5` sends
+  `subscription_name` instead. This caused a `badmatch` that detached the telemetry logger
+  handler for the entire session. Fixed: use `maps:get/3` with fallback.
+
 ## [1.4.3] - 2026-03-06
 
 ### Fixed
