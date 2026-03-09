@@ -21,10 +21,12 @@
     append/5,
     read/5,
     read_all/4,
+    read_all_global/3,
     read_by_event_types/3,
     read_by_tags/4,
     get_version/2,
     exists/2,
+    has_events/1,
     list_streams/1,
     delete/2
 ]).
@@ -148,6 +150,43 @@ read(StoreId, StreamId, StartVersion, Count, Direction) ->
     {ok, [event()]} | {error, term()}.
 read_all(StoreId, StreamId, BatchSize, Direction) ->
     read(StoreId, StreamId, 0, BatchSize, Direction).
+
+%% @doc Read all events across all streams in global epoch_us order.
+%%
+%% Returns events sorted by epoch_us, skipping `Offset' events and
+%% returning up to `BatchSize' events. Used by catch-up subscriptions
+%% to replay historical events to a subscriber.
+%%
+%% Parameters:
+%%   StoreId   - The store identifier
+%%   Offset    - Number of events to skip (0-based)
+%%   BatchSize - Maximum number of events to return
+%%
+%% Returns events sorted by epoch_us (global ordering).
+-spec read_all_global(atom(), non_neg_integer(), pos_integer()) ->
+    {ok, [event()]} | {error, term()}.
+read_all_global(StoreId, Offset, BatchSize) ->
+    Path = [streams,
+            ?KHEPRI_WILDCARD_STAR,
+            #if_all{conditions = [
+                ?KHEPRI_WILDCARD_STAR,
+                #if_has_data{has_data = true}
+            ]}],
+    case khepri:get_many(StoreId, Path) of
+        {ok, Results} when is_map(Results) ->
+            Events = [convert_result_to_event(PathKey, Value)
+                      || {PathKey, Value} <- maps:to_list(Results)],
+            ValidEvents = [E || E <- Events, E =/= undefined],
+            SortedEvents = lists:sort(
+                fun(#event{epoch_us = E1}, #event{epoch_us = E2}) -> E1 =< E2 end,
+                ValidEvents),
+            Skipped = safe_nthtail(Offset, SortedEvents),
+            {ok, lists:sublist(Skipped, BatchSize)};
+        {ok, _} ->
+            {ok, []};
+        {error, _} = Error ->
+            Error
+    end.
 
 %% @doc Read all events of specific types from all streams using Khepri native filtering.
 %%
@@ -347,6 +386,17 @@ exists(StoreId, StreamId) ->
         {error, _} -> false
     end.
 
+%% @doc Check if a store contains at least one event.
+%% Cannot rely on stream existence alone — streams can survive
+%% after all their events are deleted (truncation, GDPR erasure).
+%% Checks for actual event data by reading 1 event globally.
+-spec has_events(atom()) -> boolean().
+has_events(StoreId) ->
+    case read_all_global(StoreId, 0, 1) of
+        {ok, [_ | _]} -> true;
+        _              -> false
+    end.
+
 %% @doc List all streams in the store
 -spec list_streams(atom()) -> {ok, [binary()]} | {error, term()}.
 list_streams(StoreId) ->
@@ -461,13 +511,7 @@ create_event_record(Event, StreamId, Version, Timestamp, EpochUs) ->
 %% @private
 -spec generate_event_id() -> binary().
 generate_event_id() ->
-    %% Generate a UUID-like identifier
-    Bytes = crypto:strong_rand_bytes(16),
-    list_to_binary(uuid_to_string(Bytes)).
-
-%% @private
-uuid_to_string(<<A:32, B:16, C:16, D:16, E:48>>) ->
-    io_lib:format("~8.16.0b-~4.16.0b-~4.16.0b-~4.16.0b-~12.16.0b", [A, B, C, D, E]).
+    reckon_gater_uuid:to_string(reckon_gater_uuid:v7()).
 
 %% @private
 -spec pad_version(non_neg_integer(), pos_integer()) -> binary().
@@ -535,3 +579,9 @@ map_to_event(Map) ->
         data_content_type = maps:get(data_content_type, Map, ?CONTENT_TYPE_JSON),
         metadata_content_type = maps:get(metadata_content_type, Map, ?CONTENT_TYPE_JSON)
     }.
+
+%% @private Safe version of lists:nthtail that returns [] when Offset >= length.
+-spec safe_nthtail(non_neg_integer(), list()) -> list().
+safe_nthtail(0, List) -> List;
+safe_nthtail(_, []) -> [];
+safe_nthtail(N, [_ | Rest]) -> safe_nthtail(N - 1, Rest).
