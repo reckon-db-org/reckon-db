@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.39.1">
-    <meta name="project" content="reckon_db v1.6.0">
+    <meta name="project" content="reckon_db v1.6.1">
 
 
-    <title>esdb_graph_nif — reckon_db v1.6.0</title>
+    <title>esdb_graph_nif — reckon_db v1.6.1</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-6D76E4B2.js"></script>
+    <script defer src="dist/sidebar_items-5C137902.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.6.0
+          v1.6.1
         </div>
       </div>
     </div>
@@ -94,11 +94,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">esdb_graph_nif</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.6.0)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.6.1)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L33" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L33" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -108,15 +108,15 @@ reckon_db
 
     <section id="moduledoc">
 <p>Optimized graph operations for causation analysis in reckon-db.</p><p>This module provides high-performance graph algorithms:</p><ul><li><b>Graph building</b>: Build edges from event causation relationships</li><li><b>Topological sort</b>: Order events by causation (causes before effects)</li><li><b>Path finding</b>: Check paths, find ancestors/descendants</li><li><b>DOT export</b>: Generate Graphviz visualization</li></ul><p>The mode is automatically detected at startup based on whether the NIF library is available. Community edition users (hex.pm) will always use the Erlang fallbacks, which provide identical functionality.</p><h3 id="module-usage" class="section-heading"><a href="#module-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Usage">Usage</a></span></h3><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Build edges from events (event_id, causation_id pairs)</span><span class="w">
-  </span><span class="n">Nodes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="9202224674-1">[</span><span class="p" data-group-id="9202224674-2">{</span><span class="p" data-group-id="9202224674-3">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="9202224674-3">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="ss">undefined</span><span class="p" data-group-id="9202224674-2">}</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="9202224674-4">{</span><span class="p" data-group-id="9202224674-5">&lt;&lt;</span><span class="s">&quot;evt-2&quot;</span><span class="p" data-group-id="9202224674-5">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="9202224674-6">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="9202224674-6">&gt;&gt;</span><span class="p" data-group-id="9202224674-4">}</span><span class="p" data-group-id="9202224674-1">]</span><span class="p">,</span><span class="w">
-  </span><span class="n">Edges</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_graph_nif</span><span class="p">:</span><span class="nf">build_edges</span><span class="p" data-group-id="9202224674-7">(</span><span class="n">Nodes</span><span class="p" data-group-id="9202224674-7">)</span><span class="p">.</span><span class="w">
+  </span><span class="n">Nodes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="6729844300-1">[</span><span class="p" data-group-id="6729844300-2">{</span><span class="p" data-group-id="6729844300-3">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="6729844300-3">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="ss">undefined</span><span class="p" data-group-id="6729844300-2">}</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6729844300-4">{</span><span class="p" data-group-id="6729844300-5">&lt;&lt;</span><span class="s">&quot;evt-2&quot;</span><span class="p" data-group-id="6729844300-5">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6729844300-6">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="6729844300-6">&gt;&gt;</span><span class="p" data-group-id="6729844300-4">}</span><span class="p" data-group-id="6729844300-1">]</span><span class="p">,</span><span class="w">
+  </span><span class="n">Edges</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_graph_nif</span><span class="p">:</span><span class="nf">build_edges</span><span class="p" data-group-id="6729844300-7">(</span><span class="n">Nodes</span><span class="p" data-group-id="6729844300-7">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Topological sort</span><span class="w">
-  </span><span class="p" data-group-id="9202224674-8">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Sorted</span><span class="p" data-group-id="9202224674-8">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_graph_nif</span><span class="p">:</span><span class="nf">topo_sort</span><span class="p" data-group-id="9202224674-9">(</span><span class="p" data-group-id="9202224674-10">[</span><span class="p" data-group-id="9202224674-11">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="9202224674-11">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="9202224674-12">&lt;&lt;</span><span class="s">&quot;evt-2&quot;</span><span class="p" data-group-id="9202224674-12">&gt;&gt;</span><span class="p" data-group-id="9202224674-10">]</span><span class="p">,</span><span class="w"> </span><span class="n">Edges</span><span class="p" data-group-id="9202224674-9">)</span><span class="p">.</span><span class="w">
+  </span><span class="p" data-group-id="6729844300-8">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Sorted</span><span class="p" data-group-id="6729844300-8">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_graph_nif</span><span class="p">:</span><span class="nf">topo_sort</span><span class="p" data-group-id="6729844300-9">(</span><span class="p" data-group-id="6729844300-10">[</span><span class="p" data-group-id="6729844300-11">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="6729844300-11">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6729844300-12">&lt;&lt;</span><span class="s">&quot;evt-2&quot;</span><span class="p" data-group-id="6729844300-12">&gt;&gt;</span><span class="p" data-group-id="6729844300-10">]</span><span class="p">,</span><span class="w"> </span><span class="n">Edges</span><span class="p" data-group-id="6729844300-9">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Check which mode is active</span><span class="w">
-  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_graph_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="9202224674-13">(</span><span class="p" data-group-id="9202224674-13">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
-  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_graph_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="9202224674-14">(</span><span class="p" data-group-id="9202224674-14">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
+  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_graph_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="6729844300-13">(</span><span class="p" data-group-id="6729844300-13">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
+  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_graph_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="6729844300-14">(</span><span class="p" data-group-id="6729844300-14">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
     </section>
 
 </div>
@@ -287,7 +287,7 @@ reckon_db
       <h1 class="signature" translate="no">build_edges(Nodes)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L179" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L179" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -316,7 +316,7 @@ reckon_db
       <h1 class="signature" translate="no">find_leaves(Nodes, Edges)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L195" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L195" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -344,7 +344,7 @@ reckon_db
       <h1 class="signature" translate="no">find_roots(Nodes, Edges)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L187" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L187" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -372,7 +372,7 @@ reckon_db
       <h1 class="signature" translate="no">get_ancestors(Nodes, Edges, Target)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L284" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L284" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -401,7 +401,7 @@ reckon_db
       <h1 class="signature" translate="no">get_descendants(Nodes, Edges, Source)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L293" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L293" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -430,7 +430,7 @@ reckon_db
       <h1 class="signature" translate="no">graph_stats(Nodes, Edges)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L232" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L232" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -458,7 +458,7 @@ reckon_db
       <h1 class="signature" translate="no">has_cycle(Nodes, Edges)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L218" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L218" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -486,7 +486,7 @@ reckon_db
       <h1 class="signature" translate="no">has_path(Nodes, Edges, From, To)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L275" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L275" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -515,7 +515,7 @@ reckon_db
       <h1 class="signature" translate="no">implementation()</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L163" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L163" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -543,7 +543,7 @@ reckon_db
       <h1 class="signature" translate="no">is_nif_loaded()</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L158" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L158" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -571,7 +571,7 @@ reckon_db
       <h1 class="signature" translate="no">to_dot(Nodes, Edges)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L247" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L247" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -599,7 +599,7 @@ reckon_db
       <h1 class="signature" translate="no">to_dot_simple(Nodes, Edges)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L260" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L260" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -627,7 +627,7 @@ reckon_db
       <h1 class="signature" translate="no">topo_sort(Nodes, Edges)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/esdb_graph_nif.erl#L210" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/esdb_graph_nif.erl#L210" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -654,9 +654,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.6.0" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.6.1" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.6.0">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.6.1">Hex Preview</a>
 
           </span>
 
