@@ -58,11 +58,14 @@ list_all_snapshots(StoreId) ->
     try
         Streams = list_streams_safe(StoreId),
         Snapshots = lists:flatmap(fun({StreamId, _Version}) ->
-            case reckon_db_snapshots_store:list(StoreId, StreamId) of
-                {ok, SnapList} ->
-                    [snapshot_summary(StreamId, S) || S <- SnapList];
-                _ ->
-                    []
+            try
+                case reckon_db_snapshots_store:list(StoreId, StreamId) of
+                    {ok, SnapList} ->
+                        [snapshot_summary(StreamId, S) || S <- SnapList];
+                    _ ->
+                        []
+                end
+            catch _:_ -> []
             end
         end, Streams),
         Sorted = lists:sort(fun(A, B) ->
@@ -78,7 +81,12 @@ list_all_snapshots(StoreId) ->
 list_subscriptions(StoreId) ->
     try
         Subs = list_subs_safe(StoreId),
-        SubMaps = [subscription_summary(S) || S <- Subs],
+        SubMaps = lists:filtermap(fun(S) ->
+            try
+                {true, subscription_summary(S)}
+            catch _:_ -> false
+            end
+        end, Subs),
         {ok, SubMaps}
     catch
         _:Reason -> {error, Reason}
@@ -251,7 +259,7 @@ subscription_summary(Sub) ->
                 checkpoint => Sub#subscription.checkpoint,
                 pool_size => Sub#subscription.pool_size,
                 created_at => Sub#subscription.created_at,
-                subscriber_pid => list_to_binary(pid_to_list(Sub#subscription.subscriber_pid))
+                subscriber_pid => format_pid(Sub#subscription.subscriber_pid)
             };
         #{subscription_name := _} = Map ->
             Map#{subscriber_pid => format_pid(maps:get(subscriber_pid, Map, undefined))};
@@ -260,7 +268,9 @@ subscription_summary(Sub) ->
     end.
 
 format_pid(Pid) when is_pid(Pid) -> list_to_binary(pid_to_list(Pid));
-format_pid(Other) -> Other.
+format_pid(Bin) when is_binary(Bin) -> Bin;
+format_pid(undefined) -> <<"undefined">>;
+format_pid(Other) -> list_to_binary(io_lib:format("~p", [Other])).
 
 get_first_event_timestamp(StoreId, StreamId) ->
     case reckon_db_streams:read(StoreId, StreamId, 0, 1, forward) of

@@ -5,6 +5,15 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-03-19
+
+### Fixed
+
+- **Store Inspector**: Fixed `badarg` crash in `subscription_summary/1` when `subscriber_pid` is undefined
+- **Store Inspector**: Made snapshot listing defensive against per-stream errors
+- **Store Inspector**: Made subscription listing skip malformed entries instead of crashing
+- **Store Inspector**: `format_pid/1` handles undefined, binary, and non-pid terms gracefully
+
 ## [1.6.1] - 2026-03-19
 
 ### Changed
