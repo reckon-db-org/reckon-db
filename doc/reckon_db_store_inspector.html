@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.39.1">
-    <meta name="project" content="reckon_db v1.6.1">
+    <meta name="project" content="reckon_db v1.6.2">
 
 
-    <title>reckon_db_store_inspector — reckon_db v1.6.1</title>
+    <title>reckon_db_store_inspector — reckon_db v1.6.2</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-5C137902.js"></script>
+    <script defer src="dist/sidebar_items-701FCDDE.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v1.6.1
+          v1.6.2
         </div>
       </div>
     </div>
@@ -94,11 +94,11 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_store_inspector</span> 
-      <small class="app-vsn" translate="no">(reckon_db v1.6.1)</small>
+      <small class="app-vsn" translate="no">(reckon_db v1.6.2)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/reckon_db_store_inspector.erl#L11" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.2/src/reckon_db_store_inspector.erl#L11" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -208,7 +208,7 @@ reckon_db
       <h1 class="signature" translate="no">event_type_summary(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/reckon_db_store_inspector.erl#L124" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.2/src/reckon_db_store_inspector.erl#L76" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -223,7 +223,7 @@ reckon_db
 
       </div>
 
-<p>Summary of event types in the store.</p><p>Walks all streams and collects unique event types with counts. This can be expensive for large stores — use with care.</p>
+<p>Summary of event types in the store.</p>
   </section>
 </section>
 <section class="detail" id="list_all_snapshots/1">
@@ -236,7 +236,7 @@ reckon_db
       <h1 class="signature" translate="no">list_all_snapshots(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/reckon_db_store_inspector.erl#L57" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.2/src/reckon_db_store_inspector.erl#L43" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -251,7 +251,7 @@ reckon_db
 
       </div>
 
-<p>List all snapshots across all streams in a store.</p><p>Returns a flat list of snapshot summaries (without data payloads) sorted by timestamp descending (newest first).</p>
+<p>List all snapshots across all streams in a store.</p>
   </section>
 </section>
 <section class="detail" id="list_subscriptions/1">
@@ -264,7 +264,7 @@ reckon_db
       <h1 class="signature" translate="no">list_subscriptions(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/reckon_db_store_inspector.erl#L78" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.2/src/reckon_db_store_inspector.erl#L51" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -292,7 +292,7 @@ reckon_db
       <h1 class="signature" translate="no">store_stats(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/reckon_db_store_inspector.erl#L29" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.2/src/reckon_db_store_inspector.erl#L26" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -307,7 +307,7 @@ reckon_db
 
       </div>
 
-<p>Aggregate statistics for a store.</p><p>Returns stream count, total events, snapshot count, subscription count, and whether the store has any events.</p>
+<p>Aggregate statistics for a store.</p>
   </section>
 </section>
 <section class="detail" id="stream_info/2">
@@ -320,7 +320,7 @@ reckon_db
       <h1 class="signature" translate="no">stream_info(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/reckon_db_store_inspector.erl#L154" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.2/src/reckon_db_store_inspector.erl#L84" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -335,7 +335,7 @@ reckon_db
 
       </div>
 
-<p>Detailed info for a single stream.</p><p>Returns version, event count, snapshot info, and the first/last event timestamps.</p>
+<p>Detailed info for a single stream.</p>
   </section>
 </section>
 <section class="detail" id="subscription_lag/2">
@@ -348,7 +348,7 @@ reckon_db
       <h1 class="signature" translate="no">subscription_lag(StoreId, SubscriptionName)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.1/src/reckon_db_store_inspector.erl#L92" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.2/src/reckon_db_store_inspector.erl#L58" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -363,7 +363,7 @@ reckon_db
 
       </div>
 
-<p>Calculate lag for a specific subscription.</p><p>Returns how many events behind the subscription is from the latest event in the store's $all stream.</p>
+<p>Calculate lag for a specific subscription.</p>
   </section>
 </section>
 
@@ -374,9 +374,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/1.6.1" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/1.6.2" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/1.6.1">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/1.6.2">Hex Preview</a>
 
           </span>
 

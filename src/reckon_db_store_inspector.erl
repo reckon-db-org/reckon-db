@@ -24,10 +24,10 @@
 %% @doc Aggregate statistics for a store.
 -spec store_stats(atom()) -> {ok, map()} | {error, term()}.
 store_stats(StoreId) ->
-    Streams = list_streams_safe(StoreId),
-    StreamCount = length(Streams),
-    TotalEvents = sum_events(Streams),
-    SnapshotCount = count_all_snapshots(StoreId, Streams),
+    StreamIds = list_streams_safe(StoreId),
+    StreamCount = length(StreamIds),
+    TotalEvents = sum_events(StoreId, StreamIds),
+    SnapshotCount = count_all_snapshots(StoreId, StreamIds),
     SubCount = length(list_subs_safe(StoreId)),
     {ok, #{
         store_id => StoreId,
@@ -41,8 +41,8 @@ store_stats(StoreId) ->
 %% @doc List all snapshots across all streams in a store.
 -spec list_all_snapshots(atom()) -> {ok, [map()]} | {error, term()}.
 list_all_snapshots(StoreId) ->
-    Streams = list_streams_safe(StoreId),
-    Snapshots = lists:flatmap(fun({StreamId, _}) -> snapshots_for_stream(StoreId, StreamId) end, Streams),
+    StreamIds = list_streams_safe(StoreId),
+    Snapshots = lists:flatmap(fun(StreamId) -> snapshots_for_stream(StoreId, StreamId) end, StreamIds),
     Sorted = lists:sort(fun(A, B) -> maps:get(timestamp, A, 0) >= maps:get(timestamp, B, 0) end, Snapshots),
     {ok, Sorted}.
 
@@ -59,7 +59,7 @@ subscription_lag(StoreId, SubscriptionName) ->
     case reckon_db_subscriptions_store:find_by_name(StoreId, SubscriptionName) of
         {ok, Sub} ->
             Checkpoint = extract_checkpoint(Sub),
-            TotalEvents = sum_events(list_streams_safe(StoreId)),
+            TotalEvents = sum_events(StoreId, list_streams_safe(StoreId)),
             Lag = max(0, TotalEvents - Checkpoint - 1),
             {ok, #{
                 subscription_name => SubscriptionName,
@@ -74,8 +74,8 @@ subscription_lag(StoreId, SubscriptionName) ->
 %% @doc Summary of event types in the store.
 -spec event_type_summary(atom()) -> {ok, [map()]} | {error, term()}.
 event_type_summary(StoreId) ->
-    Streams = list_streams_safe(StoreId),
-    TypeCounts = lists:foldl(fun({StreamId, _}, Acc) -> count_types_in_stream(StoreId, StreamId, Acc) end, #{}, Streams),
+    StreamIds = list_streams_safe(StoreId),
+    TypeCounts = lists:foldl(fun(StreamId, Acc) -> count_types_in_stream(StoreId, StreamId, Acc) end, #{}, StreamIds),
     TypeList = maps_to_sorted_list(TypeCounts),
     {ok, TypeList}.
 
@@ -113,15 +113,21 @@ list_subs_safe(StoreId) ->
         _ -> []
     end.
 
-sum_events(Streams) ->
-    lists:foldl(fun({_, Version}, Acc) -> Acc + Version + 1 end, 0, Streams).
+sum_events(StoreId, StreamIds) ->
+    lists:foldl(fun(StreamId, Acc) -> Acc + stream_event_count(StoreId, StreamId) end, 0, StreamIds).
+
+stream_event_count(StoreId, StreamId) ->
+    case reckon_db_streams:get_version(StoreId, StreamId) of
+        {ok, Version} -> Version + 1;
+        _ -> 0
+    end.
 
 %%====================================================================
 %% Internal: Snapshots
 %%====================================================================
 
-count_all_snapshots(StoreId, Streams) ->
-    lists:foldl(fun({StreamId, _}, Acc) -> Acc + length(snapshots_for_stream(StoreId, StreamId)) end, 0, Streams).
+count_all_snapshots(StoreId, StreamIds) ->
+    lists:foldl(fun(StreamId, Acc) -> Acc + length(snapshots_for_stream(StoreId, StreamId)) end, 0, StreamIds).
 
 snapshots_for_stream(StoreId, StreamId) ->
     case reckon_db_snapshots_store:list(StoreId, StreamId) of
