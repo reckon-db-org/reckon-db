@@ -78,6 +78,17 @@ handle_call({get_events, _StoreId, StreamId, StartVersion, Count, Direction}, _F
     Result = reckon_db_streams:read(StoreId, StreamId, StartVersion, Count, Direction),
     {reply, Result, State};
 
+%% Read all events globally (cross-stream, sorted by epoch_us)
+handle_call({read_all_global, _StoreId, Offset, BatchSize}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_streams:read_all_global(StoreId, Offset, BatchSize),
+    {reply, Result, State};
+
+%% Has events
+handle_call({has_events, _StoreId}, _From, #state{store_id = StoreId} = State) ->
+    Result = reckon_db_streams:has_events(StoreId),
+    {reply, Result, State};
+
 %% Get streams
 handle_call({get_streams, _StoreId}, _From, #state{store_id = StoreId} = State) ->
     Result = reckon_db_streams:list_streams(StoreId),
@@ -348,6 +359,40 @@ handle_call({list_links, _StoreId}, _From,
 handle_call({link_info, _StoreId, LinkName}, _From,
             #state{store_id = StoreId} = State) ->
     Result = reckon_db_links:info(StoreId, LinkName),
+    {reply, Result, State};
+
+%%====================================================================
+%% Store Inspector Operations
+%%====================================================================
+
+handle_call({store_stats, _StoreId}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_store_inspector:store_stats(StoreId),
+    {reply, Result, State};
+
+handle_call({list_all_snapshots, _StoreId}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_store_inspector:list_all_snapshots(StoreId),
+    {reply, Result, State};
+
+handle_call({list_store_subscriptions, _StoreId}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_store_inspector:list_subscriptions(StoreId),
+    {reply, Result, State};
+
+handle_call({subscription_lag, _StoreId, SubscriptionName}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_store_inspector:subscription_lag(StoreId, SubscriptionName),
+    {reply, Result, State};
+
+handle_call({event_type_summary, _StoreId}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_store_inspector:event_type_summary(StoreId),
+    {reply, Result, State};
+
+handle_call({stream_info, _StoreId, StreamId}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_store_inspector:stream_info(StoreId, StreamId),
     {reply, Result, State};
 
 %% Unknown request

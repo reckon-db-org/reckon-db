@@ -19,6 +19,7 @@ assets/scavenge_lifecycle.svg
 assets/schema_upcasting.svg
 assets/snapshot_recovery.svg
 assets/split_brain_detection.svg
+assets/store_inspector.svg
 assets/stream_links.svg
 assets/subscription_flow.svg
 assets/subscriptions.svg
@@ -29,15 +30,15 @@ changelog.html
 cluster_consistency.html
 configuration.html
 cqrs.html
-dist/html-DPJLHKSM.js
-dist/html-erlang-DQDXQC7W.css
+dist/html-HBZYRXZS.js
+dist/html-erlang-7YNYEB7F.css
 dist/lato-latin-400-normal-W7754I4D.woff2
 dist/lato-latin-700-normal-2XVSBPG4.woff2
 dist/lato-latin-ext-400-normal-N27NCBWW.woff2
 dist/lato-latin-ext-700-normal-Q2L5DVMW.woff2
 dist/remixicon-QPNJX265.woff2
-dist/search_data-49FED039.js
-dist/sidebar_items-0F1B03E0.js
+dist/search_data-81698C93.js
+dist/sidebar_items-6D76E4B2.js
 esdb_aggregate_nif.html
 esdb_archive_nif.html
 esdb_capability_verifier.html
@@ -87,6 +88,7 @@ reckon_db_snapshots.html
 reckon_db_snapshots_store.html
 reckon_db_store.html
 reckon_db_store_coordinator.html
+reckon_db_store_inspector.html
 reckon_db_store_mgr.html
 reckon_db_store_registry.html
 reckon_db_streams.html
@@ -106,6 +108,7 @@ schema_evolution.html
 search.html
 snapshots.html
 storage_internals.html
+store_inspector.html
 stream_links.html
 subscriptions.html
 temporal_queries.html

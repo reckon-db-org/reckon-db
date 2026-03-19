@@ -8,7 +8,7 @@
     <meta name="project" content="reckon_db v1.6.0">
 
 
-    <title>reckon_db_node_monitor — reckon_db v1.6.0</title>
+    <title>reckon_db_store_inspector — reckon_db v1.6.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
@@ -93,12 +93,12 @@ reckon_db
 <div id="top-content">
   <div class="heading-with-actions top-heading">
     <h1>
-      <span translate="no">reckon_db_node_monitor</span> 
+      <span translate="no">reckon_db_store_inspector</span> 
       <small class="app-vsn" translate="no">(reckon_db v1.6.0)</small>
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_node_monitor.erl#L14" title="View Source" class="icon-action" rel="help">
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_store_inspector.erl#L11" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -107,7 +107,7 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Node monitor for reckon-db</p><p>Monitors cluster node health and handles node up/down events.</p><p>Responsibilities: - Monitor node connectivity via net_kernel:monitor_nodes/1 - Trigger cluster join attempts on nodeup events - Track cluster membership changes - Emit telemetry on node events - Periodic leader checks</p>
+<p>Store-level introspection for debugging and monitoring.</p><p>Provides aggregate queries across streams, snapshots, and subscriptions within a single store. Designed for the Observer UI and operational tooling.</p><p>All functions read directly from the Khepri tree -- no data modification.</p><p>See the Store Inspector guide for detailed usage examples.</p>
     </section>
 
 </div>
@@ -119,20 +119,6 @@ reckon_db
       </a>
       <span class="text">Summary</span>
     </h1>
-<div class="summary-types summary">
-  <h2>
-    <a href="#types">Types</a>
-  </h2>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#t:store_config/0" data-no-tooltip="" translate="no">store_config/0</a>
-
-      </div>
-
-    </div>
-
-</div>
 <div class="summary-functions summary">
   <h2>
     <a href="#functions">Functions</a>
@@ -140,59 +126,61 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#get_members/1" data-no-tooltip="" translate="no">get_members(StoreId)</a>
+        <a href="#event_type_summary/1" data-no-tooltip="" translate="no">event_type_summary(StoreId)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Get current cluster members</p></div>
+        <div class="summary-synopsis"><p>Summary of event types in the store.</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#handle_call/3" data-no-tooltip="" translate="no">handle_call(Request, From, State)</a>
+        <a href="#list_all_snapshots/1" data-no-tooltip="" translate="no">list_all_snapshots(StoreId)</a>
 
       </div>
+
+        <div class="summary-synopsis"><p>List all snapshots across all streams in a store.</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#handle_cast/2" data-no-tooltip="" translate="no">handle_cast(Msg, State)</a>
+        <a href="#list_subscriptions/1" data-no-tooltip="" translate="no">list_subscriptions(StoreId)</a>
 
       </div>
+
+        <div class="summary-synopsis"><p>List all subscriptions for a store with their current state.</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#handle_info/2" data-no-tooltip="" translate="no">handle_info(Info, State)</a>
+        <a href="#store_stats/1" data-no-tooltip="" translate="no">store_stats(StoreId)</a>
 
       </div>
+
+        <div class="summary-synopsis"><p>Aggregate statistics for a store.</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#init/1" data-no-tooltip="" translate="no">init(Store_config)</a>
+        <a href="#stream_info/2" data-no-tooltip="" translate="no">stream_info(StoreId, StreamId)</a>
 
       </div>
+
+        <div class="summary-synopsis"><p>Detailed info for a single stream.</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#start_link/1" data-no-tooltip="" translate="no">start_link(Store_config)</a>
+        <a href="#subscription_lag/2" data-no-tooltip="" translate="no">subscription_lag(StoreId, SubscriptionName)</a>
 
       </div>
 
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#terminate/2" data-no-tooltip="" translate="no">terminate(Reason, State)</a>
-
-      </div>
+        <div class="summary-synopsis"><p>Calculate lag for a specific subscription.</p></div>
 
     </div>
 
@@ -200,55 +188,6 @@ reckon_db
 
   </section>
 
-
-  <section id="types" class="details-list">
-    <h1 class="section-heading">
-      <a class="hover-link" href="#types">
-        <i class="ri-link-m" aria-hidden="true"></i>
-      </a>
-      <span class="text">Types</span>
-    </h1>
-
-    <div class="types-list">
-<section class="detail" id="t:store_config/0">
-
-  <div class="detail-header">
-    <a href="#t:store_config/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">store_config/0</h1>
-
-
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/_build/docs/lib/reckon_db/include/reckon_db.hrl#L71" class="icon-action" rel="help" aria-label="View Source">
-          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
-        </a>
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-      <div class="specs">
-
-          <pre translate="no"><span class="attribute">-type</span> store_config() ::
-          #store_config{store_id :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(),
-                        data_dir :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>(),
-                        mode :: single | cluster,
-                        timeout :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
-                        writer_pool_size :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
-                        reader_pool_size :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
-                        gateway_pool_size :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
-                        options :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()}.</pre>
-
-      </div>
-
-
-  </section>
-</section>
-
-    </div>
-  </section>
 
   <section id="functions" class="details-list">
     <h1 class="section-heading">
@@ -259,17 +198,17 @@ reckon_db
     </h1>
 
     <div class="functions-list">
-<section class="detail" id="get_members/1">
+<section class="detail" id="event_type_summary/1">
 
   <div class="detail-header">
-    <a href="#get_members/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#event_type_summary/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">get_members(StoreId)</h1>
+      <h1 class="signature" translate="no">event_type_summary(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_node_monitor.erl#L49" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_store_inspector.erl#L124" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -280,112 +219,24 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> get_members(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> event_type_summary(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Get current cluster members</p>
+<p>Summary of event types in the store.</p><p>Walks all streams and collects unique event types with counts. This can be expensive for large stores — use with care.</p>
   </section>
 </section>
-<section class="detail" id="handle_call/3">
+<section class="detail" id="list_all_snapshots/1">
 
   <div class="detail-header">
-    <a href="#handle_call/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#list_all_snapshots/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">handle_call(Request, From, State)</h1>
+      <h1 class="signature" translate="no">list_all_snapshots(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_node_monitor.erl#L83" class="icon-action" rel="help" aria-label="View Source">
-          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
-        </a>
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="handle_cast/2">
-
-  <div class="detail-header">
-    <a href="#handle_cast/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">handle_cast(Msg, State)</h1>
-
-
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_node_monitor.erl#L86" class="icon-action" rel="help" aria-label="View Source">
-          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
-        </a>
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="handle_info/2">
-
-  <div class="detail-header">
-    <a href="#handle_info/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">handle_info(Info, State)</h1>
-
-
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_node_monitor.erl#L90" class="icon-action" rel="help" aria-label="View Source">
-          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
-        </a>
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="init/1">
-
-  <div class="detail-header">
-    <a href="#init/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">init(Store_config)</h1>
-
-
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_node_monitor.erl#L56" class="icon-action" rel="help" aria-label="View Source">
-          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
-        </a>
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-
-  </section>
-</section>
-<section class="detail" id="start_link/1">
-
-  <div class="detail-header">
-    <a href="#start_link/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">start_link(Store_config)</h1>
-
-
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_node_monitor.erl#L43" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_store_inspector.erl#L57" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -396,24 +247,24 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> start_link(<a href="#t:store_config/0">store_config</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> list_all_snapshots(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-
+<p>List all snapshots across all streams in a store.</p><p>Returns a flat list of snapshot summaries (without data payloads) sorted by timestamp descending (newest first).</p>
   </section>
 </section>
-<section class="detail" id="terminate/2">
+<section class="detail" id="list_subscriptions/1">
 
   <div class="detail-header">
-    <a href="#terminate/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#list_subscriptions/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">terminate(Reason, State)</h1>
+      <h1 class="signature" translate="no">list_subscriptions(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_node_monitor.erl#L159" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_store_inspector.erl#L78" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -422,7 +273,97 @@ reckon_db
 
   <section class="docstring">
 
+      <div class="specs">
 
+          <pre translate="no"><span class="attribute">-spec</span> list_subscriptions(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>List all subscriptions for a store with their current state.</p>
+  </section>
+</section>
+<section class="detail" id="store_stats/1">
+
+  <div class="detail-header">
+    <a href="#store_stats/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">store_stats(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_store_inspector.erl#L29" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> store_stats(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Aggregate statistics for a store.</p><p>Returns stream count, total events, snapshot count, subscription count, and whether the store has any events.</p>
+  </section>
+</section>
+<section class="detail" id="stream_info/2">
+
+  <div class="detail-header">
+    <a href="#stream_info/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">stream_info(StoreId, StreamId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_store_inspector.erl#L154" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> stream_info(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Detailed info for a single stream.</p><p>Returns version, event count, snapshot info, and the first/last event timestamps.</p>
+  </section>
+</section>
+<section class="detail" id="subscription_lag/2">
+
+  <div class="detail-header">
+    <a href="#subscription_lag/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">subscription_lag(StoreId, SubscriptionName)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v1.6.0/src/reckon_db_store_inspector.erl#L92" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> subscription_lag(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Calculate lag for a specific subscription.</p><p>Returns how many events behind the subscription is from the latest event in the store's $all stream.</p>
   </section>
 </section>
 

@@ -124,6 +124,10 @@ finalize_subscription(StoreId, Key, Type, Selector, Subscription, StartTime) ->
         Filter ->
             setup_event_notification(StoreId, Key, Filter, Subscription),
             reckon_db_tracker_group:notify_created(StoreId, subscriptions, Subscription),
+            %% Replay historical events to the subscriber (catch-up subscription).
+            %% The trigger handles live events; this fills the gap for events
+            %% that existed before the subscription was created.
+            maybe_start_catchup(StoreId, Subscription),
             Duration = erlang:monotonic_time() - StartTime,
             telemetry:execute(
                 ?SUBSCRIPTION_CREATED,
@@ -149,6 +153,13 @@ reregister_subscriber(StoreId, Key, SubscriptionName, Opts) ->
     %% Re-register the Khepri trigger and emitter names.
     %% The trigger's stored proc (an Erlang fun) may be stale after restart.
     ok = reregister_trigger(StoreId, Key),
+    %% Replay historical events from checkpoint (catch-up after restart).
+    case reckon_db_subscriptions_store:get(StoreId, Key) of
+        #subscription{} = Sub ->
+            maybe_start_catchup(StoreId, Sub#subscription{subscriber_pid = NewPid});
+        _ ->
+            ok
+    end,
     {ok, Key}.
 
 %% @private Re-register the Khepri trigger for an existing subscription.
@@ -477,6 +488,63 @@ map_to_event(Map) ->
         data_content_type = maps:get(data_content_type, Map, ?CONTENT_TYPE_JSON),
         metadata_content_type = maps:get(metadata_content_type, Map, ?CONTENT_TYPE_JSON)
     }.
+
+%%====================================================================
+%% Catch-up subscription (historical replay)
+%%====================================================================
+
+%% @private Replay historical events to a subscriber asynchronously.
+%%
+%% After a subscription is created or re-registered, this reads all
+%% existing events from the store and delivers them to the subscriber.
+%% Combined with the Khepri trigger (which handles live events), this
+%% implements a catch-up subscription: the subscriber receives ALL
+%% events from the requested position, not just new ones.
+%%
+%% Events during the overlap (written while catch-up runs) may be
+%% delivered twice. The subscriber must handle idempotency.
+-spec maybe_start_catchup(atom(), subscription()) -> ok.
+maybe_start_catchup(_StoreId, #subscription{subscriber_pid = undefined}) ->
+    ok;
+maybe_start_catchup(StoreId, #subscription{subscriber_pid = Pid, checkpoint = Checkpoint}) ->
+    StartFrom = case Checkpoint of
+        undefined -> 0;
+        N when is_integer(N) -> N
+    end,
+    spawn_link(fun() -> do_catchup(StoreId, Pid, StartFrom) end),
+    ok.
+
+%% @private Read historical events in batches and deliver to subscriber.
+-spec do_catchup(atom(), pid(), non_neg_integer()) -> ok.
+do_catchup(StoreId, SubscriberPid, Offset) ->
+    BatchSize = 500,
+    case reckon_db_streams:read_all_global(StoreId, Offset, BatchSize) of
+        {ok, []} ->
+            logger:info("[catchup] Store ~p: replay complete (~b events delivered)",
+                        [StoreId, Offset]),
+            ok;
+        {ok, Events} ->
+            case erlang:is_process_alive(SubscriberPid) of
+                true ->
+                    SubscriberPid ! {events, Events},
+                    case length(Events) < BatchSize of
+                        true ->
+                            Total = Offset + length(Events),
+                            logger:info("[catchup] Store ~p: replay complete (~b events delivered)",
+                                        [StoreId, Total]),
+                            ok;
+                        false ->
+                            do_catchup(StoreId, SubscriberPid, Offset + BatchSize)
+                    end;
+                false ->
+                    logger:warning("[catchup] Store ~p: subscriber died during replay", [StoreId]),
+                    ok
+            end;
+        {error, Reason} ->
+            logger:warning("[catchup] Store ~p: read failed at offset ~b: ~p",
+                           [StoreId, Offset, Reason]),
+            ok
+    end.
 
 %% @private Cleanup emitter pool for a subscription
 -spec cleanup_emitter_pool(atom(), binary()) -> ok.

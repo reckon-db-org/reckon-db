@@ -5,7 +5,35 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.6.0] - 2026-03-19
+
+### Added
+
+- **Store Inspector** (`reckon_db_store_inspector`): New module for aggregate store-level introspection.
+  - `store_stats/1` — stream count, total events, snapshot count, subscription count
+  - `list_all_snapshots/1` — all snapshots across all streams (summaries without data payloads)
+  - `list_subscriptions/1` — all subscriptions with checkpoint positions
+  - `subscription_lag/2` — events behind for a specific subscription
+  - `event_type_summary/1` — census of event types with counts
+  - `stream_info/2` — detailed info for a single stream (timestamps, snapshot coverage)
+- Gateway worker clauses for all inspector operations
+- Guide: `guides/store_inspector.md` with usage examples and performance notes
+- Architecture diagram: `assets/store_inspector.svg`
+
+## [1.5.1] - 2026-03-08
+
+### Added
+
+- **`reckon_db_streams:has_events/1`**: Check if a store contains at least one event.
+  Reads 1 event via `read_all_global` — correctly handles empty streams (truncation,
+  GDPR erasure) unlike path-existence checks. Exposed via gateway worker.
+
+## [1.5.0] - 2026-03-06
+
+### Added
+
+- **`reckon_db_streams:read_all_global/3`**: Read all events across all streams in
+  global epoch_us order with offset/batch pagination. Used for catch-up subscriptions.
 
 ## [1.4.5] - 2026-03-06
 
