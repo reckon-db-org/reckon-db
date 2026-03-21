@@ -14,7 +14,7 @@
 %% Version
 %%====================================================================
 
--define(RECKON_DB_VERSION, "1.4.4").
+-define(RECKON_DB_VERSION, "1.7.0").
 
 %%====================================================================
 %% Khepri Paths
@@ -49,8 +49,8 @@
     %% Data directory for Khepri/Ra
     data_dir :: string(),
 
-    %% Mode: single | cluster
-    mode = single :: single | cluster,
+    %% Mode: single | cluster (cluster = default for resilience/backup)
+    mode = cluster :: single | cluster,
 
     %% Default timeout for operations
     timeout = ?DEFAULT_TIMEOUT :: pos_integer(),
