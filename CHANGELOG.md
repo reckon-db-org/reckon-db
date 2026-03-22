@@ -5,6 +5,18 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.3] - 2026-03-22
+
+### Fixed
+
+- **Non-blocking leader activation** — `do_activate` now uses `gen_server:cast`
+  instead of a blocking `gen_server:call` with 10s timeout. When Khepri/Ra is
+  still initializing, `save_default_subscriptions` blocks on Khepri queries,
+  causing the node monitor to time out and crash-loop every 15 seconds.
+  The leader worker now handles activation asynchronously in its own process.
+
+---
+
 ## [1.6.3] - 2026-03-19
 
 ### Fixed
