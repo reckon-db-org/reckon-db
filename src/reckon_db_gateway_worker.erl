@@ -138,16 +138,11 @@ handle_call({append_events, _StoreId, StreamId, Events}, _From,
     {reply, Result, State};
 
 %% Append events (with expected version)
+%% Delegate version checking to reckon_db_streams:append/4 which handles
+%% all version constants: ANY_VERSION (-2), NO_STREAM (-1), STREAM_EXISTS (-4).
 handle_call({append_events, _StoreId, StreamId, ExpectedVersion, Events}, _From,
             #state{store_id = StoreId} = State) ->
-    %% get_version returns integer directly: -1 for no stream, or version number
-    CurrentVersion = reckon_db_streams:get_version(StoreId, StreamId),
-    Result = case version_matches(CurrentVersion, ExpectedVersion) of
-        true ->
-            reckon_db_streams:append(StoreId, StreamId, CurrentVersion, Events);
-        false ->
-            {error, {wrong_expected_version, CurrentVersion}}
-    end,
+    Result = reckon_db_streams:append(StoreId, StreamId, ExpectedVersion, Events),
     {reply, Result, State};
 
 %%====================================================================
@@ -517,22 +512,6 @@ terminate(_Reason, #state{store_id = StoreId}) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
-
-%% @private Check if current version matches expected version
-%%
-%% Version semantics:
-%% - `-1` = stream doesn't exist (empty)
-%% - `0` = first event exists (version after first append)
-%% - For event sourcing, ExpectedVersion=0 with CurrentVersion=-1 is valid
-%%   (both mean "no events yet")
--spec version_matches(integer(), integer() | any | stream_exists) -> boolean().
-version_matches(_Current, any) -> true;
-version_matches(Current, stream_exists) when Current >= 0 -> true;
-version_matches(-1, stream_exists) -> false;
-%% Special case: ExpectedVersion=0 matches empty stream (-1)
-%% This is common in event sourcing when aggregate initializes with version 0
-version_matches(-1, 0) -> true;
-version_matches(Current, Expected) when is_integer(Expected) -> Current =:= Expected.
 
 %% @private Find subscription by name across all types
 -spec find_subscription_by_name(atom(), binary()) -> {ok, map()} | {error, not_found}.

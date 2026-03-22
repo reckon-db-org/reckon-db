@@ -5,6 +5,21 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5] - 2026-03-22
+
+### Fixed
+
+- **Gateway worker version check bypass** — `reckon_db_gateway_worker` had a
+  duplicate version check (`version_matches/2`) that used atoms (`any`,
+  `stream_exists`) instead of the integer constants (`?ANY_VERSION = -2`,
+  `?STREAM_EXISTS = -4`) defined in `esdb_gater_types.hrl`. This caused
+  `append_events/4` via the gateway to reject `ANY_VERSION` and `STREAM_EXISTS`
+  with `{wrong_expected_version, _}`. Removed the duplicate check — the gateway
+  worker now delegates directly to `reckon_db_streams:append/4` which handles
+  all version constants correctly.
+
+---
+
 ## [1.7.4] - 2026-03-22
 
 ### Fixed
