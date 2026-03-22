@@ -171,17 +171,21 @@ schedule_leader_check_if_needed(single, #state{current_leader = undefined}) ->
 schedule_leader_check_if_needed(single, _State) ->
     ok.
 
-%% @private Handle nodeup in cluster mode
+%% @private Handle nodeup in cluster mode.
+%% Spawned to avoid blocking the node monitor — coordinator calls can be slow.
 -spec handle_nodeup_cluster_join(atom()) -> ok.
 handle_nodeup_cluster_join(StoreId) ->
+    spawn(fun() -> maybe_join_cluster(StoreId) end),
+    ok.
+
+maybe_join_cluster(StoreId) ->
     case reckon_db_store_coordinator:should_handle_nodeup(StoreId) of
         true ->
             logger:info("Attempting cluster join due to nodeup (store: ~p)", [StoreId]),
-            spawn(fun() -> attempt_cluster_join(StoreId) end);
+            attempt_cluster_join(StoreId);
         false ->
-            logger:debug("Already in cluster, ignoring nodeup (store: ~p)", [StoreId])
-    end,
-    ok.
+            ok
+    end.
 
 attempt_cluster_join(StoreId) ->
     case reckon_db_store_coordinator:join_cluster(StoreId) of
