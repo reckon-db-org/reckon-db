@@ -181,36 +181,21 @@ start_khepri_store(StoreId, DataDir, single) ->
     end;
 
 start_khepri_store(StoreId, DataDir, cluster) ->
-    %% Cluster mode — each store gets its own Ra system (same fix as single).
+    %% Cluster mode — starts identically to single mode.
+    %% The Ra store starts as a single-node cluster (quorum of 1).
+    %% reckon_db_store_coordinator handles joining multi-node clusters
+    %% when other nodes appear.
+    Timeout = application:get_env(reckon_db, default_timeout, ?DEFAULT_TIMEOUT),
     RaSystemName = ra_system_name(StoreId),
     case ensure_ra_system(RaSystemName, DataDir) of
         ok ->
-            start_khepri_cluster(RaSystemName, StoreId);
+            start_khepri_single(RaSystemName, StoreId, Timeout);
         {error, _} = Error ->
             Error
     end.
 
 start_khepri_single(RaSystemName, StoreId, Timeout) ->
     case khepri:start(RaSystemName, StoreId, Timeout) of
-        {ok, _} -> ok;
-        {error, {already_started, _}} -> ok;
-        Error -> Error
-    end.
-
-start_khepri_cluster(RaSystemName, StoreId) ->
-    RaServerConfig = #{
-        cluster_name => StoreId,
-        id => {StoreId, node()},
-        uid => atom_to_binary(StoreId, utf8),
-        initial_members => [{StoreId, node()}],
-        log_init_args => #{uid => atom_to_binary(StoreId, utf8)},
-        machine => {module, khepri_machine, #{store_id => StoreId}}
-    },
-    KhepriOpts = #{
-        store_id => StoreId,
-        ra_server_config => RaServerConfig
-    },
-    case khepri:start(RaSystemName, KhepriOpts) of
         {ok, _} -> ok;
         {error, {already_started, _}} -> ok;
         Error -> Error
@@ -240,6 +225,10 @@ ensure_ra_system(RaSystemName, DataDir) ->
 %% @private
 -spec init_store_paths(atom()) -> ok.
 init_store_paths(StoreId) ->
+    %% Wait for Ra leader election before querying Khepri.
+    %% In cluster mode, the Ra server needs time to elect a leader
+    %% after khepri:start returns.
+    ok = await_store_ready(StoreId, 10),
     %% Ensure base paths exist
     Paths = [
         ?STREAMS_PATH,
@@ -259,3 +248,20 @@ init_store_paths(StoreId) ->
         Paths
     ),
     ok.
+
+%% @private Wait for the Khepri store to be queryable (Ra leader elected).
+-spec await_store_ready(atom(), non_neg_integer()) -> ok | {error, timeout}.
+await_store_ready(_StoreId, 0) ->
+    {error, timeout};
+await_store_ready(StoreId, Retries) ->
+    case khepri:exists(StoreId, []) of
+        true -> ok;
+        false -> ok;
+        {error, noproc} ->
+            timer:sleep(500),
+            await_store_ready(StoreId, Retries - 1);
+        {error, {timeout, _}} ->
+            timer:sleep(500),
+            await_store_ready(StoreId, Retries - 1);
+        _ -> ok
+    end.
