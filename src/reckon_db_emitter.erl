@@ -164,11 +164,13 @@ handle_event_delivery(Topic, Event, #state{
 
 maybe_forward_events(undefined, _Events) ->
     ok;
-maybe_forward_events(Pid, Events) when is_pid(Pid) ->
+maybe_forward_events(Pid, Events) when is_pid(Pid), node(Pid) =:= node() ->
     case erlang:is_process_alive(Pid) of
         true -> Pid ! {events, Events};
         false -> ok
-    end.
+    end;
+maybe_forward_events(_RemotePid, _Events) ->
+    ok.
 
 deliver_event(undefined, Event, StoreId, _SubscriptionKey, Topic) ->
     broadcast_to_topic(StoreId, Topic, Event);
@@ -192,7 +194,7 @@ broadcast_to_topic(StoreId, Topic, Event) ->
 
 %% @private Send event directly to subscriber, stop pool if subscriber is dead
 -spec send_to_subscriber(pid(), event(), atom(), binary()) -> ok.
-send_to_subscriber(Pid, Event, StoreId, SubscriptionKey) ->
+send_to_subscriber(Pid, Event, StoreId, SubscriptionKey) when node(Pid) =:= node() ->
     case erlang:is_process_alive(Pid) of
         true ->
             Pid ! {events, [Event]},
@@ -205,4 +207,6 @@ send_to_subscriber(Pid, Event, StoreId, SubscriptionKey) ->
             %% emitter worker during event delivery
             spawn(fun() -> reckon_db_emitter_pool:stop(StoreId, SubscriptionKey) end),
             ok
-    end.
+    end;
+send_to_subscriber(_RemotePid, _Event, _StoreId, _SubscriptionKey) ->
+    ok.

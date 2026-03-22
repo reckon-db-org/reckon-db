@@ -524,7 +524,7 @@ do_catchup(StoreId, SubscriberPid, Offset) ->
                         [StoreId, Offset]),
             ok;
         {ok, Events} ->
-            case erlang:is_process_alive(SubscriberPid) of
+            case is_local_process_alive(SubscriberPid) of
                 true ->
                     SubscriberPid ! {events, Events},
                     case length(Events) < BatchSize of
@@ -562,3 +562,9 @@ cleanup_emitter_pool(StoreId, SubscriptionKey) ->
     Key = reckon_db_emitter_group:group_key(StoreId, SubscriptionKey),
     catch persistent_term:erase(Key),
     ok.
+
+%% @private Check if a local PID is alive. Remote PIDs are assumed alive.
+is_local_process_alive(Pid) when is_pid(Pid), node(Pid) =:= node() ->
+    erlang:is_process_alive(Pid);
+is_local_process_alive(_) ->
+    true.

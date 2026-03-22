@@ -177,12 +177,16 @@ check_subscriptions(StoreId, Subscriptions, RunningPools) ->
         Subscriptions
     ).
 
-%% @private Check if a subscriber PID is dead
+%% @private Check if a subscriber PID is dead.
+%% In a cluster, PIDs from remote nodes may appear. is_process_alive/1
+%% only works on local PIDs — remote PIDs are assumed alive.
 -spec is_subscriber_dead(pid() | undefined) -> boolean().
 is_subscriber_dead(undefined) ->
     false;
-is_subscriber_dead(Pid) when is_pid(Pid) ->
+is_subscriber_dead(Pid) when is_pid(Pid), node(Pid) =:= node() ->
     not erlang:is_process_alive(Pid);
+is_subscriber_dead(Pid) when is_pid(Pid) ->
+    false;  %% Remote PID — assume alive
 is_subscriber_dead(_) ->
     false.
 
