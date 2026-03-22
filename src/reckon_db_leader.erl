@@ -51,15 +51,11 @@ activate(StoreId) ->
     end.
 
 do_activate(Name, StoreId) ->
-    case gen_server:call(Name, {save_default_subscriptions, StoreId}, 10000) of
-        {ok, _} ->
-            gen_server:cast(Name, {activate, StoreId}),
-            logger:info("Leader activated (store: ~p, node: ~p)", [StoreId, node()]),
-            ok;
-        {error, Reason} ->
-            logger:warning("Failed to activate leader: ~p (store: ~p)", [Reason, StoreId]),
-            {error, Reason}
-    end.
+    %% Non-blocking: cast activation to the leader worker.
+    %% The worker handles save_default_subscriptions + activate sequentially
+    %% in its own process, avoiding timeout crashes in the node monitor.
+    gen_server:cast(Name, {do_activate, StoreId}),
+    ok.
 
 %% @doc Check if leader is currently active
 -spec is_active(atom()) -> boolean().
@@ -88,17 +84,44 @@ handle_call({save_default_subscriptions, StoreId}, _From, State) ->
     Result = save_default_subscriptions(StoreId),
     {reply, {ok, Result}, State};
 
+%% Legacy — keep for backward compat if anything still calls it
+handle_call({activate_sync, StoreId}, _From, State) ->
+    save_default_subscriptions(StoreId),
+    {reply, ok, State};
+
 handle_call(is_active, _From, #state{active = Active} = State) ->
     {reply, Active, State};
 
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
 
+handle_cast({do_activate, StoreId}, State) ->
+    logger:info("Leader activation starting (store: ~p)", [StoreId]),
+    save_default_subscriptions(StoreId),
+    activate_leadership(StoreId, State);
+
 handle_cast({activate, StoreId}, State) ->
+    activate_leadership(StoreId, State);
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(Reason, #state{store_id = StoreId}) ->
+    logger:info("Leader worker terminating (store: ~p, reason: ~p)", [StoreId, Reason]),
+    ok.
+
+%%====================================================================
+%% Internal — activation
+%%====================================================================
+
+%% @private Activate leadership: start emitters and manage subscriptions.
+activate_leadership(StoreId, State) ->
     logger:info("Activating leadership responsibilities (store: ~p, node: ~p)",
                [StoreId, node()]),
 
-    %% Get all subscriptions
     Subscriptions = get_subscriptions(StoreId),
     SubscriptionCount = length(Subscriptions),
 
@@ -107,7 +130,6 @@ handle_cast({activate, StoreId}, State) ->
             logger:info("No active subscriptions to manage (store: ~p)", [StoreId]);
         N ->
             logger:info("Managing ~p active subscriptions (store: ~p)", [N, StoreId]),
-            %% Start emitters for each subscription
             start_emitters_for_subscriptions(StoreId, Subscriptions)
     end,
 
@@ -119,17 +141,7 @@ handle_cast({activate, StoreId}, State) ->
     ),
 
     logger:info("Leadership activation complete (store: ~p)", [StoreId]),
-    {noreply, State#state{active = true}};
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
-
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-terminate(Reason, #state{store_id = StoreId}) ->
-    logger:info("Leader worker terminating (store: ~p, reason: ~p)", [StoreId, Reason]),
-    ok.
+    {noreply, State#state{active = true}}.
 
 %%====================================================================
 %% Internal functions
