@@ -368,7 +368,12 @@ create_filter(by_tags, Tags) ->
 -spec setup_event_notification(atom(), binary(), term(), subscription()) -> ok.
 setup_event_notification(StoreId, SubscriptionKey, Filter, #subscription{pool_size = PoolSize} = Subscription) ->
     _Emitters = reckon_db_emitter_group:persist_emitters(StoreId, SubscriptionKey, PoolSize),
-    ok = register_trigger(StoreId, SubscriptionKey, Filter),
+    case register_trigger(StoreId, SubscriptionKey, Filter) of
+        ok -> ok;
+        {error, Reason} ->
+            logger:warning("Trigger registration deferred for ~s (store: ~p): ~p",
+                          [SubscriptionKey, StoreId, Reason])
+    end,
     maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription),
     ok.
 
@@ -400,26 +405,30 @@ maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription, _SupPid) ->
             ok
     end.
 
-%% @private Register a Khepri trigger for event notification
+%% @private Register a Khepri trigger for event notification.
+%% May fail if the Khepri store isn't ready yet (noproc during leader
+%% activation race). Returns {error, _} instead of crashing — trigger
+%% registration will be retried on next leader activation.
 -spec register_trigger(atom(), binary(), term()) -> ok | {error, term()}.
 register_trigger(StoreId, SubscriptionKey, Filter) ->
-    %% Store the proc function that will be called on trigger
     Topic = reckon_db_emitter_group:topic(StoreId, SubscriptionKey),
     ProcPath = [procs, on_new_event, Topic],
+    ProcFun = make_trigger_proc(StoreId, SubscriptionKey),
+    case store_trigger_proc(StoreId, SubscriptionKey, ProcPath, ProcFun) of
+        ok -> activate_trigger(StoreId, SubscriptionKey, Filter, ProcPath);
+        {error, _} = Error -> Error
+    end.
 
-    %% Create the proc function
-    ProcFun = fun(Props) ->
-        case maps:get(path, Props, undefined) of
-            undefined -> ok;
-            Path ->
-                broadcast_event_at_path(StoreId, SubscriptionKey, Path)
-        end
-    end,
+store_trigger_proc(StoreId, SubscriptionKey, ProcPath, ProcFun) ->
+    case khepri:put(StoreId, ProcPath, ProcFun) of
+        ok -> ok;
+        {error, Reason} ->
+            logger:warning("Trigger proc store failed for ~s (~p): ~p",
+                          [SubscriptionKey, StoreId, Reason]),
+            {error, Reason}
+    end.
 
-    %% Store the proc
-    ok = khepri:put(StoreId, ProcPath, ProcFun),
-
-    %% Register the trigger
+activate_trigger(StoreId, SubscriptionKey, Filter, ProcPath) ->
     TriggerId = binary_to_atom(SubscriptionKey, utf8),
     PropOpts = #{
         expect_specific_node => false,
@@ -427,10 +436,20 @@ register_trigger(StoreId, SubscriptionKey, Filter) ->
                            child_list_length, child_names],
         include_root_props => true
     },
-
     case khepri:register_trigger(StoreId, TriggerId, Filter, ProcPath, PropOpts) of
         ok -> ok;
-        {error, _} = Error -> Error
+        {error, Reason} ->
+            logger:warning("Trigger activation failed for ~s (~p): ~p",
+                          [SubscriptionKey, StoreId, Reason]),
+            {error, Reason}
+    end.
+
+make_trigger_proc(StoreId, SubscriptionKey) ->
+    fun(Props) ->
+        case maps:get(path, Props, undefined) of
+            undefined -> ok;
+            Path -> broadcast_event_at_path(StoreId, SubscriptionKey, Path)
+        end
     end.
 
 broadcast_event_at_path(StoreId, SubscriptionKey, Path) ->
