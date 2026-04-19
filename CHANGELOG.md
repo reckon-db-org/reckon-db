@@ -5,6 +5,53 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-19
+
+### Changed
+
+**BREAKING**: Internal modules renamed from `esdb_*` to `reckon_db_*`
+to match the overall reckon-db-org naming scheme. Most consumers go
+through `reckon_gater_api` and should not be affected directly, but
+any code that reaches into reckon-db internal modules must update:
+
+| Old module | New module |
+|---|---|
+| `esdb_aggregate_nif`        | `reckon_db_aggregate_nif`        |
+| `esdb_archive_nif`          | `reckon_db_archive_nif`          |
+| `esdb_crypto_nif`           | `reckon_db_crypto_nif`           |
+| `esdb_filter_nif`           | `reckon_db_filter_nif`           |
+| `esdb_graph_nif`            | `reckon_db_graph_nif`            |
+| `esdb_hash_nif`             | `reckon_db_hash_nif`             |
+| `esdb_capability_verifier`  | `reckon_db_capability_verifier`  |
+| `esdb_revocation`           | `reckon_db_revocation`           |
+
+ETS table atoms also renamed:
+- `esdb_revoked_tokens`  → `reckon_db_revoked_tokens`
+- `esdb_revoked_issuers` → `reckon_db_revoked_issuers`
+
+### Dependencies
+
+- Bumped `reckon_gater` to `~> 2.0` (requires the corresponding renamed API
+  from reckon-gater 2.0.0).
+- NIF binaries now loaded as `reckon_db_*_nif.so` — requires reckon-nifs 2.0.0.
+
+### Migration
+
+Applications that go through `reckon_gater_api` see only the
+reckon-gater 2.0.0 renames. Direct-internal users:
+
+```erlang
+%% Before
+{ok, Verified} = esdb_capability_verifier:verify(Token).
+
+%% After
+{ok, Verified} = reckon_db_capability_verifier:verify(Token).
+```
+
+Rebuild from clean: `rm -rf _build rebar.lock && rebar3 compile` will
+re-fetch reckon_gater 2.0+ and reckon_nifs 2.0+ and recompile the renamed
+NIFs via the rustler hooks.
+
 ## [1.7.5] - 2026-03-22
 
 ### Fixed
@@ -511,19 +558,19 @@ These handlers support the erl-evoq-esdb adapter improvements.
   - Enterprise Edition (git + Rust) gets 5-100x speedups for specific operations
   - Automatic fallback detection via `persistent_term`
 
-- **esdb_crypto_nif** (Phase 1):
+- **reckon_db_crypto_nif** (Phase 1):
   - `nif_base58_encode/1` - Fast Base58 encoding for DIDs
   - `nif_base58_decode/1` - Fast Base58 decoding
   - Uses Bitcoin alphabet, ~5x faster than pure Erlang
 
-- **esdb_archive_nif** (Phase 2):
+- **reckon_db_archive_nif** (Phase 2):
   - `nif_compress/1,2` - Zstd compression with configurable level
   - `nif_decompress/1` - Zstd decompression
   - `nif_compress_batch/1,2` - Batch compression for multiple items
   - `nif_decompress_batch/1` - Batch decompression
   - ~10x faster than zlib, better compression ratios
 
-- **esdb_hash_nif** (Phase 3):
+- **reckon_db_hash_nif** (Phase 3):
   - `nif_xxhash64/1,2` - 64-bit xxHash with optional seed
   - `nif_xxhash3/1` - Modern xxHash3 (SIMD optimized)
   - `nif_partition_hash/2` - Hash to partition number
@@ -532,7 +579,7 @@ These handlers support the erl-evoq-esdb adapter improvements.
   - `nif_fnv1a/1` - FNV-1a for small keys
   - `nif_fast_phash/2` - Drop-in phash2 replacement
 
-- **esdb_aggregate_nif** (Phase 3):
+- **reckon_db_aggregate_nif** (Phase 3):
   - `nif_aggregate_events/2` - Bulk fold with tagged value semantics
   - `nif_sum_field/2` - Vectorized sum accumulation for numeric fields
   - `nif_count_where/3` - Count events matching field condition
@@ -540,7 +587,7 @@ These handlers support the erl-evoq-esdb adapter improvements.
   - `nif_finalize/1` - Unwrap tagged values ({sum, N}, {overwrite, V})
   - `nif_aggregation_stats/1` - Event statistics (counts, unique fields)
 
-- **esdb_filter_nif** (Phase 3):
+- **reckon_db_filter_nif** (Phase 3):
   - `nif_filter_events/2` - Filter events by compiled predicate
   - `nif_filter_count/2` - Count matching events without collecting
   - `nif_compile_predicate/1` - Pre-compile filter predicates
@@ -549,7 +596,7 @@ These handlers support the erl-evoq-esdb adapter improvements.
   - `nif_find_all/2` - Find all matching events with indexes
   - `nif_any_match/2`, `nif_all_match/2` - Boolean aggregate predicates
 
-- **esdb_graph_nif** (Phase 4):
+- **reckon_db_graph_nif** (Phase 4):
   - `nif_build_edges/1` - Build edge list from event causation relationships
   - `nif_find_roots/1`, `nif_find_leaves/1` - Find root/leaf nodes
   - `nif_topo_sort/1` - Topological sort (Kahn's algorithm via petgraph)
@@ -588,7 +635,7 @@ These handlers support the erl-evoq-esdb adapter improvements.
 
 ### Added
 
-- **Capability-Based Security** (`esdb_capability_verifier.erl`, `esdb_revocation.erl`):
+- **Capability-Based Security** (`reckon_db_capability_verifier.erl`, `reckon_db_revocation.erl`):
   - Server-side verification of UCAN-inspired capability tokens
   - Ed25519 signature verification using issuer's public key from DID
   - Token expiration and not-before time validation

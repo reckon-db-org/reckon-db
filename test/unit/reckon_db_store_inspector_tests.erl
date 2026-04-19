@@ -5,7 +5,7 @@
 %% to test the inspector's aggregation and data transformation logic.
 -module(reckon_db_store_inspector_tests).
 -include_lib("eunit/include/eunit.hrl").
--include_lib("reckon_gater/include/esdb_gater_types.hrl").
+-include_lib("reckon_gater/include/reckon_gater_types.hrl").
 
 -define(STORE, test_inspector_store).
 

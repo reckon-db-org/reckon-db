@@ -8,7 +8,7 @@
 %% These define: #event{}, #subscription{}, #snapshot{}, #append_result{},
 %% subscription_type(), read_direction(), append_error(), read_error(),
 %% and constants: NO_STREAM, ANY_VERSION, STREAM_EXISTS, CONTENT_TYPE_*
--include_lib("reckon_gater/include/esdb_gater_types.hrl").
+-include_lib("reckon_gater/include/reckon_gater_types.hrl").
 
 %%====================================================================
 %% Version

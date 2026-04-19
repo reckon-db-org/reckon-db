@@ -18,7 +18,7 @@
 -include_lib("stdlib/include/assert.hrl").
 
 %% Include gater first to avoid DEFAULT_TIMEOUT conflict
--include_lib("reckon_gater/include/esdb_gater.hrl").
+-include_lib("reckon_gater/include/reckon_gater.hrl").
 -include("reckon_db.hrl").
 
 %% CT callbacks
@@ -205,10 +205,10 @@ end_per_group(_GroupName, Config) ->
     StoreId = proplists:get_value(store_id, Config),
 
     %% Unregister any remaining workers
-    case esdb_gater_api:get_workers(StoreId) of
+    case reckon_gater_api:get_workers(StoreId) of
         {ok, Workers} ->
             lists:foreach(fun(#worker_entry{pid = Pid}) ->
-                esdb_gater_api:unregister_worker(StoreId, Pid)
+                reckon_gater_api:unregister_worker(StoreId, Pid)
             end, Workers);
         _ ->
             ok
@@ -238,10 +238,10 @@ register_worker_test(Config) ->
     Worker = spawn_link(fun() -> mock_worker_loop(StoreId) end),
 
     %% Register worker
-    ok = esdb_gater_api:register_worker(StoreId, Worker),
+    ok = reckon_gater_api:register_worker(StoreId, Worker),
 
     %% Verify worker is registered
-    {ok, Workers} = esdb_gater_api:get_workers(StoreId),
+    {ok, Workers} = reckon_gater_api:get_workers(StoreId),
     ?assertEqual(1, length(Workers)),
 
     %% Cleanup
@@ -255,17 +255,17 @@ unregister_worker_test(Config) ->
 
     %% Start and register a worker
     Worker = spawn_link(fun() -> mock_worker_loop(StoreId) end),
-    ok = esdb_gater_api:register_worker(StoreId, Worker),
+    ok = reckon_gater_api:register_worker(StoreId, Worker),
 
     %% Verify registered
-    {ok, Workers1} = esdb_gater_api:get_workers(StoreId),
+    {ok, Workers1} = reckon_gater_api:get_workers(StoreId),
     ?assertEqual(1, length(Workers1)),
 
     %% Unregister
-    ok = esdb_gater_api:unregister_worker(StoreId, Worker),
+    ok = reckon_gater_api:unregister_worker(StoreId, Worker),
 
     %% Verify unregistered
-    {ok, Workers2} = esdb_gater_api:get_workers(StoreId),
+    {ok, Workers2} = reckon_gater_api:get_workers(StoreId),
     ?assertEqual(0, length(Workers2)),
 
     exit(Worker, normal),
@@ -276,7 +276,7 @@ get_workers_test(Config) ->
     StoreId = proplists:get_value(store_id, Config),
 
     %% No workers initially
-    {ok, Workers0} = esdb_gater_api:get_workers(StoreId),
+    {ok, Workers0} = reckon_gater_api:get_workers(StoreId),
     ?assertEqual(0, length(Workers0)),
 
     %% Register 3 workers
@@ -284,12 +284,12 @@ get_workers_test(Config) ->
     Worker2 = spawn_link(fun() -> mock_worker_loop(StoreId) end),
     Worker3 = spawn_link(fun() -> mock_worker_loop(StoreId) end),
 
-    ok = esdb_gater_api:register_worker(StoreId, Worker1),
-    ok = esdb_gater_api:register_worker(StoreId, Worker2),
-    ok = esdb_gater_api:register_worker(StoreId, Worker3),
+    ok = reckon_gater_api:register_worker(StoreId, Worker1),
+    ok = reckon_gater_api:register_worker(StoreId, Worker2),
+    ok = reckon_gater_api:register_worker(StoreId, Worker3),
 
     %% Verify 3 workers
-    {ok, Workers} = esdb_gater_api:get_workers(StoreId),
+    {ok, Workers} = reckon_gater_api:get_workers(StoreId),
     ?assertEqual(3, length(Workers)),
 
     %% Cleanup
@@ -310,7 +310,7 @@ multiple_workers_test(Config) ->
     timer:sleep(200),
 
     %% Verify worker is registered
-    {ok, Workers} = esdb_gater_api:get_workers(StoreId),
+    {ok, Workers} = reckon_gater_api:get_workers(StoreId),
     ?assert(length(Workers) >= 1),
 
     %% Stop worker
@@ -333,7 +333,7 @@ gater_append_events_test(Config) ->
     timer:sleep(200),
 
     %% Append via gater API
-    {ok, Result} = esdb_gater_api:append_events(StoreId, StreamId, Events),
+    {ok, Result} = reckon_gater_api:append_events(StoreId, StreamId, Events),
     {ok, Version} = Result,
 
     ?assertEqual(2, Version),
@@ -352,11 +352,11 @@ gater_append_with_version_test(Config) ->
     timer:sleep(200),
 
     %% First append
-    {ok, {ok, V1}} = esdb_gater_api:append_events(StoreId, StreamId, -1, Events1),
+    {ok, {ok, V1}} = reckon_gater_api:append_events(StoreId, StreamId, -1, Events1),
     ?assertEqual(1, V1),
 
     %% Second append with correct version
-    {ok, {ok, V2}} = esdb_gater_api:append_events(StoreId, StreamId, V1, Events2),
+    {ok, {ok, V2}} = reckon_gater_api:append_events(StoreId, StreamId, V1, Events2),
     ?assertEqual(3, V2),
 
     gen_server:stop(Worker),
@@ -372,10 +372,10 @@ gater_get_events_forward_test(Config) ->
     timer:sleep(200),
 
     %% Append events
-    {ok, _} = esdb_gater_api:append_events(StoreId, StreamId, Events),
+    {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% Read forward
-    {ok, {ok, ReadEvents}} = esdb_gater_api:get_events(StoreId, StreamId, 0, 10, forward),
+    {ok, {ok, ReadEvents}} = reckon_gater_api:get_events(StoreId, StreamId, 0, 10, forward),
 
     ?assertEqual(5, length(ReadEvents)),
 
@@ -395,10 +395,10 @@ gater_get_events_backward_test(Config) ->
     Worker = start_gateway_worker(StoreId, Config),
     timer:sleep(200),
 
-    {ok, _} = esdb_gater_api:append_events(StoreId, StreamId, Events),
+    {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% Read backward from version 4
-    {ok, {ok, ReadEvents}} = esdb_gater_api:get_events(StoreId, StreamId, 4, 5, backward),
+    {ok, {ok, ReadEvents}} = reckon_gater_api:get_events(StoreId, StreamId, 4, 5, backward),
 
     ?assertEqual(5, length(ReadEvents)),
 
@@ -418,10 +418,10 @@ gater_stream_forward_test(Config) ->
     Worker = start_gateway_worker(StoreId, Config),
     timer:sleep(200),
 
-    {ok, _} = esdb_gater_api:append_events(StoreId, StreamId, Events),
+    {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% Stream forward from version 5, count 3
-    {ok, {ok, ReadEvents}} = esdb_gater_api:stream_forward(StoreId, StreamId, 5, 3),
+    {ok, {ok, ReadEvents}} = reckon_gater_api:stream_forward(StoreId, StreamId, 5, 3),
 
     ?assertEqual(3, length(ReadEvents)),
     Versions = [E#event.version || E <- ReadEvents],
@@ -439,10 +439,10 @@ gater_stream_backward_test(Config) ->
     Worker = start_gateway_worker(StoreId, Config),
     timer:sleep(200),
 
-    {ok, _} = esdb_gater_api:append_events(StoreId, StreamId, Events),
+    {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% Stream backward from version 7, count 3
-    {ok, {ok, ReadEvents}} = esdb_gater_api:stream_backward(StoreId, StreamId, 7, 3),
+    {ok, {ok, ReadEvents}} = reckon_gater_api:stream_backward(StoreId, StreamId, 7, 3),
 
     ?assertEqual(3, length(ReadEvents)),
     Versions = [E#event.version || E <- ReadEvents],
@@ -460,10 +460,10 @@ gater_get_version_test(Config) ->
     Worker = start_gateway_worker(StoreId, Config),
     timer:sleep(200),
 
-    {ok, _} = esdb_gater_api:append_events(StoreId, StreamId, Events),
+    {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% get_version returns integer directly wrapped in {ok, ...}
-    {ok, Version} = esdb_gater_api:get_version(StoreId, StreamId),
+    {ok, Version} = reckon_gater_api:get_version(StoreId, StreamId),
 
     ?assertEqual(6, Version),
 
@@ -480,10 +480,10 @@ gater_get_streams_test(Config) ->
     Worker = start_gateway_worker(StoreId, Config),
     timer:sleep(200),
 
-    {ok, _} = esdb_gater_api:append_events(StoreId, Stream1, Events),
-    {ok, _} = esdb_gater_api:append_events(StoreId, Stream2, Events),
+    {ok, _} = reckon_gater_api:append_events(StoreId, Stream1, Events),
+    {ok, _} = reckon_gater_api:append_events(StoreId, Stream2, Events),
 
-    {ok, {ok, Streams}} = esdb_gater_api:get_streams(StoreId),
+    {ok, {ok, Streams}} = reckon_gater_api:get_streams(StoreId),
 
     ?assert(lists:member(Stream1, Streams)),
     ?assert(lists:member(Stream2, Streams)),
@@ -501,10 +501,10 @@ gater_wrong_version_test(Config) ->
     timer:sleep(200),
 
     %% Create stream
-    {ok, _} = esdb_gater_api:append_events(StoreId, StreamId, Events),
+    {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% Try to append with wrong version
-    {ok, Result} = esdb_gater_api:append_events(StoreId, StreamId, 99, Events),
+    {ok, Result} = reckon_gater_api:append_events(StoreId, StreamId, 99, Events),
     ?assertMatch({error, {wrong_expected_version, _}}, Result),
 
     gen_server:stop(Worker),
@@ -524,7 +524,7 @@ gater_save_subscription_test(Config) ->
     timer:sleep(200),
 
     %% Save subscription (cast - always returns ok)
-    ok = esdb_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
+    ok = reckon_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
 
     %% Give time for cast to complete
     timer:sleep(100),
@@ -542,11 +542,11 @@ gater_get_subscriptions_test(Config) ->
     timer:sleep(200),
 
     %% Save subscription
-    ok = esdb_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
+    ok = reckon_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
     timer:sleep(100),
 
     %% Get subscriptions
-    {ok, _Result} = esdb_gater_api:get_subscriptions(StoreId),
+    {ok, _Result} = reckon_gater_api:get_subscriptions(StoreId),
 
     gen_server:stop(Worker),
     ok.
@@ -561,11 +561,11 @@ gater_remove_subscription_test(Config) ->
     timer:sleep(200),
 
     %% Save subscription
-    ok = esdb_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
+    ok = reckon_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
     timer:sleep(100),
 
     %% Remove subscription
-    ok = esdb_gater_api:remove_subscription(StoreId, stream, StreamId, SubName),
+    ok = reckon_gater_api:remove_subscription(StoreId, stream, StreamId, SubName),
     timer:sleep(100),
 
     gen_server:stop(Worker),
@@ -587,7 +587,7 @@ gater_ack_event_test(Config) ->
     },
 
     %% Ack event (cast - always returns ok)
-    ok = esdb_gater_api:ack_event(StoreId, SubName, self(), Event),
+    ok = reckon_gater_api:ack_event(StoreId, SubName, self(), Event),
 
     gen_server:stop(Worker),
     ok.
@@ -611,7 +611,7 @@ gater_record_snapshot_test(Config) ->
     timer:sleep(200),
 
     %% Record snapshot (cast)
-    ok = esdb_gater_api:record_snapshot(StoreId, SourceId, StreamId, Version, SnapshotData),
+    ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, Version, SnapshotData),
     timer:sleep(100),
 
     gen_server:stop(Worker),
@@ -632,11 +632,11 @@ gater_read_snapshot_test(Config) ->
     timer:sleep(200),
 
     %% Record snapshot first
-    ok = esdb_gater_api:record_snapshot(StoreId, SourceId, StreamId, Version, SnapshotData),
+    ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, Version, SnapshotData),
     timer:sleep(100),
 
     %% Read snapshot
-    {ok, _Result} = esdb_gater_api:read_snapshot(StoreId, SourceId, StreamId, Version),
+    {ok, _Result} = reckon_gater_api:read_snapshot(StoreId, SourceId, StreamId, Version),
 
     gen_server:stop(Worker),
     ok.
@@ -651,13 +651,13 @@ gater_list_snapshots_test(Config) ->
     timer:sleep(200),
 
     %% Record multiple snapshots
-    ok = esdb_gater_api:record_snapshot(StoreId, SourceId, StreamId, 5, #{v => 5}),
-    ok = esdb_gater_api:record_snapshot(StoreId, SourceId, StreamId, 10, #{v => 10}),
-    ok = esdb_gater_api:record_snapshot(StoreId, SourceId, StreamId, 15, #{v => 15}),
+    ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, 5, #{v => 5}),
+    ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, 10, #{v => 10}),
+    ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, 15, #{v => 15}),
     timer:sleep(100),
 
     %% List snapshots
-    {ok, _Result} = esdb_gater_api:list_snapshots(StoreId, SourceId, StreamId),
+    {ok, _Result} = reckon_gater_api:list_snapshots(StoreId, SourceId, StreamId),
 
     gen_server:stop(Worker),
     ok.
@@ -673,11 +673,11 @@ gater_delete_snapshot_test(Config) ->
     timer:sleep(200),
 
     %% Record snapshot
-    ok = esdb_gater_api:record_snapshot(StoreId, SourceId, StreamId, Version, #{v => 20}),
+    ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, Version, #{v => 20}),
     timer:sleep(100),
 
     %% Delete snapshot (cast)
-    ok = esdb_gater_api:delete_snapshot(StoreId, SourceId, StreamId, Version),
+    ok = reckon_gater_api:delete_snapshot(StoreId, SourceId, StreamId, Version),
     timer:sleep(100),
 
     gen_server:stop(Worker),
@@ -699,17 +699,17 @@ gater_load_balance_test(Config) ->
     timer:sleep(300),
 
     %% Verify 3 workers registered
-    {ok, Workers} = esdb_gater_api:get_workers(StoreId),
+    {ok, Workers} = reckon_gater_api:get_workers(StoreId),
     ?assertEqual(3, length(Workers)),
 
     %% Make multiple requests - should be load balanced
     Events = generate_events(<<"lb_event">>, 1),
     lists:foreach(fun(_) ->
-        {ok, _} = esdb_gater_api:append_events(StoreId, StreamId, Events)
+        {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events)
     end, lists:seq(1, 10)),
 
     %% Verify all appends succeeded by reading
-    {ok, {ok, ReadEvents}} = esdb_gater_api:get_events(StoreId, StreamId, 0, 100, forward),
+    {ok, {ok, ReadEvents}} = reckon_gater_api:get_events(StoreId, StreamId, 0, 100, forward),
     ?assertEqual(10, length(ReadEvents)),
 
     gen_server:stop(Worker1),
@@ -725,7 +725,7 @@ gater_health_check_test(Config) ->
     timer:sleep(200),
 
     %% Get health status
-    {ok, Health} = esdb_gater_api:health(),
+    {ok, Health} = reckon_gater_api:health(),
 
     ?assertEqual(healthy, maps:get(status, Health)),
     ?assert(is_map(maps:get(stores, Health))),
@@ -741,11 +741,11 @@ gater_no_workers_error_test(Config) ->
     Events = generate_events(<<"no_worker">>, 1),
 
     %% Ensure no workers registered
-    {ok, Workers} = esdb_gater_api:get_workers(StoreId),
+    {ok, Workers} = reckon_gater_api:get_workers(StoreId),
     ?assertEqual(0, length(Workers)),
 
     %% Try to append - should fail after retry exhaustion
-    Result = esdb_gater_api:append_events(StoreId, StreamId, Events),
+    Result = reckon_gater_api:append_events(StoreId, StreamId, Events),
     ?assertMatch({error, {retries_exhausted, no_workers}}, Result),
 
     ok.

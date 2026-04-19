@@ -306,16 +306,16 @@ All event store operations go through the gater API:
 
 ```erlang
 %% Stream operations
-{ok, Version} = esdb_gater_api:append_events(my_store, StreamId, Events).
-{ok, Events} = esdb_gater_api:stream_forward(my_store, StreamId, 0, 100).
-{ok, Version} = esdb_gater_api:get_version(my_store, StreamId).
+{ok, Version} = reckon_gater_api:append_events(my_store, StreamId, Events).
+{ok, Events} = reckon_gater_api:stream_forward(my_store, StreamId, 0, 100).
+{ok, Version} = reckon_gater_api:get_version(my_store, StreamId).
 
 %% Subscription operations
-ok = esdb_gater_api:save_subscription(my_store, stream, StreamId, Name, 0, self()).
+ok = reckon_gater_api:save_subscription(my_store, stream, StreamId, Name, 0, self()).
 
 %% Snapshot operations
-ok = esdb_gater_api:record_snapshot(my_store, SourceUuid, StreamUuid, Version, Record).
-{ok, Snap} = esdb_gater_api:read_snapshot(my_store, SourceUuid, StreamUuid, Version).
+ok = reckon_gater_api:record_snapshot(my_store, SourceUuid, StreamUuid, Version, Record).
+{ok, Snap} = reckon_gater_api:read_snapshot(my_store, SourceUuid, StreamUuid, Version).
 ```
 
 See [reckon-gater](https://hex.pm/packages/reckon_gater) for complete API documentation.

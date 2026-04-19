@@ -51,7 +51,7 @@ init(#store_config{store_id = StoreId} = Config) ->
     process_flag(trap_exit, true),
 
     %% Register with the gateway
-    ok = esdb_gater_api:register_worker(StoreId, self()),
+    ok = reckon_gater_api:register_worker(StoreId, self()),
     logger:info("Gateway worker for store ~p registered with gater", [StoreId]),
 
     {ok, #state{store_id = StoreId, config = Config}}.
@@ -505,7 +505,7 @@ handle_info(_Info, State) ->
 
 terminate(_Reason, #state{store_id = StoreId}) ->
     %% Unregister from the gateway
-    esdb_gater_api:unregister_worker(StoreId, self()),
+    reckon_gater_api:unregister_worker(StoreId, self()),
     logger:info("Gateway worker for store ~p unregistered from gater", [StoreId]),
     ok.
 
