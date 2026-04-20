@@ -1,0 +1,15 @@
+%% Baseline scenario — the sanity anchor every hardware profile runs
+%% first so results across profiles are comparable.
+%%
+%% One writer, 256-byte data payload, 60-second measurement window
+%% after warmup convergence. A 5-minute wall-clock ceiling keeps
+%% slow hardware from stalling the suite; tuned hardware will hit
+%% measure_min_ops (100k) well before the ceiling.
+#{
+    store_id            => bench_store,
+    event_size_bytes    => 256,
+    parallelism         => 1,
+    duration_seconds    => 60,
+    measure_max_seconds => 300,
+    tags                => [baseline, steady_state, single_writer]
+}.

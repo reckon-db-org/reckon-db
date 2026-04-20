@@ -1,0 +1,9 @@
+%% Saturation scenario — 32 concurrent writers on one stream.
+%% Frames the single-stream Raft-log ceiling.
+#{
+    store_id         => bench_store,
+    event_size_bytes => 256,
+    parallelism      => 32,
+    duration_seconds => 60,
+    tags             => [saturation, contention, single_stream]
+}.

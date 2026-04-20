@@ -1,0 +1,16 @@
+_build/
+.rebar3/
+rebar.lock
+*.beam
+erl_crash.dump
+
+results/*/
+!results/.gitkeep
+
+# Ephemeral reckon-db bench data
+data/
+
+.DS_Store
+*.swp
+.idea/
+.vscode/

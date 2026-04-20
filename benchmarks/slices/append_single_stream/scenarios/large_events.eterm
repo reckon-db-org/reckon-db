@@ -1,0 +1,10 @@
+%% Large-event scenario — 1 writer, 64 KB events. Isolates the
+%% payload-size contribution to latency. For the full curve across
+%% sizes see the sweep_event_size slice.
+#{
+    store_id         => bench_store,
+    event_size_bytes => 65536,
+    parallelism      => 1,
+    duration_seconds => 60,
+    tags             => [large_events, payload_sensitivity]
+}.

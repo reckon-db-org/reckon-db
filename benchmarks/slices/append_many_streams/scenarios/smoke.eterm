@@ -1,0 +1,13 @@
+%% 32 parallel workers, each on its own stream. 5s measurement.
+#{
+    store_id            => bench_store,
+    event_size_bytes    => 256,
+    parallelism         => 32,
+    duration_seconds    => 5,
+    warmup_min_seconds  => 3,
+    warmup_min_ops      => 500,
+    warmup_max_seconds  => 60,
+    measure_min_ops     => 500,
+    measure_max_seconds => 60,
+    tags                => [smoke, many_streams]
+}.
