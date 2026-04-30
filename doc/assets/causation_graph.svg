@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+  <defs>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4299e1"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ed8936"/>
+    </marker>
+    <linearGradient id="rootGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#48bb78"/>
+      <stop offset="100%" style="stop-color:#38a169"/>
+    </linearGradient>
+    <linearGradient id="eventGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4299e1"/>
+      <stop offset="100%" style="stop-color:#3182ce"/>
+    </linearGradient>
+    <linearGradient id="leafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#9f7aea"/>
+      <stop offset="100%" style="stop-color:#805ad5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="450" fill="#f7fafc"/>
+
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="bold" fill="#2d3748">Causation Graph Structure</text>
+
+  <!-- Correlation ID Box -->
+  <rect x="50" y="50" width="700" height="35" rx="6" fill="#feebc8" stroke="#ed8936" stroke-width="1"/>
+  <text x="400" y="72" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" fill="#744210">correlation_id: "saga-checkout-789" (Groups all events in this business process)</text>
+
+  <!-- Root Event -->
+  <rect x="325" y="100" width="150" height="60" rx="10" fill="url(#rootGrad)" stroke="#276749" stroke-width="2"/>
+  <text x="400" y="125" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="white">CheckoutStarted</text>
+  <text x="400" y="145" text-anchor="middle" font-family="monospace" font-size="9" fill="#c6f6d5">evt-001 (root)</text>
+
+  <!-- Level 2 Events -->
+  <!-- Order Created -->
+  <line x1="400" y1="160" x2="200" y2="200" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <rect x="100" y="205" width="150" height="60" rx="10" fill="url(#eventGrad)" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="175" y="230" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="white">OrderCreated</text>
+  <text x="175" y="250" text-anchor="middle" font-family="monospace" font-size="9" fill="#bee3f8">evt-002</text>
+
+  <!-- Inventory Reserved -->
+  <line x1="400" y1="160" x2="400" y2="200" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <rect x="325" y="205" width="150" height="60" rx="10" fill="url(#eventGrad)" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="400" y="230" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="white">InventoryReserved</text>
+  <text x="400" y="250" text-anchor="middle" font-family="monospace" font-size="9" fill="#bee3f8">evt-003</text>
+
+  <!-- Payment Requested -->
+  <line x1="400" y1="160" x2="600" y2="200" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <rect x="550" y="205" width="150" height="60" rx="10" fill="url(#eventGrad)" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="625" y="230" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="white">PaymentRequested</text>
+  <text x="625" y="250" text-anchor="middle" font-family="monospace" font-size="9" fill="#bee3f8">evt-004</text>
+
+  <!-- Level 3 Events -->
+  <!-- Payment Received (from PaymentRequested) -->
+  <line x1="625" y1="265" x2="625" y2="300" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <rect x="550" y="305" width="150" height="60" rx="10" fill="url(#eventGrad)" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="625" y="330" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="white">PaymentReceived</text>
+  <text x="625" y="350" text-anchor="middle" font-family="monospace" font-size="9" fill="#bee3f8">evt-005</text>
+
+  <!-- Level 4 Events (Leaves) -->
+  <!-- Order Shipped (from PaymentReceived) -->
+  <line x1="625" y1="365" x2="475" y2="395" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <rect x="400" y="400" width="150" height="40" rx="8" fill="url(#leafGrad)" stroke="#6b46c1" stroke-width="2"/>
+  <text x="475" y="425" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="white">OrderShipped (evt-006)</text>
+
+  <!-- Email Sent (from PaymentReceived) -->
+  <line x1="625" y1="365" x2="625" y2="395" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <rect x="560" y="400" width="130" height="40" rx="8" fill="url(#leafGrad)" stroke="#6b46c1" stroke-width="2"/>
+  <text x="625" y="425" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="white">EmailSent (evt-007)</text>
+
+  <!-- Metadata Box -->
+  <rect x="50" y="280" width="220" height="110" rx="8" fill="#edf2f7" stroke="#cbd5e0" stroke-width="1"/>
+  <text x="160" y="305" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#2d3748">Event Metadata</text>
+  <text x="60" y="330" font-family="monospace" font-size="9" fill="#4a5568">causation_id: "evt-005"</text>
+  <text x="60" y="350" font-family="monospace" font-size="9" fill="#4a5568">correlation_id: "saga-789"</text>
+  <text x="60" y="370" font-family="monospace" font-size="9" fill="#4a5568">actor_id: "user-001"</text>
+
+  <!-- Arrow from metadata to OrderShipped -->
+  <path d="M 270 350 Q 320 350, 320 410 L 395 410" stroke="#ed8936" stroke-width="2" stroke-dasharray="4" fill="none" marker-end="url(#arrowOrange)"/>
+
+  <!-- Legend -->
+  <rect x="50" y="100" width="140" height="90" rx="6" fill="white" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="120" y="120" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#2d3748">Legend</text>
+
+  <rect x="60" y="130" width="20" height="12" rx="3" fill="url(#rootGrad)"/>
+  <text x="90" y="140" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">Root (no cause)</text>
+
+  <rect x="60" y="150" width="20" height="12" rx="3" fill="url(#eventGrad)"/>
+  <text x="90" y="160" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">Intermediate</text>
+
+  <rect x="60" y="170" width="20" height="12" rx="3" fill="url(#leafGrad)"/>
+  <text x="90" y="180" font-family="system-ui, sans-serif" font-size="9" fill="#4a5568">Leaf (no effects)</text>
+
+  <!-- Causation arrow label -->
+  <text x="330" y="185" font-family="system-ui, sans-serif" font-size="9" fill="#4299e1">causation_id</text>
+</svg>

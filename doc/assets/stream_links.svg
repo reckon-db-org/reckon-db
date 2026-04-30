@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420">
+  <defs>
+    <marker id="arrowLink" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4299e1"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#48bb78"/>
+    </marker>
+    <linearGradient id="sourceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+    <linearGradient id="linkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f6ad55"/>
+      <stop offset="100%" style="stop-color:#ed8936"/>
+    </linearGradient>
+    <linearGradient id="outputGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#48bb78"/>
+      <stop offset="100%" style="stop-color:#38a169"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="420" fill="#f7fafc"/>
+
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="bold" fill="#2d3748">Stream Links Architecture</text>
+
+  <!-- Source Streams Section -->
+  <rect x="30" y="55" width="200" height="200" rx="10" fill="#f0f5ff" stroke="#c3dafe" stroke-width="1"/>
+  <text x="130" y="75" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#4c51bf">Source Streams</text>
+
+  <!-- Source streams -->
+  <rect x="50" y="90" width="160" height="40" rx="6" fill="url(#sourceGrad)" stroke="#5a67d8" stroke-width="2"/>
+  <text x="130" y="115" text-anchor="middle" font-family="monospace" font-size="10" fill="white">orders-123</text>
+
+  <rect x="50" y="140" width="160" height="40" rx="6" fill="url(#sourceGrad)" stroke="#5a67d8" stroke-width="2"/>
+  <text x="130" y="165" text-anchor="middle" font-family="monospace" font-size="10" fill="white">orders-456</text>
+
+  <rect x="50" y="190" width="160" height="40" rx="6" fill="url(#sourceGrad)" stroke="#5a67d8" stroke-width="2"/>
+  <text x="130" y="215" text-anchor="middle" font-family="monospace" font-size="10" fill="white">orders-789</text>
+
+  <!-- Pattern indicator -->
+  <text x="130" y="245" text-anchor="middle" font-family="monospace" font-size="10" fill="#718096">pattern: orders-*</text>
+
+  <!-- Arrows to Link Processor -->
+  <line x1="210" y1="110" x2="280" y2="155" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowLink)"/>
+  <line x1="210" y1="160" x2="280" y2="160" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowLink)"/>
+  <line x1="210" y1="210" x2="280" y2="165" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowLink)"/>
+
+  <!-- Link Processor -->
+  <rect x="290" y="80" width="220" height="170" rx="10" fill="url(#linkGrad)" stroke="#dd6b20" stroke-width="2"/>
+  <text x="400" y="105" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Link: high-value-orders</text>
+
+  <!-- Filter Box -->
+  <rect x="310" y="120" width="180" height="50" rx="6" fill="white" stroke="#dd6b20" stroke-width="1"/>
+  <text x="400" y="140" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="#744210">Filter</text>
+  <text x="400" y="158" text-anchor="middle" font-family="monospace" font-size="9" fill="#744210">total > 1000</text>
+
+  <!-- Transform Box -->
+  <rect x="310" y="180" width="180" height="50" rx="6" fill="white" stroke="#dd6b20" stroke-width="1"/>
+  <text x="400" y="200" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="#744210">Transform</text>
+  <text x="400" y="218" text-anchor="middle" font-family="monospace" font-size="9" fill="#744210">add flagged: true</text>
+
+  <!-- Arrow to Output -->
+  <line x1="510" y1="160" x2="560" y2="160" stroke="#48bb78" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <text x="535" y="150" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#48bb78">write</text>
+
+  <!-- Output Stream -->
+  <rect x="570" y="100" width="200" height="120" rx="10" fill="url(#outputGrad)" stroke="#276749" stroke-width="2"/>
+  <text x="670" y="130" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Link Stream</text>
+  <text x="670" y="155" text-anchor="middle" font-family="monospace" font-size="10" fill="#c6f6d5">$link:high-value-orders</text>
+  <text x="670" y="180" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#c6f6d5">156 events</text>
+  <text x="670" y="200" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#c6f6d5">subscribable like any stream</text>
+
+  <!-- Khepri Storage Section -->
+  <rect x="30" y="280" width="740" height="120" rx="10" fill="#edf2f7" stroke="#cbd5e0" stroke-width="1"/>
+  <text x="400" y="305" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#2d3748">Khepri Storage Paths</text>
+
+  <!-- Link Definition Path -->
+  <rect x="50" y="320" width="320" height="60" rx="6" fill="white" stroke="#a0aec0" stroke-width="1"/>
+  <text x="210" y="345" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="#4a5568">Link Definition</text>
+  <text x="210" y="365" text-anchor="middle" font-family="monospace" font-size="9" fill="#718096">[links, my_store, "high-value-orders"]</text>
+
+  <!-- Link Stream Path -->
+  <rect x="400" y="320" width="350" height="60" rx="6" fill="white" stroke="#a0aec0" stroke-width="1"/>
+  <text x="575" y="345" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="#4a5568">Link Stream Events</text>
+  <text x="575" y="365" text-anchor="middle" font-family="monospace" font-size="9" fill="#718096">[streams, "$link:high-value-orders", Version]</text>
+
+  <!-- Event Flow Legend -->
+  <rect x="570" y="235" width="200" height="35" rx="6" fill="#f0fff4" stroke="#9ae6b4" stroke-width="1"/>
+  <text x="670" y="255" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#276749">metadata.source_stream preserved</text>
+</svg>

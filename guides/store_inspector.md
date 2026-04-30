@@ -91,7 +91,7 @@ Detailed information about a single stream, including snapshot coverage.
 
 The inspector reads directly from the Khepri tree via existing facade modules (`reckon_db_streams`, `reckon_db_snapshots_store`, `reckon_db_subscriptions_store`). It never modifies data.
 
-Gateway worker clauses route inspector requests through the standard `esdb_gater_api` dispatch chain, making these operations available to any client (including the Hecate Observer UI).
+Gateway worker clauses route inspector requests through the standard `reckon_gater_api` dispatch chain, making these operations available to any client (including the Hecate Observer UI).
 
 ## Performance Notes
 

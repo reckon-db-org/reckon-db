@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.39.1">
+    <meta name="project" content="reckon_db v2.0.0">
+
+
+    <title>reckon_db_naming — reckon_db v2.0.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
+
+    <script defer src="dist/sidebar_items-7E229343.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-HBZYRXZS.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="readme.html" class="sidebar-projectName" translate="no">
+reckon_db
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v2.0.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-module" id="main" data-type="modules">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of reckon_db</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>
+      <span translate="no">reckon_db_naming</span> 
+      <small class="app-vsn" translate="no">(reckon_db v2.0.0)</small>
+
+    </h1>
+
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L8" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+    <section id="moduledoc">
+<p>Process naming utilities for reckon-db</p><p>Provides consistent naming conventions for all processes and registered names throughout the system.</p>
+    </section>
+
+</div>
+
+  <section id="summary" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#summary">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Summary</span>
+    </h1>
+<div class="summary-functions summary">
+  <h2>
+    <a href="#functions">Functions</a>
+  </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#cluster_sup_name/1" data-no-tooltip="" translate="no">cluster_sup_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Cluster supervisor name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#coordinator_name/1" data-no-tooltip="" translate="no">coordinator_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Store coordinator worker name</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#core_sup_name/1" data-no-tooltip="" translate="no">core_sup_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Core supervisor name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#discovery_name/1" data-no-tooltip="" translate="no">discovery_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Discovery worker name</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#emitter_group_key/2" data-no-tooltip="" translate="no">emitter_group_key(StoreId, SubscriptionId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Emitter group key (for event distribution via pg)</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#emitter_pool_name/2" data-no-tooltip="" translate="no">emitter_pool_name(StoreId, SubscriptionId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Emitter pool name for a subscription</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#emitter_sup_name/1" data-no-tooltip="" translate="no">emitter_sup_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Emitter supervisor name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#gateway_sup_name/1" data-no-tooltip="" translate="no">gateway_sup_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Gateway supervisor name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#gateway_worker_name/1" data-no-tooltip="" translate="no">gateway_worker_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Gateway worker name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#health_monitor_name/1" data-no-tooltip="" translate="no">health_monitor_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Subscription health monitor name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#leader_name/1" data-no-tooltip="" translate="no">leader_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Leader worker name</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#leader_sup_name/1" data-no-tooltip="" translate="no">leader_sup_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Leader supervisor name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#leader_tracker_name/1" data-no-tooltip="" translate="no">leader_tracker_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Leader tracker worker name</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#node_monitor_name/1" data-no-tooltip="" translate="no">node_monitor_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Node monitor worker name</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#notification_sup_name/1" data-no-tooltip="" translate="no">notification_sup_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Notification supervisor name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#persistence_sup_name/1" data-no-tooltip="" translate="no">persistence_sup_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Persistence supervisor name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#persistence_worker_name/1" data-no-tooltip="" translate="no">persistence_worker_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Persistence worker name</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#pg_group_name/2" data-no-tooltip="" translate="no">pg_group_name(StoreId, Feature)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Process group name for a store feature</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#reader_pool_name/1" data-no-tooltip="" translate="no">reader_pool_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Reader pool name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#snapshots_store_name/1" data-no-tooltip="" translate="no">snapshots_store_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Snapshots store worker name</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#store_mgr_name/1" data-no-tooltip="" translate="no">store_mgr_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Store manager worker name</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#store_name/1" data-no-tooltip="" translate="no">store_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Khepri store name (this is the atom used for khepri operations)</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#store_worker_name/1" data-no-tooltip="" translate="no">store_worker_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Store worker name (the gen_server that starts Khepri) NOTE: This is different from store_name/1 (Khepri operations) and store_mgr_name/1 (store lifecycle coordination).</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#streams_sup_name/1" data-no-tooltip="" translate="no">streams_sup_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Streams supervisor name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#subscriptions_store_name/1" data-no-tooltip="" translate="no">subscriptions_store_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Subscriptions store worker name</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#system_sup_name/1" data-no-tooltip="" translate="no">system_sup_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>System supervisor name for a store</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#tracker_group_key/2" data-no-tooltip="" translate="no">tracker_group_key(StoreId, Feature)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Tracker group key (for subscription tracking via pg)</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#writer_pool_name/1" data-no-tooltip="" translate="no">writer_pool_name(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Writer pool name for a store</p></div>
+
+    </div>
+
+</div>
+
+  </section>
+
+
+  <section id="functions" class="details-list">
+    <h1 class="section-heading">
+      <a class="hover-link" href="#functions">
+        <i class="ri-link-m" aria-hidden="true"></i>
+      </a>
+      <span class="text">Functions</span>
+    </h1>
+
+    <div class="functions-list">
+<section class="detail" id="cluster_sup_name/1">
+
+  <div class="detail-header">
+    <a href="#cluster_sup_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">cluster_sup_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L75" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> cluster_sup_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Cluster supervisor name for a store</p>
+  </section>
+</section>
+<section class="detail" id="coordinator_name/1">
+
+  <div class="detail-header">
+    <a href="#coordinator_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">coordinator_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L151" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> coordinator_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Store coordinator worker name</p>
+  </section>
+</section>
+<section class="detail" id="core_sup_name/1">
+
+  <div class="detail-header">
+    <a href="#core_sup_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">core_sup_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L60" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> core_sup_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Core supervisor name for a store</p>
+  </section>
+</section>
+<section class="detail" id="discovery_name/1">
+
+  <div class="detail-header">
+    <a href="#discovery_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">discovery_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L146" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> discovery_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Discovery worker name</p>
+  </section>
+</section>
+<section class="detail" id="emitter_group_key/2">
+
+  <div class="detail-header">
+    <a href="#emitter_group_key/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">emitter_group_key(StoreId, SubscriptionId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L205" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> emitter_group_key(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>().</pre>
+
+      </div>
+
+<p>Emitter group key (for event distribution via pg)</p>
+  </section>
+</section>
+<section class="detail" id="emitter_pool_name/2">
+
+  <div class="detail-header">
+    <a href="#emitter_pool_name/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">emitter_pool_name(StoreId, SubscriptionId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L185" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> emitter_pool_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Emitter pool name for a subscription</p>
+  </section>
+</section>
+<section class="detail" id="emitter_sup_name/1">
+
+  <div class="detail-header">
+    <a href="#emitter_sup_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">emitter_sup_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L90" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> emitter_sup_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Emitter supervisor name for a store</p>
+  </section>
+</section>
+<section class="detail" id="gateway_sup_name/1">
+
+  <div class="detail-header">
+    <a href="#gateway_sup_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">gateway_sup_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L80" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> gateway_sup_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Gateway supervisor name for a store</p>
+  </section>
+</section>
+<section class="detail" id="gateway_worker_name/1">
+
+  <div class="detail-header">
+    <a href="#gateway_worker_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">gateway_worker_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L161" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> gateway_worker_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Gateway worker name for a store</p>
+  </section>
+</section>
+<section class="detail" id="health_monitor_name/1">
+
+  <div class="detail-header">
+    <a href="#health_monitor_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">health_monitor_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L166" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> health_monitor_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Subscription health monitor name for a store</p>
+  </section>
+</section>
+<section class="detail" id="leader_name/1">
+
+  <div class="detail-header">
+    <a href="#leader_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">leader_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L136" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> leader_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Leader worker name</p>
+  </section>
+</section>
+<section class="detail" id="leader_sup_name/1">
+
+  <div class="detail-header">
+    <a href="#leader_sup_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">leader_sup_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L95" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> leader_sup_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Leader supervisor name for a store</p>
+  </section>
+</section>
+<section class="detail" id="leader_tracker_name/1">
+
+  <div class="detail-header">
+    <a href="#leader_tracker_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">leader_tracker_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L141" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> leader_tracker_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Leader tracker worker name</p>
+  </section>
+</section>
+<section class="detail" id="node_monitor_name/1">
+
+  <div class="detail-header">
+    <a href="#node_monitor_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">node_monitor_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L156" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> node_monitor_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Node monitor worker name</p>
+  </section>
+</section>
+<section class="detail" id="notification_sup_name/1">
+
+  <div class="detail-header">
+    <a href="#notification_sup_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">notification_sup_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L70" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> notification_sup_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Notification supervisor name for a store</p>
+  </section>
+</section>
+<section class="detail" id="persistence_sup_name/1">
+
+  <div class="detail-header">
+    <a href="#persistence_sup_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">persistence_sup_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L65" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> persistence_sup_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Persistence supervisor name for a store</p>
+  </section>
+</section>
+<section class="detail" id="persistence_worker_name/1">
+
+  <div class="detail-header">
+    <a href="#persistence_worker_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">persistence_worker_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L131" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> persistence_worker_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Persistence worker name</p>
+  </section>
+</section>
+<section class="detail" id="pg_group_name/2">
+
+  <div class="detail-header">
+    <a href="#pg_group_name/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">pg_group_name(StoreId, Feature)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L195" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> pg_group_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>().</pre>
+
+      </div>
+
+<p>Process group name for a store feature</p>
+  </section>
+</section>
+<section class="detail" id="reader_pool_name/1">
+
+  <div class="detail-header">
+    <a href="#reader_pool_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">reader_pool_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L180" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> reader_pool_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Reader pool name for a store</p>
+  </section>
+</section>
+<section class="detail" id="snapshots_store_name/1">
+
+  <div class="detail-header">
+    <a href="#snapshots_store_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">snapshots_store_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L126" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> snapshots_store_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Snapshots store worker name</p>
+  </section>
+</section>
+<section class="detail" id="store_mgr_name/1">
+
+  <div class="detail-header">
+    <a href="#store_mgr_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">store_mgr_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L116" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> store_mgr_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Store manager worker name</p>
+  </section>
+</section>
+<section class="detail" id="store_name/1">
+
+  <div class="detail-header">
+    <a href="#store_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">store_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L104" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> store_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Khepri store name (this is the atom used for khepri operations)</p>
+  </section>
+</section>
+<section class="detail" id="store_worker_name/1">
+
+  <div class="detail-header">
+    <a href="#store_worker_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">store_worker_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L111" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> store_worker_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Store worker name (the gen_server that starts Khepri) NOTE: This is different from store_name/1 (Khepri operations) and store_mgr_name/1 (store lifecycle coordination).</p>
+  </section>
+</section>
+<section class="detail" id="streams_sup_name/1">
+
+  <div class="detail-header">
+    <a href="#streams_sup_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">streams_sup_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L85" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> streams_sup_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Streams supervisor name for a store</p>
+  </section>
+</section>
+<section class="detail" id="subscriptions_store_name/1">
+
+  <div class="detail-header">
+    <a href="#subscriptions_store_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">subscriptions_store_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L121" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> subscriptions_store_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Subscriptions store worker name</p>
+  </section>
+</section>
+<section class="detail" id="system_sup_name/1">
+
+  <div class="detail-header">
+    <a href="#system_sup_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">system_sup_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L55" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> system_sup_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>System supervisor name for a store</p>
+  </section>
+</section>
+<section class="detail" id="tracker_group_key/2">
+
+  <div class="detail-header">
+    <a href="#tracker_group_key/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">tracker_group_key(StoreId, Feature)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L200" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> tracker_group_key(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>().</pre>
+
+      </div>
+
+<p>Tracker group key (for subscription tracking via pg)</p>
+  </section>
+</section>
+<section class="detail" id="writer_pool_name/1">
+
+  <div class="detail-header">
+    <a href="#writer_pool_name/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">writer_pool_name(StoreId)</h1>
+
+
+        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_naming.erl#L175" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> writer_pool_name(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>().</pre>
+
+      </div>
+
+<p>Writer pool name for a store</p>
+  </section>
+</section>
+
+    </div>
+  </section>
+
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/reckon_db/2.0.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/reckon_db/2.0.0">Hex Preview</a>
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="reckon_db.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.39.1) for the
+
+          <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

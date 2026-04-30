@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 180">
+  <defs>
+    <linearGradient id="cmdGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fce4ec"/>
+      <stop offset="100%" style="stop-color:#f8bbd9"/>
+    </linearGradient>
+    <linearGradient id="queryGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8f5e9"/>
+      <stop offset="100%" style="stop-color:#c8e6c9"/>
+    </linearGradient>
+    <linearGradient id="storeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e1bee7"/>
+      <stop offset="100%" style="stop-color:#ce93d8"/>
+    </linearGradient>
+    <linearGradient id="readGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#e3f2fd"/>
+      <stop offset="100%" style="stop-color:#bbdefb"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#666"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="225" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#333">CQRS: Separated Models</text>
+
+  <!-- Command Model -->
+  <rect x="30" y="40" width="130" height="50" rx="6" fill="url(#cmdGrad)" stroke="#e91e63" stroke-width="2"/>
+  <text x="95" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#ad1457">Command Model</text>
+  <text x="95" y="78" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#c2185b">(Writes)</text>
+
+  <!-- Query Model -->
+  <rect x="290" y="40" width="130" height="50" rx="6" fill="url(#queryGrad)" stroke="#4caf50" stroke-width="2"/>
+  <text x="355" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#2e7d32">Query Model</text>
+  <text x="355" y="78" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#388e3c">(Reads)</text>
+
+  <!-- Arrows down -->
+  <line x1="95" y1="90" x2="95" y2="115" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="355" y1="90" x2="355" y2="115" stroke="#666" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Event Store -->
+  <rect x="30" y="120" width="130" height="50" rx="6" fill="url(#storeGrad)" stroke="#9c27b0" stroke-width="2"/>
+  <text x="95" y="140" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#7b1fa2">Event Store</text>
+  <text x="95" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#8e24aa">(reckon-db)</text>
+
+  <!-- Read Models -->
+  <rect x="290" y="120" width="130" height="50" rx="6" fill="url(#readGrad)" stroke="#2196f3" stroke-width="2"/>
+  <text x="355" y="140" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#1565c0">Read Models</text>
+  <text x="355" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#1976d2">(Projections)</text>
+
+  <!-- Events flow arrow -->
+  <line x1="160" y1="145" x2="285" y2="145" stroke="#9c27b0" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrow)"/>
+  <text x="225" y="138" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#7b1fa2">events</text>
+</svg>

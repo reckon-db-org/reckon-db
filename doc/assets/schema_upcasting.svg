@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <marker id="arrowSchema" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4299e1"/>
+    </marker>
+    <linearGradient id="v1Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fc8181"/>
+      <stop offset="100%" style="stop-color:#e53e3e"/>
+    </linearGradient>
+    <linearGradient id="v2Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f6ad55"/>
+      <stop offset="100%" style="stop-color:#ed8936"/>
+    </linearGradient>
+    <linearGradient id="v3Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#48bb78"/>
+      <stop offset="100%" style="stop-color:#38a169"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="400" fill="#f7fafc"/>
+
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="bold" fill="#2d3748">Schema Evolution &amp; Upcasting</text>
+
+  <!-- Version 1 Event -->
+  <rect x="50" y="60" width="180" height="130" rx="10" fill="url(#v1Grad)" stroke="#c53030" stroke-width="2"/>
+  <text x="140" y="85" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Version 1</text>
+  <rect x="65" y="95" width="150" height="80" rx="6" fill="white" stroke="#fc8181" stroke-width="1"/>
+  <text x="140" y="115" text-anchor="middle" font-family="monospace" font-size="9" fill="#2d3748">order_id: "123"</text>
+  <text x="140" y="130" text-anchor="middle" font-family="monospace" font-size="9" fill="#2d3748">customerId: "c-1"</text>
+  <text x="140" y="145" text-anchor="middle" font-family="monospace" font-size="9" fill="#2d3748">address: "123 Main"</text>
+  <text x="140" y="165" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" fill="#718096">schema_version: 1</text>
+
+  <!-- Upcast Arrow 1 -->
+  <line x1="230" y1="125" x2="290" y2="125" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowSchema)"/>
+  <rect x="235" y="100" width="50" height="20" rx="4" fill="#ebf8ff" stroke="#90cdf4" stroke-width="1"/>
+  <text x="260" y="114" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" fill="#2b6cb0">upcast</text>
+
+  <!-- Version 2 Event -->
+  <rect x="300" y="60" width="180" height="130" rx="10" fill="url(#v2Grad)" stroke="#dd6b20" stroke-width="2"/>
+  <text x="390" y="85" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Version 2</text>
+  <rect x="315" y="95" width="150" height="80" rx="6" fill="white" stroke="#f6ad55" stroke-width="1"/>
+  <text x="390" y="115" text-anchor="middle" font-family="monospace" font-size="9" fill="#2d3748">order_id: "123"</text>
+  <text x="390" y="130" text-anchor="middle" font-family="monospace" font-size="9" fill="#48bb78">customer_id: "c-1"</text>
+  <text x="390" y="145" text-anchor="middle" font-family="monospace" font-size="9" fill="#2d3748">address: "123 Main"</text>
+  <text x="390" y="165" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" fill="#718096">schema_version: 2</text>
+
+  <!-- Upcast Arrow 2 -->
+  <line x1="480" y1="125" x2="540" y2="125" stroke="#4299e1" stroke-width="2" marker-end="url(#arrowSchema)"/>
+  <rect x="485" y="100" width="50" height="20" rx="4" fill="#ebf8ff" stroke="#90cdf4" stroke-width="1"/>
+  <text x="510" y="114" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" fill="#2b6cb0">upcast</text>
+
+  <!-- Version 3 Event (Current) -->
+  <rect x="550" y="60" width="200" height="130" rx="10" fill="url(#v3Grad)" stroke="#276749" stroke-width="2"/>
+  <text x="650" y="85" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="white">Version 3 (Current)</text>
+  <rect x="565" y="95" width="170" height="80" rx="6" fill="white" stroke="#48bb78" stroke-width="1"/>
+  <text x="650" y="115" text-anchor="middle" font-family="monospace" font-size="9" fill="#2d3748">order_id: "123"</text>
+  <text x="650" y="130" text-anchor="middle" font-family="monospace" font-size="9" fill="#2d3748">customer_id: "c-1"</text>
+  <text x="650" y="145" text-anchor="middle" font-family="monospace" font-size="9" fill="#48bb78">shipping_address: {...}</text>
+  <text x="650" y="165" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" fill="#718096">schema_version: 3</text>
+
+  <!-- Schema Registry -->
+  <rect x="50" y="220" width="700" height="160" rx="10" fill="#edf2f7" stroke="#cbd5e0" stroke-width="1"/>
+  <text x="400" y="245" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="bold" fill="#2d3748">Schema Registry (Khepri)</text>
+
+  <!-- Upcast Functions -->
+  <rect x="80" y="265" width="280" height="100" rx="8" fill="white" stroke="#a0aec0" stroke-width="1"/>
+  <text x="220" y="285" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="bold" fill="#4a5568">upcast_from</text>
+
+  <text x="100" y="310" font-family="monospace" font-size="9" fill="#2d3748">1 => fun(D) -></text>
+  <text x="120" y="325" font-family="monospace" font-size="9" fill="#718096">%% customerId -> customer_id</text>
+  <text x="100" y="350" font-family="monospace" font-size="9" fill="#2d3748">2 => fun(D) -></text>
+  <text x="120" y="365" font-family="monospace" font-size="9" fill="#718096">%% Split address -> shipping</text>
+
+  <!-- Storage Path -->
+  <rect x="400" y="265" width="320" height="50" rx="8" fill="white" stroke="#a0aec0" stroke-width="1"/>
+  <text x="560" y="285" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="#4a5568">Khepri Path</text>
+  <text x="560" y="305" text-anchor="middle" font-family="monospace" font-size="9" fill="#718096">[schemas, my_store, "OrderPlaced"]</text>
+
+  <!-- Current Version -->
+  <rect x="400" y="325" width="320" height="40" rx="8" fill="#f0fff4" stroke="#9ae6b4" stroke-width="1"/>
+  <text x="560" y="350" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#276749">Current Version: 3 | Upcast from: 1, 2</text>
+
+  <!-- Change indicators -->
+  <text x="390" y="130" text-anchor="middle" font-family="system-ui, sans-serif" font-size="7" fill="#48bb78">(renamed)</text>
+  <text x="650" y="145" text-anchor="middle" font-family="system-ui, sans-serif" font-size="7" fill="#48bb78">(split from address)</text>
+</svg>

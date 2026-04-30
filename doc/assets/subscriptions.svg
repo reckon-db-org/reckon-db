@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <linearGradient id="bg3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <filter id="shadow3" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="400" fill="url(#bg3)"/>
+
+  <!-- Title -->
+  <text x="400" y="35" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="22" font-weight="bold">Subscription Types</text>
+
+  <!-- Event Store -->
+  <rect x="50" y="80" width="140" height="280" rx="8" fill="#0f3460" filter="url(#shadow3)"/>
+  <text x="120" y="105" text-anchor="middle" fill="#e94560" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Event Store</text>
+
+  <!-- Events in store -->
+  <rect x="65" y="120" width="110" height="30" rx="4" fill="#4ade80"/>
+  <text x="120" y="140" text-anchor="middle" fill="#000" font-family="monospace" font-size="9">order-123 v0</text>
+
+  <rect x="65" y="155" width="110" height="30" rx="4" fill="#60a5fa"/>
+  <text x="120" y="175" text-anchor="middle" fill="#000" font-family="monospace" font-size="9">user-456 v0</text>
+
+  <rect x="65" y="190" width="110" height="30" rx="4" fill="#4ade80"/>
+  <text x="120" y="210" text-anchor="middle" fill="#000" font-family="monospace" font-size="9">order-123 v1</text>
+
+  <rect x="65" y="225" width="110" height="30" rx="4" fill="#f59e0b"/>
+  <text x="120" y="245" text-anchor="middle" fill="#000" font-family="monospace" font-size="9">order-789 v0</text>
+
+  <rect x="65" y="260" width="110" height="30" rx="4" fill="#60a5fa"/>
+  <text x="120" y="280" text-anchor="middle" fill="#000" font-family="monospace" font-size="9">user-456 v1</text>
+
+  <rect x="65" y="295" width="110" height="30" rx="4" fill="#4ade80"/>
+  <text x="120" y="315" text-anchor="middle" fill="#000" font-family="monospace" font-size="9">order-123 v2</text>
+
+  <!-- By Stream -->
+  <rect x="230" y="80" width="130" height="130" rx="8" fill="#533483" filter="url(#shadow3)"/>
+  <text x="295" y="105" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">by_stream</text>
+  <text x="295" y="125" text-anchor="middle" fill="#a78bfa" font-family="monospace" font-size="9">"order-123"</text>
+
+  <rect x="245" y="140" width="100" height="22" rx="3" fill="#4ade80"/>
+  <text x="295" y="155" text-anchor="middle" fill="#000" font-family="monospace" font-size="8">order-123 v0</text>
+  <rect x="245" y="165" width="100" height="22" rx="3" fill="#4ade80"/>
+  <text x="295" y="180" text-anchor="middle" fill="#000" font-family="monospace" font-size="8">order-123 v1</text>
+  <rect x="245" y="190" width="100" height="10" rx="3" fill="#4ade80" opacity="0.5"/>
+
+  <!-- By Event Type -->
+  <rect x="380" y="80" width="130" height="130" rx="8" fill="#0f3460" filter="url(#shadow3)"/>
+  <text x="445" y="105" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">by_event_type</text>
+  <text x="445" y="125" text-anchor="middle" fill="#60a5fa" font-family="monospace" font-size="9">"UserCreated"</text>
+
+  <rect x="395" y="140" width="100" height="22" rx="3" fill="#60a5fa"/>
+  <text x="445" y="155" text-anchor="middle" fill="#000" font-family="monospace" font-size="8">user-456 v0</text>
+  <rect x="395" y="165" width="100" height="22" rx="3" fill="#60a5fa"/>
+  <text x="445" y="180" text-anchor="middle" fill="#000" font-family="monospace" font-size="8">user-789 v0</text>
+  <rect x="395" y="190" width="100" height="10" rx="3" fill="#60a5fa" opacity="0.5"/>
+
+  <!-- By Pattern -->
+  <rect x="530" y="80" width="130" height="130" rx="8" fill="#166534" filter="url(#shadow3)"/>
+  <text x="595" y="105" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">by_pattern</text>
+  <text x="595" y="125" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="9">"order-*"</text>
+
+  <rect x="545" y="140" width="100" height="22" rx="3" fill="#4ade80"/>
+  <text x="595" y="155" text-anchor="middle" fill="#000" font-family="monospace" font-size="8">order-123 v0</text>
+  <rect x="545" y="165" width="100" height="22" rx="3" fill="#f59e0b"/>
+  <text x="595" y="180" text-anchor="middle" fill="#000" font-family="monospace" font-size="8">order-789 v0</text>
+  <rect x="545" y="190" width="100" height="10" rx="3" fill="#4ade80" opacity="0.5"/>
+
+  <!-- By Payload -->
+  <rect x="680" y="80" width="100" height="130" rx="8" fill="#7c2d12" filter="url(#shadow3)"/>
+  <text x="730" y="105" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">by_payload</text>
+  <text x="730" y="125" text-anchor="middle" fill="#f97316" font-family="monospace" font-size="8">vip: true</text>
+
+  <rect x="693" y="140" width="74" height="22" rx="3" fill="#f97316"/>
+  <text x="730" y="155" text-anchor="middle" fill="#000" font-family="monospace" font-size="7">matched</text>
+  <rect x="693" y="165" width="74" height="10" rx="3" fill="#f97316" opacity="0.5"/>
+
+  <!-- Emitter Pool -->
+  <rect x="230" y="235" width="550" height="145" rx="8" fill="#0a2540" filter="url(#shadow3)"/>
+  <text x="505" y="260" text-anchor="middle" fill="#e94560" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Emitter Pool</text>
+  <text x="505" y="280" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="10">High-throughput event delivery with configurable pool size</text>
+
+  <!-- Emitter workers -->
+  <rect x="260" y="295" width="70" height="35" rx="4" fill="#e94560"/>
+  <text x="295" y="317" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="9">Emitter 1</text>
+
+  <rect x="345" y="295" width="70" height="35" rx="4" fill="#e94560"/>
+  <text x="380" y="317" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="9">Emitter 2</text>
+
+  <rect x="430" y="295" width="70" height="35" rx="4" fill="#e94560"/>
+  <text x="465" y="317" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="9">Emitter 3</text>
+
+  <rect x="515" y="295" width="70" height="35" rx="4" fill="#e94560"/>
+  <text x="550" y="317" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="9">Emitter 4</text>
+
+  <text x="620" y="317" fill="#888" font-family="Arial, sans-serif" font-size="20">...</text>
+
+  <!-- Subscribers -->
+  <rect x="260" y="340" width="70" height="25" rx="4" fill="#533483"/>
+  <text x="295" y="357" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="8">Subscriber</text>
+
+  <rect x="345" y="340" width="70" height="25" rx="4" fill="#533483"/>
+  <text x="380" y="357" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="8">Subscriber</text>
+
+  <rect x="430" y="340" width="70" height="25" rx="4" fill="#533483"/>
+  <text x="465" y="357" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="8">Subscriber</text>
+
+  <rect x="515" y="340" width="70" height="25" rx="4" fill="#533483"/>
+  <text x="550" y="357" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="8">Subscriber</text>
+
+  <!-- Arrows from store to subscriptions -->
+  <path d="M190 145 L225 145" stroke="#4ade80" stroke-width="2" fill="none"/>
+  <path d="M190 200 L280 200 L280 210" stroke="#4ade80" stroke-width="2" fill="none"/>
+  <path d="M190 160 L380 160 L380 135" stroke="#60a5fa" stroke-width="2" fill="none"/>
+  <path d="M190 235 L530 235 L530 210" stroke="#4ade80" stroke-width="2" fill="none"/>
+</svg>

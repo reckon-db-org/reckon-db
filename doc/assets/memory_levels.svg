@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 380">
+  <defs>
+    <linearGradient id="normalGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#48bb78"/>
+      <stop offset="100%" style="stop-color:#38a169"/>
+    </linearGradient>
+    <linearGradient id="elevatedGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f6ad55"/>
+      <stop offset="100%" style="stop-color:#ed8936"/>
+    </linearGradient>
+    <linearGradient id="criticalGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fc8181"/>
+      <stop offset="100%" style="stop-color:#e53e3e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="700" height="380" fill="#f7fafc"/>
+
+  <!-- Title -->
+  <text x="350" y="30" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" font-weight="bold" fill="#2d3748">Memory Pressure Levels</text>
+
+  <!-- Memory Bar Container -->
+  <rect x="80" y="60" width="60" height="250" rx="8" fill="#e2e8f0" stroke="#a0aec0" stroke-width="2"/>
+
+  <!-- Normal Zone (0-70%) -->
+  <rect x="82" y="135" width="56" height="173" rx="6" fill="url(#normalGrad)"/>
+  <text x="110" y="230" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="white" transform="rotate(-90, 110, 230)">NORMAL</text>
+
+  <!-- Elevated Zone (70-85%) -->
+  <rect x="82" y="97" width="56" height="38" rx="0" fill="url(#elevatedGrad)"/>
+  <text x="110" y="118" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="white">ELEVATED</text>
+
+  <!-- Critical Zone (85-100%) -->
+  <rect x="82" y="62" width="56" height="35" rx="6" fill="url(#criticalGrad)"/>
+  <text x="110" y="82" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="white">CRITICAL</text>
+
+  <!-- Percentage Labels -->
+  <text x="65" y="67" text-anchor="end" font-family="system-ui, sans-serif" font-size="10" fill="#718096">100%</text>
+  <text x="65" y="97" text-anchor="end" font-family="system-ui, sans-serif" font-size="10" fill="#718096">85%</text>
+  <text x="65" y="135" text-anchor="end" font-family="system-ui, sans-serif" font-size="10" fill="#718096">70%</text>
+  <text x="65" y="310" text-anchor="end" font-family="system-ui, sans-serif" font-size="10" fill="#718096">0%</text>
+
+  <!-- Threshold Lines -->
+  <line x1="140" y1="97" x2="160" y2="97" stroke="#dd6b20" stroke-width="2" stroke-dasharray="4"/>
+  <line x1="140" y1="135" x2="160" y2="135" stroke="#276749" stroke-width="2" stroke-dasharray="4"/>
+
+  <!-- Normal Details -->
+  <rect x="180" y="180" width="240" height="120" rx="8" fill="#f0fff4" stroke="#9ae6b4" stroke-width="2"/>
+  <text x="300" y="205" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#276749">normal (< 70%)</text>
+  <text x="195" y="230" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Full caching enabled</text>
+  <text x="195" y="250" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">All features active</text>
+  <text x="195" y="270" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Maximum performance</text>
+  <text x="195" y="290" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Default check: 10s</text>
+
+  <!-- Elevated Details -->
+  <rect x="440" y="60" width="240" height="120" rx="8" fill="#feebc8" stroke="#f6ad55" stroke-width="2"/>
+  <text x="560" y="85" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#c05621">elevated (70-85%)</text>
+  <text x="455" y="110" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Reduce cache sizes</text>
+  <text x="455" y="130" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Flush buffers more often</text>
+  <text x="455" y="150" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Warn in logs</text>
+  <text x="455" y="170" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Consider scavenging</text>
+
+  <!-- Critical Details -->
+  <rect x="440" y="195" width="240" height="120" rx="8" fill="#fed7d7" stroke="#fc8181" stroke-width="2"/>
+  <text x="560" y="220" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#c53030">critical (> 85%)</text>
+  <text x="455" y="245" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Pause subscriptions</text>
+  <text x="455" y="265" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Aggressive cleanup</text>
+  <text x="455" y="285" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Throttle writes</text>
+  <text x="455" y="305" font-family="system-ui, sans-serif" font-size="10" fill="#2d3748">Alert operators</text>
+
+  <!-- Connecting lines -->
+  <line x1="140" y1="240" x2="175" y2="240" stroke="#9ae6b4" stroke-width="2"/>
+  <line x1="140" y1="116" x2="250" y2="116" stroke="#f6ad55" stroke-width="2"/>
+  <line x1="250" y1="116" x2="250" y2="60" stroke="#f6ad55" stroke-width="2"/>
+  <line x1="250" y1="60" x2="435" y2="60" stroke="#f6ad55" stroke-width="2"/>
+  <line x1="140" y1="80" x2="300" y2="80" stroke="#fc8181" stroke-width="2"/>
+  <line x1="300" y1="80" x2="300" y2="195" stroke="#fc8181" stroke-width="2"/>
+  <line x1="300" y1="195" x2="435" y2="195" stroke="#fc8181" stroke-width="2"/>
+
+  <!-- Callback visualization -->
+  <rect x="180" y="320" width="500" height="45" rx="6" fill="#edf2f7" stroke="#cbd5e0" stroke-width="1"/>
+  <text x="430" y="345" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#4a5568">
+    Callbacks notified on level change: on_pressure_change(fun(Level) -> ... end)
+  </text>
+</svg>

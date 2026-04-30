@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.39.1">
+    <meta name="project" content="reckon_db v2.0.0">
+
+
+    <title>Store Inspector — reckon_db v2.0.0</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
+
+    <script defer src="dist/sidebar_items-7E229343.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-HBZYRXZS.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="readme.html" class="sidebar-projectName" translate="no">
+reckon_db
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v2.0.0
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-extra" id="main" data-type="extras">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of reckon_db</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>Store Inspector</h1>
+
+
+      <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/guides/store_inspector.md#L1" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+<p>The Store Inspector provides aggregate introspection for debugging and monitoring ReckonDB stores. It answers questions like:</p><ul><li>How many streams and events does this store have?</li><li>What event types are being used?</li><li>Are subscriptions keeping up or falling behind?</li><li>Which streams have snapshots?</li></ul><h2 id="usage" class="section-heading"><a href="#usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Usage</span></h2><p>All functions take a <code class="inline">StoreId</code> atom and return <code class="inline">{ok, Data}</code> or <code class="inline">{error, Reason}</code>.</p><h3 id="store-statistics" class="section-heading"><a href="#store-statistics" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Store Statistics</span></h3><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="9120131627-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Stats</span><span class="p" data-group-id="9120131627-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_store_inspector</span><span class="p">:</span><span class="nf">store_stats</span><span class="p" data-group-id="9120131627-2">(</span><span class="ss">my_store</span><span class="p" data-group-id="9120131627-2">)</span><span class="p">.</span><span class="w">
+</span><span class="c1">%% #{store_id =&gt; my_store,</span><span class="w">
+</span><span class="c1">%%   stream_count =&gt; 42,</span><span class="w">
+</span><span class="c1">%%   total_events =&gt; 1337,</span><span class="w">
+</span><span class="c1">%%   snapshot_count =&gt; 5,</span><span class="w">
+</span><span class="c1">%%   subscription_count =&gt; 3,</span><span class="w">
+</span><span class="c1">%%   has_events =&gt; true}</span></code></pre><h3 id="list-all-snapshots" class="section-heading"><a href="#list-all-snapshots" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">List All Snapshots</span></h3><p>Returns snapshot summaries across all streams, sorted newest first. Data payloads are not included (only metadata).</p><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="6787166784-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Snapshots</span><span class="p" data-group-id="6787166784-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_store_inspector</span><span class="p">:</span><span class="nf">list_all_snapshots</span><span class="p" data-group-id="6787166784-2">(</span><span class="ss">my_store</span><span class="p" data-group-id="6787166784-2">)</span><span class="p">.</span><span class="w">
+</span><span class="c1">%% [#{stream_id =&gt; &lt;&lt;&quot;user-123&quot;&gt;&gt;, version =&gt; 50, timestamp =&gt; 1710000000000, metadata =&gt; #{}},</span><span class="w">
+</span><span class="c1">%%  #{stream_id =&gt; &lt;&lt;&quot;order-456&quot;&gt;&gt;, version =&gt; 20, timestamp =&gt; 1709000000000, metadata =&gt; #{}}]</span></code></pre><h3 id="list-subscriptions" class="section-heading"><a href="#list-subscriptions" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">List Subscriptions</span></h3><p>Returns all active subscriptions with their checkpoint positions.</p><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="2783048506-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Subs</span><span class="p" data-group-id="2783048506-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_store_inspector</span><span class="p">:</span><span class="nf">list_subscriptions</span><span class="p" data-group-id="2783048506-2">(</span><span class="ss">my_store</span><span class="p" data-group-id="2783048506-2">)</span><span class="p">.</span><span class="w">
+</span><span class="c1">%% [#{subscription_name =&gt; &lt;&lt;&quot;prj_users&quot;&gt;&gt;,</span><span class="w">
+</span><span class="c1">%%    type =&gt; event_type,</span><span class="w">
+</span><span class="c1">%%    selector =&gt; &lt;&lt;&quot;user_registered_v1&quot;&gt;&gt;,</span><span class="w">
+</span><span class="c1">%%    checkpoint =&gt; 42,</span><span class="w">
+</span><span class="c1">%%    pool_size =&gt; 1,</span><span class="w">
+</span><span class="c1">%%    created_at =&gt; 1710000000000,</span><span class="w">
+</span><span class="c1">%%    subscriber_pid =&gt; &lt;&lt;&quot;&lt;0.500.0&gt;&quot;&gt;&gt;}]</span></code></pre><h3 id="subscription-lag" class="section-heading"><a href="#subscription-lag" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Subscription Lag</span></h3><p>How far behind is a specific subscription?</p><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="2894304516-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Lag</span><span class="p" data-group-id="2894304516-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_store_inspector</span><span class="p">:</span><span class="nf">subscription_lag</span><span class="p" data-group-id="2894304516-2">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="2894304516-3">&lt;&lt;</span><span class="s">&quot;prj_users&quot;</span><span class="p" data-group-id="2894304516-3">&gt;&gt;</span><span class="p" data-group-id="2894304516-2">)</span><span class="p">.</span><span class="w">
+</span><span class="c1">%% #{subscription_name =&gt; &lt;&lt;&quot;prj_users&quot;&gt;&gt;,</span><span class="w">
+</span><span class="c1">%%   checkpoint =&gt; 42,</span><span class="w">
+</span><span class="c1">%%   latest_position =&gt; 100,</span><span class="w">
+</span><span class="c1">%%   lag_events =&gt; 57}</span></code></pre><h3 id="event-type-summary" class="section-heading"><a href="#event-type-summary" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Event Type Summary</span></h3><p>Census of which event types appear and how many of each. Can be expensive for large stores.</p><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="0310177286-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Types</span><span class="p" data-group-id="0310177286-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_store_inspector</span><span class="p">:</span><span class="nf">event_type_summary</span><span class="p" data-group-id="0310177286-2">(</span><span class="ss">my_store</span><span class="p" data-group-id="0310177286-2">)</span><span class="p">.</span><span class="w">
+</span><span class="c1">%% [#{event_type =&gt; &lt;&lt;&quot;user_registered_v1&quot;&gt;&gt;, count =&gt; 500},</span><span class="w">
+</span><span class="c1">%%  #{event_type =&gt; &lt;&lt;&quot;user_promoted_v1&quot;&gt;&gt;, count =&gt; 50},</span><span class="w">
+</span><span class="c1">%%  #{event_type =&gt; &lt;&lt;&quot;user_archived_v1&quot;&gt;&gt;, count =&gt; 10}]</span></code></pre><h3 id="stream-info" class="section-heading"><a href="#stream-info" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Stream Info</span></h3><p>Detailed information about a single stream, including snapshot coverage.</p><pre><code class="makeup erlang" translate="no"><span class="p" data-group-id="3360853268-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Info</span><span class="p" data-group-id="3360853268-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_store_inspector</span><span class="p">:</span><span class="nf">stream_info</span><span class="p" data-group-id="3360853268-2">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="3360853268-3">&lt;&lt;</span><span class="s">&quot;user-123&quot;</span><span class="p" data-group-id="3360853268-3">&gt;&gt;</span><span class="p" data-group-id="3360853268-2">)</span><span class="p">.</span><span class="w">
+</span><span class="c1">%% #{stream_id =&gt; &lt;&lt;&quot;user-123&quot;&gt;&gt;,</span><span class="w">
+</span><span class="c1">%%   version =&gt; 50,</span><span class="w">
+</span><span class="c1">%%   event_count =&gt; 51,</span><span class="w">
+</span><span class="c1">%%   first_event_at =&gt; 1700000000000,</span><span class="w">
+</span><span class="c1">%%   last_event_at =&gt; 1710000000000,</span><span class="w">
+</span><span class="c1">%%   snapshots =&gt; #{count =&gt; 1, latest_version =&gt; 50}}</span></code></pre><h2 id="architecture" class="section-heading"><a href="#architecture" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Architecture</span></h2><p><img src="assets/store_inspector.svg" alt="Store Inspector"/></p><p>The inspector reads directly from the Khepri tree via existing facade modules (<code class="inline">reckon_db_streams</code>, <code class="inline">reckon_db_snapshots_store</code>, <code class="inline">reckon_db_subscriptions_store</code>). It never modifies data.</p><p>Gateway worker clauses route inspector requests through the standard <code class="inline">reckon_gater_api</code> dispatch chain, making these operations available to any client (including the Hecate Observer UI).</p><h2 id="performance-notes" class="section-heading"><a href="#performance-notes" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Performance Notes</span></h2><ul><li><code class="inline">store_stats/1</code> — O(streams) — fast for typical stores (&lt;1000 streams)</li><li><code class="inline">list_all_snapshots/1</code> — O(streams) — iterates all streams checking for snapshots</li><li><code class="inline">list_subscriptions/1</code> — O(subscriptions) — typically very fast (&lt;50 subscriptions)</li><li><code class="inline">subscription_lag/2</code> — O(streams) — needs total event count</li><li><code class="inline">event_type_summary/1</code> — O(total events) — <strong>expensive for large stores</strong>, walks all events</li><li><code class="inline">stream_info/2</code> — O(1) — reads single stream metadata + first/last events</li></ul>
+
+</div>
+
+<div class="bottom-actions" id="bottom-actions">
+  <div class="bottom-actions-item">
+
+      <a href="cluster_consistency.html" class="bottom-actions-button" rel="prev">
+        <span class="subheader">
+          ← Previous Page
+        </span>
+        <span class="title">
+Cluster Consistency
+        </span>
+      </a>
+
+  </div>
+  <div class="bottom-actions-item">
+
+  </div>
+</div>
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/reckon_db/2.0.0" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/reckon_db/2.0.0">Hex Preview</a>
+
+              (<a href="https://preview.hex.pm/preview/reckon_db/2.0.0/show/guides/store_inspector.md">current file</a>)
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="reckon_db.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.39.1) for the
+
+          <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

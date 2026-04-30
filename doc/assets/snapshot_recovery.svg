@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="400" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="400" y="35" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="22" font-weight="bold">Snapshot Recovery Performance</text>
+
+  <!-- Without Snapshots -->
+  <rect x="30" y="60" width="360" height="150" rx="10" fill="#0f3460" filter="url(#shadow)"/>
+  <text x="210" y="90" text-anchor="middle" fill="#e94560" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Without Snapshots (10,000 events)</text>
+
+  <!-- Event chain without snapshot -->
+  <rect x="50" y="110" width="50" height="30" rx="3" fill="#4ade80"/>
+  <text x="75" y="130" text-anchor="middle" fill="#000" font-family="monospace" font-size="8">E1</text>
+
+  <rect x="110" y="110" width="50" height="30" rx="3" fill="#60a5fa"/>
+  <text x="135" y="130" text-anchor="middle" fill="#000" font-family="monospace" font-size="8">E2</text>
+
+  <rect x="170" y="110" width="50" height="30" rx="3" fill="#f59e0b"/>
+  <text x="195" y="130" text-anchor="middle" fill="#000" font-family="monospace" font-size="8">E3</text>
+
+  <text x="240" y="130" fill="#888" font-family="Arial" font-size="12">...</text>
+
+  <rect x="270" y="110" width="60" height="30" rx="3" fill="#a78bfa"/>
+  <text x="300" y="130" text-anchor="middle" fill="#000" font-family="monospace" font-size="8">E10000</text>
+
+  <path d="M340 125 L360 125" stroke="#4ade80" stroke-width="2"/>
+  <polygon points="355,120 365,125 355,130" fill="#4ade80"/>
+
+  <rect x="50" y="155" width="320" height="8" rx="2" fill="#ef4444"/>
+  <text x="210" y="185" text-anchor="middle" fill="#ef4444" font-family="Arial, sans-serif" font-size="11">Replay all 10,000 events: ~500ms</text>
+
+  <!-- With Snapshots -->
+  <rect x="410" y="60" width="360" height="150" rx="10" fill="#0f3460" filter="url(#shadow)"/>
+  <text x="590" y="90" text-anchor="middle" fill="#4ade80" font-family="Arial, sans-serif" font-size="14" font-weight="bold">With Snapshots</text>
+
+  <!-- Snapshot box -->
+  <rect x="430" y="110" width="80" height="40" rx="5" fill="#166534" stroke="#4ade80" stroke-width="2"/>
+  <text x="470" y="127" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="9" font-weight="bold">Snapshot</text>
+  <text x="470" y="142" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="8">@9500</text>
+
+  <path d="M520 130 L540 130" stroke="#4ade80" stroke-width="2"/>
+  <polygon points="535,125 545,130 535,135" fill="#4ade80"/>
+
+  <!-- Remaining events -->
+  <rect x="555" y="115" width="40" height="25" rx="3" fill="#60a5fa"/>
+  <text x="575" y="132" text-anchor="middle" fill="#000" font-family="monospace" font-size="7">9501</text>
+
+  <text x="610" y="130" fill="#888" font-family="Arial" font-size="10">...</text>
+
+  <rect x="635" y="115" width="50" height="25" rx="3" fill="#a78bfa"/>
+  <text x="660" y="132" text-anchor="middle" fill="#000" font-family="monospace" font-size="7">10000</text>
+
+  <path d="M695 127 L720 127" stroke="#4ade80" stroke-width="2"/>
+  <polygon points="715,122 725,127 715,132" fill="#4ade80"/>
+
+  <rect x="430" y="155" width="320" height="8" rx="2" fill="#4ade80"/>
+  <text x="590" y="185" text-anchor="middle" fill="#4ade80" font-family="Arial, sans-serif" font-size="11">Load snapshot + 500 events: ~25ms</text>
+
+  <!-- Comparison -->
+  <rect x="30" y="230" width="740" height="140" rx="10" fill="#0f3460" filter="url(#shadow)"/>
+  <text x="400" y="260" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="16" font-weight="bold">Performance Comparison</text>
+
+  <!-- Without bar -->
+  <rect x="80" y="280" width="500" height="30" rx="3" fill="#ef4444"/>
+  <text x="330" y="300" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Without Snapshot: 500ms</text>
+  <text x="600" y="300" fill="#ef4444" font-family="Arial, sans-serif" font-size="12" font-weight="bold">100%</text>
+
+  <!-- With bar -->
+  <rect x="80" y="320" width="25" height="30" rx="3" fill="#4ade80"/>
+  <text x="130" y="340" fill="#4ade80" font-family="Arial, sans-serif" font-size="11" font-weight="bold">With Snapshot: 25ms</text>
+  <text x="260" y="340" fill="#4ade80" font-family="Arial, sans-serif" font-size="12" font-weight="bold">5% (20x faster)</text>
+</svg>

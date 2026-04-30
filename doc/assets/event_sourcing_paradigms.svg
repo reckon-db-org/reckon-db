@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500">
+  <defs>
+    <linearGradient id="bgParadigms" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <filter id="shadowP" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="2" dy="3" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="900" height="500" fill="url(#bgParadigms)"/>
+
+  <!-- Title -->
+  <text x="450" y="35" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="22" font-weight="bold">Three Paradigms of Event Sourcing</text>
+
+  <!-- Entity-Centric Column -->
+  <rect x="20" y="55" width="280" height="430" rx="10" fill="#0f3460" filter="url(#shadowP)"/>
+  <text x="160" y="85" text-anchor="middle" fill="#ef4444" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Entity-Centric</text>
+  <text x="160" y="105" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="10">(Traditional DDD)</text>
+
+  <!-- Entity streams -->
+  <rect x="35" y="120" width="250" height="100" rx="5" fill="#1e3a5f"/>
+  <text x="160" y="140" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Stream per Entity</text>
+
+  <rect x="45" y="150" width="110" height="60" rx="3" fill="#2d4a6d"/>
+  <text x="100" y="168" text-anchor="middle" fill="#ef4444" font-family="monospace" font-size="9">order-123</text>
+  <text x="100" y="182" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">OrderPlaced</text>
+  <text x="100" y="194" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">ItemAdded</text>
+  <text x="100" y="206" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">OrderShipped</text>
+
+  <rect x="165" y="150" width="110" height="60" rx="3" fill="#2d4a6d"/>
+  <text x="220" y="168" text-anchor="middle" fill="#ef4444" font-family="monospace" font-size="9">user-456</text>
+  <text x="220" y="182" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">UserCreated</text>
+  <text x="220" y="194" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">ProfileUpdated</text>
+  <text x="220" y="206" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">...</text>
+
+  <!-- Mental model -->
+  <rect x="35" y="235" width="250" height="45" rx="5" fill="#1a1a2e"/>
+  <text x="160" y="255" text-anchor="middle" fill="#ef4444" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Mental Model:</text>
+  <text x="160" y="270" text-anchor="middle" fill="#aaa" font-family="Arial, sans-serif" font-size="9">"Entity has history"</text>
+
+  <!-- Cross-entity -->
+  <rect x="35" y="290" width="250" height="85" rx="5" fill="#1e3a5f"/>
+  <text x="160" y="310" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Cross-Entity Invariants:</text>
+  <text x="160" y="328" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="9">Requires Sagas</text>
+  <text x="160" y="345" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="8">+ Compensating transactions</text>
+  <text x="160" y="360" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="8">+ Complex failure handling</text>
+
+  <!-- Verdict -->
+  <rect x="35" y="385" width="250" height="85" rx="5" fill="#7f1d1d"/>
+  <text x="160" y="405" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Trade-offs:</text>
+  <text x="160" y="422" text-anchor="middle" fill="#fca5a5" font-family="Arial, sans-serif" font-size="8">+ Intuitive entity mapping</text>
+  <text x="160" y="437" text-anchor="middle" fill="#fca5a5" font-family="Arial, sans-serif" font-size="8">+ Simple concurrency</text>
+  <text x="160" y="452" text-anchor="middle" fill="#fca5a5" font-family="Arial, sans-serif" font-size="8">- Saga complexity grows</text>
+  <text x="160" y="467" text-anchor="middle" fill="#fca5a5" font-family="Arial, sans-serif" font-size="8">- Fact duplication</text>
+
+  <!-- DCB Column -->
+  <rect x="310" y="55" width="280" height="430" rx="10" fill="#0f3460" filter="url(#shadowP)"/>
+  <text x="450" y="85" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Relationship-Centric</text>
+  <text x="450" y="105" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="10">(DCB - Dynamic Consistency Boundaries)</text>
+
+  <!-- Tagged stream -->
+  <rect x="325" y="120" width="250" height="100" rx="5" fill="#1e3a5f"/>
+  <text x="450" y="140" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Single Stream + Tags</text>
+
+  <rect x="335" y="150" width="230" height="60" rx="3" fill="#2d4a6d"/>
+  <text x="450" y="168" text-anchor="middle" fill="#f59e0b" font-family="monospace" font-size="9">enrollment-context</text>
+  <text x="450" y="182" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">Enrolled [student:456, course:CS101]</text>
+  <text x="450" y="194" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">Enrolled [student:456, course:MATH]</text>
+  <text x="450" y="206" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">Enrolled [student:789, course:CS101]</text>
+
+  <!-- Mental model -->
+  <rect x="325" y="235" width="250" height="45" rx="5" fill="#1a1a2e"/>
+  <text x="450" y="255" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Mental Model:</text>
+  <text x="450" y="270" text-anchor="middle" fill="#aaa" font-family="Arial, sans-serif" font-size="9">"Facts tagged for multi-dimensional slicing"</text>
+
+  <!-- Cross-entity -->
+  <rect x="325" y="290" width="250" height="85" rx="5" fill="#1e3a5f"/>
+  <text x="450" y="310" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Cross-Entity Invariants:</text>
+  <text x="450" y="328" text-anchor="middle" fill="#4ade80" font-family="Arial, sans-serif" font-size="9">Query-based locking</text>
+  <text x="450" y="345" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="8">Check: "course:CS101" count &lt; 30</text>
+  <text x="450" y="360" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="8">Check: "student:456" count &lt; 10</text>
+
+  <!-- Verdict -->
+  <rect x="325" y="385" width="250" height="85" rx="5" fill="#78350f"/>
+  <text x="450" y="405" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Trade-offs:</text>
+  <text x="450" y="422" text-anchor="middle" fill="#fde68a" font-family="Arial, sans-serif" font-size="8">+ No sagas needed</text>
+  <text x="450" y="437" text-anchor="middle" fill="#fde68a" font-family="Arial, sans-serif" font-size="8">+ No fact duplication</text>
+  <text x="450" y="452" text-anchor="middle" fill="#fde68a" font-family="Arial, sans-serif" font-size="8">- Requires tag indexes</text>
+  <text x="450" y="467" text-anchor="middle" fill="#fde68a" font-family="Arial, sans-serif" font-size="8">- Double-query cost</text>
+
+  <!-- Process-Centric Column -->
+  <rect x="600" y="55" width="280" height="430" rx="10" fill="#0f3460" filter="url(#shadowP)"/>
+  <text x="740" y="85" text-anchor="middle" fill="#4ade80" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Process-Centric</text>
+  <text x="740" y="105" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="10">(Dossier Model - ReckonDB)</text>
+
+  <!-- Process stream -->
+  <rect x="615" y="120" width="250" height="100" rx="5" fill="#1e3a5f"/>
+  <text x="740" y="140" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Stream per Process Instance</text>
+
+  <rect x="625" y="150" width="230" height="60" rx="3" fill="#2d4a6d"/>
+  <text x="740" y="168" text-anchor="middle" fill="#4ade80" font-family="monospace" font-size="9">enrollment-req-ABC</text>
+  <text x="740" y="182" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">EnrollmentRequested</text>
+  <text x="740" y="194" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">  (captures: student courses, course students)</text>
+  <text x="740" y="206" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="7">EnrollmentCompleted</text>
+
+  <!-- Mental model -->
+  <rect x="615" y="235" width="250" height="45" rx="5" fill="#1a1a2e"/>
+  <text x="740" y="255" text-anchor="middle" fill="#4ade80" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Mental Model:</text>
+  <text x="740" y="270" text-anchor="middle" fill="#aaa" font-family="Arial, sans-serif" font-size="9">"Dossier passed desk to desk"</text>
+
+  <!-- Cross-entity -->
+  <rect x="615" y="290" width="250" height="85" rx="5" fill="#1e3a5f"/>
+  <text x="740" y="310" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Cross-Entity Invariants:</text>
+  <text x="740" y="328" text-anchor="middle" fill="#4ade80" font-family="Arial, sans-serif" font-size="9">Guards + Read Models</text>
+  <text x="740" y="345" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="8">Check projections BEFORE emit</text>
+  <text x="740" y="360" text-anchor="middle" fill="#888" font-family="Arial, sans-serif" font-size="8">Record context in dossier</text>
+
+  <!-- Verdict -->
+  <rect x="615" y="385" width="250" height="85" rx="5" fill="#14532d"/>
+  <text x="740" y="405" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Trade-offs:</text>
+  <text x="740" y="422" text-anchor="middle" fill="#bbf7d0" font-family="Arial, sans-serif" font-size="8">+ Full auditability (temporal)</text>
+  <text x="740" y="437" text-anchor="middle" fill="#bbf7d0" font-family="Arial, sans-serif" font-size="8">+ Simple implementation</text>
+  <text x="740" y="452" text-anchor="middle" fill="#bbf7d0" font-family="Arial, sans-serif" font-size="8">+ No sagas, no tag indexes</text>
+  <text x="740" y="467" text-anchor="middle" fill="#bbf7d0" font-family="Arial, sans-serif" font-size="8">- Requires read models</text>
+
+  <!-- Recommended badge -->
+  <rect x="815" y="55" width="70" height="20" rx="3" fill="#4ade80"/>
+  <text x="850" y="69" text-anchor="middle" fill="#000" font-family="Arial, sans-serif" font-size="9" font-weight="bold">RECOMMENDED</text>
+</svg>
