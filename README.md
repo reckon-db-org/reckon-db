@@ -287,7 +287,7 @@ rebar3 ct --suite=reckon_db_cluster_SUITE  # Cluster tests
 
 ## Gateway API
 
-reckon-db is accessed through [reckon-gater](https://github.com/reckon-db-org/reckon-gater), which provides the unified API for load-balanced, distributed access to event stores.
+reckon-db is accessed through [reckon-gater](https://codeberg.org/reckon-db-org/reckon-gater), which provides the unified API for load-balanced, distributed access to event stores.
 
 ### How It Works
 
@@ -322,7 +322,7 @@ See [reckon-gater](https://hex.pm/packages/reckon_gater) for complete API docume
 
 ## Related Projects
 
-- [reckon-gater](https://github.com/reckon-db-org/reckon-gater) - Gateway for distributed access
+- [reckon-gater](https://codeberg.org/reckon-db-org/reckon-gater) - Gateway for distributed access
 - [ex-esdb](https://github.com/beam-campus/ex-esdb) - Original Elixir implementation
 
 ## License
