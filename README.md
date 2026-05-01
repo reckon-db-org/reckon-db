@@ -325,6 +325,10 @@ See [reckon-gater](https://hex.pm/packages/reckon_gater) for complete API docume
 - [reckon-gater](https://codeberg.org/reckon-db-org/reckon-gater) - Gateway for distributed access
 - [ex-esdb](https://github.com/beam-campus/ex-esdb) - Original Elixir implementation
 
+## Contributing
+
+Contributors are expected to follow the project's [Generative AI use policy](docs/genai-policy.md).
+
 ## License
 
 Apache-2.0
