@@ -62,7 +62,8 @@
 %% Boundary + mixed-stream cases
 -export([
     legacy_and_integrity_events_in_same_stream/1,
-    backward_read_bypasses_verification/1,
+    backward_read_catches_tampering/1,
+    backward_read_returns_events_in_descending_order/1,
     integrity_disabled_store_bypasses_verification/1
 ]).
 
@@ -110,7 +111,8 @@ groups() ->
         ]},
         {boundary_cases, [sequence], [
             legacy_and_integrity_events_in_same_stream,
-            backward_read_bypasses_verification,
+            backward_read_catches_tampering,
+            backward_read_returns_events_in_descending_order,
             integrity_disabled_store_bypasses_verification
         ]}
     ].
@@ -450,20 +452,38 @@ legacy_and_integrity_events_in_same_stream(Config) ->
                  ChainStartEvent#event.prev_event_hash),
     ok.
 
-%% Backward reads bypass verification in 2.1.0 (documented gap).
-%% A tampered event in a backward read returns successfully.
-backward_read_bypasses_verification(Config) ->
+%% Backward reads verify the same chain as forward reads — the
+%% ordering of the returned list is the only behavioural difference.
+%% A tampered event encountered during a backward read surfaces as
+%% an integrity_violation, just like a forward read would.
+backward_read_catches_tampering(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"backward">>,
+    StreamId = <<"backward-tamper">>,
     write_n_events(StoreId, StreamId, 3),
     tamper_event(StoreId, StreamId, 1,
         fun(E) -> E#event{data = #{forged => true}} end),
 
-    %% Forward read catches it...
     ?assertMatch({error, {integrity_violation, _}},
         reckon_db_streams:read(StoreId, StreamId, 0, 10, forward)),
-    %% ...but backward read does not (known gap).
-    {ok, _} = reckon_db_streams:read(StoreId, StreamId, 2, 3, backward),
+    ?assertMatch({error, {integrity_violation, _}},
+        reckon_db_streams:read(StoreId, StreamId, 2, 3, backward)),
+    ok.
+
+%% An intact backward read returns the events highest-version-first,
+%% as the caller requested — verification works in either direction
+%% without reshaping the result-ordering contract.
+backward_read_returns_events_in_descending_order(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = <<"backward-clean">>,
+    write_n_events(StoreId, StreamId, 5),
+
+    {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 4, 3, backward),
+    ?assertEqual(3, length(Events)),
+    %% Events come back as [v4, v3, v2] — backward order preserved.
+    [?assertEqual(V, E#event.version)
+     || {V, E} <- lists:zip([4, 3, 2], Events)],
+    %% Each event still has its integrity fields populated.
+    [?assert(is_binary(E#event.prev_event_hash)) || E <- Events],
     ok.
 
 %% A store with integrity disabled bypasses verification entirely,

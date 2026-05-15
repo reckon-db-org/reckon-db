@@ -682,6 +682,14 @@ do_read_with_verify(StoreId, StreamId, StartVersion, Count, Direction, Opts) ->
     end.
 
 %% @private Apply the configured verification mode to a fresh result.
+%%
+%% Backward reads verify the same chain as forward reads by walking
+%% the result in forward order (smallest version first) and then
+%% reversing the returned list to preserve the caller's requested
+%% ordering. The chain semantics are direction-independent: every
+%% event's `prev_event_hash` must equal the chain hash of its
+%% predecessor, regardless of the order the caller chose to receive
+%% them in.
 -spec maybe_verify_events(
     atom(), binary(), non_neg_integer(), direction(), [event()], read_opts()
 ) -> {ok, [event()]} | {error, term()}.
@@ -691,20 +699,45 @@ maybe_verify_events(StoreId, StreamId, StartVersion, Direction, Events, Opts) ->
         false ->
             {ok, Events};
         true ->
-            verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode)
+            verify_in_direction(
+                StoreId, StreamId, StartVersion, Direction, Events, Mode)
     end.
 
-%% @private Verification only runs on integrity-enabled stores with
-%% forward-direction reads in 2.1.0; everything else is pass-through.
+%% @private Verification runs on integrity-enabled stores regardless
+%% of read direction. The verification surface is the same in both
+%% directions — the only difference is the result-ordering of the
+%% returned events.
 -spec verify_required(atom(), direction(), verify_mode()) -> boolean().
 verify_required(_StoreId, _Direction, skip_all) -> false;
-verify_required(StoreId, forward, _Mode) ->
-    reckon_db_integrity_key:is_enabled(StoreId);
-verify_required(_StoreId, backward, _Mode) ->
-    %% Documented gap: backward-direction chain verification deferred
-    %% past 2.1.0. The MAC alone could be checked but is not in this
-    %% release.
-    false.
+verify_required(StoreId, _Direction, _Mode) ->
+    reckon_db_integrity_key:is_enabled(StoreId).
+
+%% @private Dispatch on direction: forward verifies in place; backward
+%% reverses to forward order, verifies, and reverses the result back.
+-spec verify_in_direction(
+    atom(), binary(), non_neg_integer(), direction(), [event()], verify_mode()
+) -> {ok, [event()]} | {error, term()}.
+verify_in_direction(StoreId, StreamId, StartVersion, forward, Events, Mode) ->
+    verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode);
+verify_in_direction(StoreId, StreamId, StartVersion, backward, Events, Mode) ->
+    %% Backward reads return events highest-version-first. To verify
+    %% the chain we re-order them lowest-version-first, walk the
+    %% forward verifier, then reverse the verified list before
+    %% returning so the caller gets the ordering they asked for.
+    %% The forward verifier's `StartVersion` is the LOWEST version in
+    %% the batch, which for a backward read is the LAST event.
+    ForwardEvents = lists:reverse(Events),
+    ForwardStart = case ForwardEvents of
+        [] -> StartVersion;
+        [#event{version = V} | _] -> V
+    end,
+    case verify_events_forward(
+            StoreId, StreamId, ForwardStart, ForwardEvents, Mode) of
+        {ok, Verified} ->
+            {ok, lists:reverse(Verified)};
+        {integrity_violation, _} = Violation ->
+            Violation
+    end.
 
 %% @private Walk events in forward order, verifying each against the
 %% running chain tip. Short-circuits on the first integrity_violation.

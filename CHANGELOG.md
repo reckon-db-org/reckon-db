@@ -5,6 +5,51 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-05-15
+
+### Added — Backward-direction chain verification
+
+Closes the documented gap from 2.1.0. On integrity-enabled stores,
+`reckon_db_streams:read/5,6` now verifies the chain for backward
+reads in exactly the same way as forward reads. The only
+behavioural difference between directions is the result-ordering
+of the returned events; the chain semantics are identical.
+
+#### Implementation
+
+The verifier walks events in forward order regardless of read
+direction (the chain runs forward through time and that's the
+direction it has to be checked in). For a backward read, the
+implementation reverses the result to forward order, runs the
+forward verifier, then reverses the verified list before
+returning so the caller still sees events highest-version-first.
+
+#### Behaviour change for callers
+
+Backward reads of integrity-enabled stores that previously
+succeeded against tampered storage now return
+`{error, {integrity_violation, _}}`. This is a hardening, not
+a regression: 2.1.0's behaviour was the documented gap. Callers
+relying on the old behaviour to access tampered data deliberately
+should use the existing `Opts = #{verify => skip_all}` escape
+hatch.
+
+#### Tests
+
+`backward_read_bypasses_verification` (which had asserted the
+gap) replaced with two tests in
+`reckon_db_integrity_reads_SUITE`:
+
+- `backward_read_catches_tampering` — symmetric assertion that
+  the same tamper detected on forward reads is also detected on
+  backward reads
+- `backward_read_returns_events_in_descending_order` — intact
+  backward read returns `[v4, v3, v2]` with integrity fields
+  populated
+
+Full regression: 514 eunit + 5/21/12/4 CT (writes/reads/snapshots/
+subscriptions) = 556 tests pass.
+
 ## [2.1.0] - 2026-05-15
 
 ### Added — Tamper-resistance for events and snapshots
