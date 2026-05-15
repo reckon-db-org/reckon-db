@@ -534,6 +534,19 @@ maybe_start_catchup(StoreId, #subscription{subscriber_pid = Pid, checkpoint = Ch
     ok.
 
 %% @private Read historical events in batches and deliver to subscriber.
+%%
+%% On integrity-enabled stores, every event is MAC-verified before
+%% delivery. Cross-stream chain verification is intentionally NOT
+%% performed here — catch-up reads sort by epoch_us across all
+%% streams, so there is no single chain to walk. Per-stream chain
+%% integrity is the consumer's responsibility (Layer 6 — the evoq
+%% aggregate rebuild path does walk a single stream and can do the
+%% chain check there).
+%%
+%% A MAC failure halts catch-up and surfaces a subscription_error
+%% to the subscriber. Silently delivering a tampered event would
+%% leave the consumer's read model inconsistent with no warning,
+%% which is strictly worse than failing loudly.
 -spec do_catchup(atom(), pid(), non_neg_integer()) -> ok.
 do_catchup(StoreId, SubscriberPid, Offset) ->
     BatchSize = 500,
@@ -543,26 +556,102 @@ do_catchup(StoreId, SubscriberPid, Offset) ->
                         [StoreId, Offset]),
             ok;
         {ok, Events} ->
-            case is_local_process_alive(SubscriberPid) of
-                true ->
-                    SubscriberPid ! {events, Events},
-                    case length(Events) < BatchSize of
-                        true ->
-                            Total = Offset + length(Events),
-                            logger:info("[catchup] Store ~p: replay complete (~b events delivered)",
-                                        [StoreId, Total]),
-                            ok;
-                        false ->
-                            do_catchup(StoreId, SubscriberPid, Offset + BatchSize)
-                    end;
-                false ->
-                    logger:warning("[catchup] Store ~p: subscriber died during replay", [StoreId]),
+            case verify_catchup_batch(StoreId, Events) of
+                ok ->
+                    deliver_catchup_batch(
+                        StoreId, SubscriberPid, Offset, Events, BatchSize);
+                {error, {integrity_violation, _} = Violation} ->
+                    notify_integrity_violation(
+                        StoreId, SubscriberPid, Offset, Violation),
                     ok
             end;
         {error, Reason} ->
             logger:warning("[catchup] Store ~p: read failed at offset ~b: ~p",
                            [StoreId, Offset, Reason]),
             ok
+    end.
+
+%% @private Verify every event's MAC in the batch if integrity is
+%% enabled on the store. Per-event check only — no cross-stream chain
+%% walk. Short-circuits on first failure.
+verify_catchup_batch(StoreId, Events) ->
+    case reckon_db_integrity_key:is_enabled(StoreId) of
+        false ->
+            ok;
+        true ->
+            Key = reckon_db_integrity_key:get(StoreId),
+            verify_each_event_mac(Events, Key)
+    end.
+
+verify_each_event_mac([], _Key) ->
+    ok;
+verify_each_event_mac([Event | Rest], Key) ->
+    case verify_one_event_mac(Event, Key) of
+        ok -> verify_each_event_mac(Rest, Key);
+        {error, _} = Err -> Err
+    end.
+
+%% Legacy events have no MAC field; pass through.
+%% Integrity-bearing events must verify; otherwise short-circuit.
+verify_one_event_mac(#event{mac = undefined}, _Key) ->
+    ok;
+verify_one_event_mac(#event{mac = {_KeyId, _}} = Event, Key) ->
+    %% MAC-only check (no chain). reckon_gater_integrity:verify_event/3
+    %% requires both a chain tip and a key; we only have a key here.
+    %% Roll the MAC-only piece inline to avoid forcing the gater
+    %% module to expose a separate verifier surface.
+    Stripped = Event#event{mac = undefined, signature = undefined},
+    Bytes = reckon_gater_canonical:encode_for_mac(event, Stripped),
+    Expected = crypto:mac(hmac, sha256, Key, Bytes),
+    {_, StoredMac} = Event#event.mac,
+    case crypto:hash_equals(StoredMac, Expected) of
+        true -> ok;
+        false ->
+            {error, {integrity_violation, #{
+                layer => storage,
+                stream_id => Event#event.stream_id,
+                version => Event#event.version,
+                kind => mac_mismatch,
+                context => #{detected_at => catchup_replay}
+            }}}
+    end.
+
+%% @private Deliver a verified batch to the subscriber and continue.
+deliver_catchup_batch(StoreId, SubscriberPid, Offset, Events, BatchSize) ->
+    case is_local_process_alive(SubscriberPid) of
+        true ->
+            SubscriberPid ! {events, Events},
+            case length(Events) < BatchSize of
+                true ->
+                    Total = Offset + length(Events),
+                    logger:info(
+                        "[catchup] Store ~p: replay complete (~b events delivered)",
+                        [StoreId, Total]),
+                    ok;
+                false ->
+                    do_catchup(StoreId, SubscriberPid, Offset + BatchSize)
+            end;
+        false ->
+            logger:warning("[catchup] Store ~p: subscriber died during replay",
+                           [StoreId]),
+            ok
+    end.
+
+%% @private Notify the subscriber that catch-up halted on an
+%% integrity violation. The subscriber receives a structured message
+%% and the catch-up process exits without delivering further events.
+notify_integrity_violation(StoreId, SubscriberPid, Offset, Violation) ->
+    logger:error(
+        "[catchup] Store ~p: integrity violation at offset ~b: ~p",
+        [StoreId, Offset, Violation]),
+    telemetry:execute(
+        [reckon, db, subscription, integrity, violation],
+        #{system_time => erlang:system_time(millisecond), offset => Offset},
+        #{store_id => StoreId, subscriber_pid => SubscriberPid}
+    ),
+    case is_local_process_alive(SubscriberPid) of
+        true -> SubscriberPid ! {subscription_error, Violation};
+        false -> ok
     end.
 
 %% @private Cleanup emitter pool for a subscription
