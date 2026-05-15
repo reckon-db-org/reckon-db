@@ -20,6 +20,7 @@
     append/4,
     append/5,
     read/5,
+    read/6,
     read_all/4,
     read_all_global/3,
     read_by_event_types/3,
@@ -118,6 +119,34 @@ append(StoreId, StreamId, ExpectedVersion, Events, _Opts) ->
 -spec read(atom(), binary(), non_neg_integer(), pos_integer(), direction()) ->
     {ok, [event()]} | {error, term()}.
 read(StoreId, StreamId, StartVersion, Count, Direction) ->
+    read(StoreId, StreamId, StartVersion, Count, Direction, #{}).
+
+%% @doc Read events from a stream with explicit options.
+%%
+%% Currently supported options:
+%%
+%%   `verify' :: `skip_legacy' | `strict' | `skip_all'
+%%       Tamper-resistance enforcement mode. Default: `skip_legacy'.
+%%       - `skip_legacy' (default): events with version below the
+%%         per-stream chain_start watermark are returned untouched
+%%         (legacy data); events at or above the watermark are
+%%         verified strictly and an integrity_violation is returned
+%%         on any failure.
+%%       - `strict': every event must carry integrity fields and
+%%         verify; legacy events surface as missing_integrity.
+%%       - `skip_all': no verification (dangerous; intended for
+%%         migration tooling only).
+%%
+%% Backward-direction reads always bypass chain verification in 2.1.0;
+%% the MAC alone could still be checked but is not in this release.
+%% Forward reads receive full chain + MAC verification.
+-type verify_mode() :: skip_legacy | strict | skip_all.
+-type read_opts() :: #{verify => verify_mode()}.
+
+-spec read(
+    atom(), binary(), non_neg_integer(), pos_integer(), direction(), read_opts()
+) -> {ok, [event()]} | {error, term()}.
+read(StoreId, StreamId, StartVersion, Count, Direction, Opts) ->
     StartTime = erlang:monotonic_time(),
 
     %% Emit start telemetry
@@ -128,7 +157,8 @@ read(StoreId, StreamId, StartVersion, Count, Direction) ->
           start_version => StartVersion, count => Count, direction => Direction}
     ),
 
-    Result = do_read(StoreId, StreamId, StartVersion, Count, Direction),
+    Result = do_read_with_verify(
+        StoreId, StreamId, StartVersion, Count, Direction, Opts),
 
     Duration = erlang:monotonic_time() - StartTime,
 
@@ -469,19 +499,113 @@ append_events_to_stream(StoreId, StreamId, CurrentVersion, Events) ->
     Now = erlang:system_time(millisecond),
     EpochUs = erlang:system_time(microsecond),
 
-    FinalVersion = lists:foldl(
-        fun(Event, AccVersion) ->
+    %% Resolve the tamper-resistance context for this batch. For
+    %% stores with integrity disabled (the default and only mode
+    %% pre-2.1) this is a constant `disabled` pass-through. For
+    %% integrity-enabled stores we load the HMAC key, ensure the
+    %% per-stream watermark exists, and resolve the initial chain
+    %% tip — all once, before the per-event loop.
+    IntegrityCtx = setup_integrity(StoreId, StreamId, CurrentVersion),
+    InitialTip = resolve_initial_tip(StoreId, StreamId, CurrentVersion + 1, IntegrityCtx),
+
+    {FinalVersion, _FinalTip} = lists:foldl(
+        fun(Event, {AccVersion, AccTip}) ->
             NewVersion = AccVersion + 1,
-            RecordedEvent = create_event_record(Event, StreamId, NewVersion, Now, EpochUs),
+            RecordedEvent0 = create_event_record(
+                Event, StreamId, NewVersion, Now, EpochUs),
+            {RecordedEvent, NextTip} = apply_integrity_if_enabled(
+                RecordedEvent0, AccTip, IntegrityCtx),
             PaddedVersion = pad_version(NewVersion, ?VERSION_PADDING),
             Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
             ok = khepri:put(StoreId, Path, RecordedEvent),
-            NewVersion
+            {NewVersion, NextTip}
         end,
-        CurrentVersion,
+        {CurrentVersion, InitialTip},
         Events
     ),
     {ok, FinalVersion}.
+
+%% @private Tamper-resistance context for a single append batch.
+%%
+%% Either `disabled` (no integrity work) or
+%% `{enabled, Key, ChainStart}` carrying the HMAC key and the
+%% chain-start watermark for this stream.
+-type integrity_ctx() ::
+    disabled |
+    {enabled, Key :: binary(), ChainStart :: non_neg_integer()}.
+
+-spec setup_integrity(atom(), binary(), integer()) -> integrity_ctx().
+setup_integrity(StoreId, StreamId, CurrentVersion) ->
+    case reckon_db_integrity_key:is_enabled(StoreId) of
+        false ->
+            disabled;
+        true ->
+            NextVersion = CurrentVersion + 1,
+            {ok, ChainStart} = reckon_db_chain_watermark:set_if_absent(
+                StoreId, StreamId, NextVersion),
+            Key = reckon_db_integrity_key:get(StoreId),
+            {enabled, Key, ChainStart}
+    end.
+
+%% @private Resolve the chain-tip value that the FIRST event in this
+%% batch must reference as its `prev_event_hash`.
+%%
+%% Disabled context: tip is `undefined` (unused).
+%% Enabled, first integrity event in stream (NextVersion =:= ChainStart):
+%%   tip is the genesis 32-zero-byte value.
+%% Enabled, later batch (NextVersion > ChainStart):
+%%   tip is computed from the predecessor event on disk.
+-spec resolve_initial_tip(
+    atom(), binary(), non_neg_integer(), integrity_ctx()
+) -> binary() | undefined.
+resolve_initial_tip(_StoreId, _StreamId, _NextVersion, disabled) ->
+    undefined;
+resolve_initial_tip(_StoreId, _StreamId, NextVersion,
+                    {enabled, _Key, ChainStart})
+        when NextVersion =:= ChainStart ->
+    reckon_gater_integrity:genesis_prev_hash();
+resolve_initial_tip(StoreId, StreamId, NextVersion,
+                    {enabled, _Key, ChainStart})
+        when NextVersion > ChainStart ->
+    PrevVersion = NextVersion - 1,
+    PaddedVersion = pad_version(PrevVersion, ?VERSION_PADDING),
+    Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
+    case khepri:get(StoreId, Path) of
+        {ok, #event{prev_event_hash = PrevPrevHash} = PrevEvent}
+                when is_binary(PrevPrevHash) ->
+            reckon_gater_integrity:compute_chain_hash(PrevEvent, PrevPrevHash);
+        Other ->
+            %% Invariant violation: stream's watermark says the
+            %% predecessor should be integrity-bearing, but we cannot
+            %% find a usable predecessor. Surface fast — replay
+            %% won't be able to verify anyway.
+            erlang:error({integrity_setup_failed,
+                          #{stream_id => StreamId,
+                            looking_for_version => PrevVersion,
+                            chain_start => ChainStart,
+                            got => Other}})
+    end.
+
+%% @private Compute and attach the integrity fields for one event.
+%%
+%% Disabled context: pass-through.
+%% Enabled: set prev_event_hash to the running tip, compute MAC, then
+%% compute the next tip (= chain hash of the just-built event) for the
+%% next iteration of the fold.
+-spec apply_integrity_if_enabled(
+    event(),
+    Tip :: binary() | undefined,
+    integrity_ctx()
+) -> {event(), NextTip :: binary() | undefined}.
+apply_integrity_if_enabled(Event, _Tip, disabled) ->
+    {Event, undefined};
+apply_integrity_if_enabled(#event{} = Event, Tip, {enabled, Key, _ChainStart})
+        when is_binary(Tip) ->
+    Event1 = Event#event{prev_event_hash = Tip},
+    Mac = reckon_gater_integrity:compute_event_mac(Event1, Key),
+    Event2 = Event1#event{mac = Mac},
+    NextTip = reckon_gater_integrity:compute_chain_hash(Event2, Tip),
+    {Event2, NextTip}.
 
 %% @private
 -spec create_event_record(new_event(), binary(), non_neg_integer(), integer(), integer()) -> event().
@@ -521,15 +645,170 @@ pad_version(Version, Length) ->
     PaddedStr = lists:duplicate(Padding, $0) ++ VersionStr,
     list_to_binary(PaddedStr).
 
-%% @private
+%% @private Backward-compatible: no verification (for internal callers
+%% that have not yet adopted Opts).
 -spec do_read(atom(), binary(), non_neg_integer(), pos_integer(), direction()) ->
     {ok, [event()]} | {error, term()}.
 do_read(StoreId, StreamId, StartVersion, Count, Direction) ->
+    do_read_with_verify(
+        StoreId, StreamId, StartVersion, Count, Direction, #{verify => skip_all}).
+
+%% @private Read with verification applied per the resolved options.
+-spec do_read_with_verify(
+    atom(), binary(), non_neg_integer(), pos_integer(), direction(), read_opts()
+) -> {ok, [event()]} | {error, term()}.
+do_read_with_verify(StoreId, StreamId, StartVersion, Count, Direction, Opts) ->
     case exists(StoreId, StreamId) of
         false ->
             {error, {stream_not_found, StreamId}};
         true ->
-            read_events(StoreId, StreamId, StartVersion, Count, Direction)
+            case read_events(StoreId, StreamId, StartVersion, Count, Direction) of
+                {ok, Events} ->
+                    case maybe_verify_events(
+                            StoreId, StreamId, StartVersion, Direction,
+                            Events, Opts) of
+                        {ok, _} = Ok ->
+                            Ok;
+                        {integrity_violation, _} = Violation ->
+                            %% Wrap at the public API boundary so
+                            %% callers see {error, _}. Internal
+                            %% helpers and the gater module return
+                            %% the bare tuple.
+                            {error, Violation}
+                    end;
+                Other ->
+                    Other
+            end
+    end.
+
+%% @private Apply the configured verification mode to a fresh result.
+-spec maybe_verify_events(
+    atom(), binary(), non_neg_integer(), direction(), [event()], read_opts()
+) -> {ok, [event()]} | {error, term()}.
+maybe_verify_events(StoreId, StreamId, StartVersion, Direction, Events, Opts) ->
+    Mode = maps:get(verify, Opts, skip_legacy),
+    case verify_required(StoreId, Direction, Mode) of
+        false ->
+            {ok, Events};
+        true ->
+            verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode)
+    end.
+
+%% @private Verification only runs on integrity-enabled stores with
+%% forward-direction reads in 2.1.0; everything else is pass-through.
+-spec verify_required(atom(), direction(), verify_mode()) -> boolean().
+verify_required(_StoreId, _Direction, skip_all) -> false;
+verify_required(StoreId, forward, _Mode) ->
+    reckon_db_integrity_key:is_enabled(StoreId);
+verify_required(_StoreId, backward, _Mode) ->
+    %% Documented gap: backward-direction chain verification deferred
+    %% past 2.1.0. The MAC alone could be checked but is not in this
+    %% release.
+    false.
+
+%% @private Walk events in forward order, verifying each against the
+%% running chain tip. Short-circuits on the first integrity_violation.
+-spec verify_events_forward(
+    atom(), binary(), non_neg_integer(), [event()], verify_mode()
+) -> {ok, [event()]} | {error, term()}.
+verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode) ->
+    {ok, ChainStart} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
+    Key = reckon_db_integrity_key:get(StoreId),
+    InitialTip = resolve_read_initial_tip(
+        StoreId, StreamId, StartVersion, ChainStart),
+    verify_events_loop(Events, InitialTip, ChainStart, Key, Mode, StreamId, []).
+
+%% @private
+verify_events_loop([], _Tip, _ChainStart, _Key, _Mode, _StreamId, Acc) ->
+    {ok, lists:reverse(Acc)};
+verify_events_loop([Event | Rest], Tip, ChainStart, Key, Mode, StreamId, Acc) ->
+    case is_legacy_event(Event, ChainStart) of
+        true ->
+            handle_legacy(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc);
+        false ->
+            handle_integrity(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc)
+    end.
+
+%% @private An event is legacy if it predates the watermark (or the
+%% watermark is absent, meaning the stream never had integrity events).
+is_legacy_event(_Event, undefined) -> true;
+is_legacy_event(#event{version = V}, ChainStart) when is_integer(ChainStart) ->
+    V < ChainStart.
+
+handle_legacy(Event, Rest, Tip, ChainStart, Key, strict, StreamId, _Acc) ->
+    %% Strict mode refuses to return legacy events at all.
+    _ = Tip, _ = ChainStart, _ = Key, _ = Rest,
+    {integrity_violation, #{
+        layer => storage,
+        stream_id => StreamId,
+        version => Event#event.version,
+        kind => missing_integrity,
+        context => #{detail => legacy_event_under_strict_mode}
+    }};
+handle_legacy(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc) ->
+    %% skip_legacy: return the legacy event untouched. Emit telemetry
+    %% so operators can monitor remediation progress.
+    telemetry:execute(
+        [reckon, db, read, legacy_event_returned],
+        #{system_time => erlang:system_time(millisecond)},
+        #{store_id_hint => StreamId, version => Event#event.version}
+    ),
+    verify_events_loop(Rest, Tip, ChainStart, Key, Mode, StreamId, [Event | Acc]).
+
+handle_integrity(Event, Rest, undefined, ChainStart, Key, Mode, StreamId, Acc)
+        when is_integer(ChainStart),
+             is_record(Event, event),
+             Event#event.version =:= ChainStart ->
+    %% Mid-read transition from legacy region to integrity region: the
+    %% first integrity-bearing event in a stream was written with
+    %% prev_event_hash = genesis. Seed the running tip accordingly so
+    %% the verifier has a concrete value to compare against.
+    Genesis = reckon_gater_integrity:genesis_prev_hash(),
+    handle_integrity(Event, Rest, Genesis, ChainStart, Key, Mode, StreamId, Acc);
+handle_integrity(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc)
+        when is_binary(Tip) ->
+    case reckon_gater_integrity:verify_event(Event, Tip, Key) of
+        ok ->
+            NextTip = reckon_gater_integrity:compute_chain_hash(Event, Tip),
+            verify_events_loop(
+                Rest, NextTip, ChainStart, Key, Mode, StreamId,
+                [Event | Acc]);
+        {integrity_violation, _} = Violation ->
+            Violation
+    end.
+
+%% @private Resolve the chain tip that the FIRST event in the returned
+%% batch should reference as its `prev_event_hash`.
+%%
+%% - undefined watermark or StartVersion < watermark: legacy-only;
+%%   the running tip is irrelevant (verification won't be called).
+%% - StartVersion == watermark: tip = genesis (this is the first
+%%   integrity-bearing event in the stream).
+%% - StartVersion > watermark: tip = chain_hash of the event at
+%%   (StartVersion - 1), which must itself be integrity-bearing.
+-spec resolve_read_initial_tip(
+    atom(), binary(), non_neg_integer(), non_neg_integer() | undefined
+) -> binary() | undefined.
+resolve_read_initial_tip(_StoreId, _StreamId, _StartVersion, undefined) ->
+    undefined;
+resolve_read_initial_tip(_StoreId, _StreamId, StartVersion, ChainStart)
+        when StartVersion < ChainStart ->
+    undefined;
+resolve_read_initial_tip(_StoreId, _StreamId, StartVersion, ChainStart)
+        when StartVersion =:= ChainStart ->
+    reckon_gater_integrity:genesis_prev_hash();
+resolve_read_initial_tip(StoreId, StreamId, StartVersion, _ChainStart)
+        when StartVersion > 0 ->
+    PrevVersion = StartVersion - 1,
+    PaddedVersion = pad_version(PrevVersion, ?VERSION_PADDING),
+    Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
+    case khepri:get(StoreId, Path) of
+        {ok, #event{prev_event_hash = PrevPrevHash} = PrevEvent}
+                when is_binary(PrevPrevHash) ->
+            reckon_gater_integrity:compute_chain_hash(PrevEvent, PrevPrevHash);
+        _ ->
+            %% No usable predecessor; legacy regime in practice.
+            undefined
     end.
 
 %% @private

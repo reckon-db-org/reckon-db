@@ -25,6 +25,13 @@
 -define(SUBSCRIPTIONS_PATH, [subscriptions]).
 -define(METADATA_PATH, [metadata]).
 
+%% Per-stream tamper-resistance watermark (2.1.0+).
+%% Path: [metadata, integrity, chain_start, StreamId] -> non_neg_integer()
+%% Records the version at which integrity-bearing writes began for that
+%% stream. Events with version < watermark are pre-integrity legacy;
+%% events at or above the watermark must carry prev_event_hash + mac.
+-define(INTEGRITY_CHAIN_START_PATH, [metadata, integrity, chain_start]).
+
 %%====================================================================
 %% Default Values
 %%====================================================================
@@ -65,8 +72,25 @@
     gateway_pool_size = ?DEFAULT_GATEWAY_POOL_SIZE :: pos_integer(),
 
     %% Additional options
-    options = #{} :: map()
+    options = #{} :: map(),
+
+    %% Tamper-resistance configuration (introduced in 2.1.0).
+    %% - `disabled`            : no integrity fields on writes; reads
+    %%                           treat all events as legacy. Default.
+    %% - #{enabled := true,
+    %%    key_source := Src}   : enable HMAC + chain on writes;
+    %%                           Src = {env_var, binary()} |
+    %%                                 {sealed_file, file:filename()}.
+    integrity = disabled :: integrity_config()
 }).
+
+-type integrity_key_source() ::
+    {env_var, EnvName :: binary()} |
+    {sealed_file, Path :: file:filename()}.
+
+-type integrity_config() ::
+    disabled |
+    #{enabled := true, key_source := integrity_key_source()}.
 
 -type store_config() :: #store_config{}.
 

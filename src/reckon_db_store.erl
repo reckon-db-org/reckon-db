@@ -95,28 +95,46 @@ init(#store_config{store_id = StoreId, data_dir = DataDir, mode = Mode} = Config
             %% Initialize store paths
             ok = init_store_paths(StoreId),
 
-            %% Emit telemetry
-            telemetry:execute(
-                ?STORE_STARTED,
-                #{system_time => StartTime},
-                #{store_id => StoreId, mode => Mode, data_dir => DataDir}
-            ),
-
-            logger:info("Khepri store ~p started in ~p mode", [StoreId, Mode]),
-
-            %% Announce store to the distributed registry
-            ok = reckon_db_store_registry:announce_store(StoreId, Config),
-
-            State = #state{
-                store_id = StoreId,
-                config = Config,
-                started_at = StartTime
-            },
-            {ok, State};
+            %% Load tamper-resistance HMAC key into persistent_term.
+            %% If integrity is enabled but the key cannot be loaded
+            %% (missing env var, bad base64, wrong file mode, wrong
+            %% size, etc.) the store refuses to start. This is
+            %% deliberate fail-fast — a misconfigured key would
+            %% silently leave the store unable to write or verify
+            %% events, which is strictly worse than not starting.
+            case reckon_db_integrity_key:load(Config) of
+                ok ->
+                    do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime);
+                {error, KeyReason} = KeyError ->
+                    logger:error(
+                        "Failed to load integrity key for store ~p: ~p",
+                        [StoreId, KeyReason]),
+                    {stop, KeyError}
+            end;
         {error, Reason} = Error ->
             logger:error("Failed to start Khepri store ~p: ~p", [StoreId, Reason]),
             {stop, Error}
     end.
+
+%% @private
+do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime) ->
+    telemetry:execute(
+        ?STORE_STARTED,
+        #{system_time => StartTime},
+        #{store_id => StoreId, mode => Mode, data_dir => DataDir}
+    ),
+
+    logger:info("Khepri store ~p started in ~p mode", [StoreId, Mode]),
+
+    %% Announce store to the distributed registry
+    ok = reckon_db_store_registry:announce_store(StoreId, Config),
+
+    State = #state{
+        store_id = StoreId,
+        config = Config,
+        started_at = StartTime
+    },
+    {ok, State}.
 
 %% @private
 handle_call(get_state, _From, State) ->
@@ -146,6 +164,11 @@ terminate(Reason, #state{store_id = StoreId, started_at = StartedAt}) ->
         #{system_time => erlang:system_time(millisecond), uptime_ms => Uptime},
         #{store_id => StoreId, reason => Reason}
     ),
+
+    %% Clear tamper-resistance state from persistent_term so a future
+    %% reincarnation of this store ID does not inherit stale key
+    %% material.
+    catch reckon_db_integrity_key:clear(StoreId),
 
     %% Stop Khepri store
     case khepri:stop(StoreId) of
