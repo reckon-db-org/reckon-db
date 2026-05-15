@@ -28,7 +28,7 @@ Add to your `rebar.config`:
 
 ```erlang
 {deps, [
-    {reckon_db, "1.0.0"}
+    {reckon_db, "2.1.0"}
 ]}.
 ```
 

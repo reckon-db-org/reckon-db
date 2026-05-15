@@ -5,6 +5,145 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-05-15
+
+### Added — Tamper-resistance for events and snapshots
+
+Implements Layers 2–5 of the cross-package design in
+`plans/PLAN_TAMPER_RESISTANCE.md`. Reckon-db now writes
+HMAC-protected, chain-hashed events when integrity is enabled
+on a store, and verifies them on every read surface.
+
+Requires `reckon_gater >= 2.1.0` for the schema and
+verification primitives.
+
+#### Configuration
+
+`#store_config{}` gains an `integrity` field (default `disabled`).
+To enable:
+
+```erlang
+#store_config{
+    %% ... existing fields ...
+    integrity = #{
+        enabled => true,
+        key_source => {env_var, <<"RECKON_DB_KEY_MY_STORE">>}
+        %% or: {sealed_file, "/path/to/key"}  (mode 0600 required)
+    }
+}
+```
+
+Keys are 32 random bytes (HMAC-SHA256). Loaded into
+`persistent_term` at store startup; cleared on shutdown.
+Misconfiguration (missing env, bad base64, insecure file mode,
+wrong size) is fail-fast — the store refuses to start.
+
+#### Write path (Layer 2)
+
+- `reckon_db_streams:append/4,5` populates `prev_event_hash` + `mac`
+  on every event when integrity is enabled.
+- New per-stream watermark stored under
+  `[metadata, integrity, chain_start, StreamId]`. Set on the first
+  integrity-bearing append to a stream. Events with version below
+  the watermark stay legacy; events at or above must carry
+  integrity fields.
+- Pre-existing legacy streams gain a watermark equal to
+  `current_highest_version + 1` on first integrity write — legacy
+  data is preserved untouched.
+
+#### Read path (Layer 3)
+
+- New `reckon_db_streams:read/6` accepts an `Opts` map with
+  `verify => skip_legacy | strict | skip_all`. Default
+  `skip_legacy` for backward compatibility.
+- Forward reads on integrity-enabled stores verify each event's
+  MAC and chain link against a running tip. Failure surfaces as
+  `{error, {integrity_violation, _}}` — non-retriable, distinct
+  from `wrong_expected_version`.
+- Backward reads bypass chain verification in 2.1.0 (documented
+  gap; MAC-only check possible in future).
+- New telemetry event `[reckon, db, read, legacy_event_returned]`
+  fires when legacy events are returned under `skip_legacy`, for
+  operator remediation tracking.
+
+#### Snapshot path (Layer 4)
+
+- `reckon_db_snapshots:save/4,5` populates `anchor_hash` (chain
+  hash of the event at the snapshot's version) + `mac` when
+  integrity is enabled.
+- `load/2` and `load_at/3` recompute the chain hash from the
+  underlying event at load time and verify against the stored
+  anchor. Detects post-snapshot stream tampering even when the
+  snapshot itself is intact — the headline property this layer
+  provides over MAC alone.
+- Save refused when no event exists at the target version or
+  when the target event is legacy — a snapshot whose anchor
+  cannot be established is unverifiable and worse than no
+  snapshot.
+
+#### Subscription catch-up (Layer 5)
+
+- `reckon_db_subscriptions:do_catchup/3` MAC-verifies each
+  integrity-bearing event before delivery. Cross-stream chain
+  verification is intentionally NOT performed here (catch-up
+  reads sort by `epoch_us` across all streams; per-stream chain
+  integrity belongs at the consumer / aggregate-rebuild layer).
+- Tampered event during catch-up halts replay and sends
+  `{subscription_error, {integrity_violation, _}}` to the
+  subscriber. Emits `[reckon, db, subscription, integrity, violation]`
+  telemetry.
+- Live events come from the write path with integrity fields
+  already populated — no emitter-side change needed.
+
+#### New modules
+
+- `reckon_db_integrity_key` — per-store HMAC key loader with
+  validation (32-byte size, base64 decode, file mode 0600).
+- `reckon_db_chain_watermark` — per-stream watermark CRUD against
+  the metadata tree.
+
+#### Tests
+
+41 new Common Test cases plus 12 new eunit tests across four
+suites:
+
+- `reckon_db_integrity_key_tests` (12 eunit)
+- `reckon_db_integrity_writes_SUITE` (5 CT)
+- `reckon_db_integrity_reads_SUITE` (20 CT, 5 groups)
+- `reckon_db_integrity_snapshots_SUITE` (12 CT, 2 groups)
+- `reckon_db_integrity_subscriptions_SUITE` (4 CT)
+
+Full regression: 514 eunit + 41 integrity CT pass with zero
+existing-test regressions.
+
+### Fixed
+
+- `src/reckon_db_log_backend.erl` — converted 11 `@doc` tags on
+  `-callback` declarations to plain `%%` comments. EDoc strict
+  rules disallow `@doc` before `-callback`; the previous shape
+  broke `rebar3 ex_doc` and would have blocked hex publication.
+  Text content preserved verbatim.
+
+### Changed
+
+- `src/reckon_db.app.src` — `{links, [{"GitHub", ...}]}` updated
+  to `{"Codeberg", ...}` to match canonical hosting.
+- `?RECKON_DB_VERSION` macro in `include/reckon_db.hrl` synchronised
+  with the package version (was `1.7.2`, now `2.1.0`).
+- `README.md` install snippet bumped from `1.0.0` to `2.1.0`.
+
+### Out of scope (deferred)
+
+- Backward-direction read chain verification.
+- Cross-stream chain reconstruction on catch-up (per-event MAC
+  only at that surface).
+- Ed25519 signatures for cross-trust-domain authenticity. The
+  `signature` field is reserved on the schema but not populated;
+  external authenticity is currently absent over the
+  reckon-gateway wire.
+- Key rotation. The `key_id` slot is reserved (`{1, MacBytes}`
+  shape); 2.1.0 always writes `key_id = 1`.
+
 ## [2.0.0] - 2026-04-19
 
 ### Changed
