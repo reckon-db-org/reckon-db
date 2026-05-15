@@ -64,7 +64,7 @@ save(StoreId, StreamId, Version, Data) ->
 save(StoreId, StreamId, Version, Data, Metadata) ->
     StartTime = erlang:monotonic_time(),
 
-    Snapshot = #snapshot{
+    Snapshot0 = #snapshot{
         stream_id = StreamId,
         version = Version,
         data = Data,
@@ -72,39 +72,44 @@ save(StoreId, StreamId, Version, Data, Metadata) ->
         timestamp = erlang:system_time(millisecond)
     },
 
-    Result = reckon_db_snapshots_store:put(StoreId, Snapshot),
+    %% Apply integrity if enabled on this store. For an
+    %% integrity-disabled store this is a pass-through; for an
+    %% integrity-enabled store this populates anchor_hash + mac
+    %% so a subsequent load can verify the snapshot AND that the
+    %% underlying stream's chain at this version is unchanged.
+    case apply_snapshot_integrity(StoreId, StreamId, Version, Snapshot0) of
+        {ok, Snapshot} ->
+            Result = reckon_db_snapshots_store:put(StoreId, Snapshot),
+            emit_save_telemetry(Result, StartTime, StoreId, StreamId, Version, Data),
+            Result;
+        {error, _} = Err ->
+            logger:warning("Refusing to save snapshot: store=~p, stream=~s, "
+                           "version=~p, reason=~p",
+                           [StoreId, StreamId, Version, Err]),
+            Err
+    end.
 
-    %% Emit telemetry
-    case Result of
-        ok ->
-            DataSize = estimate_size(Data),
-            Duration = erlang:monotonic_time() - StartTime,
-            telemetry:execute(
-                ?SNAPSHOT_CREATED,
-                #{system_time => erlang:system_time(millisecond),
-                  size_bytes => DataSize, duration => Duration},
-                #{store_id => StoreId, stream_id => StreamId, version => Version}
-            ),
-            logger:debug("Snapshot saved: store=~p, stream=~s, version=~p",
-                        [StoreId, StreamId, Version]);
-        {error, Reason} ->
-            logger:warning("Failed to save snapshot: store=~p, stream=~s, version=~p, reason=~p",
-                          [StoreId, StreamId, Version, Reason])
-    end,
-
-    Result.
-
-%% @doc Load the latest snapshot for a stream
+%% @doc Load the latest snapshot for a stream.
 %%
-%% Returns {ok, Snapshot} if found, {error, not_found} otherwise.
--spec load(atom(), binary()) -> {ok, snapshot()} | {error, not_found}.
+%% Returns {ok, Snapshot} if found and integrity-valid.
+%% Returns {error, not_found} if no snapshot exists.
+%% Returns {error, {integrity_violation, _}} if the store has
+%% integrity enabled and the loaded snapshot fails verification.
+%% Callers (typically aggregate rebuild) should treat an integrity
+%% violation as a directive to fall back to full event replay from
+%% the stream's chain_start_version watermark.
+-spec load(atom(), binary()) ->
+    {ok, snapshot()} | {error, not_found} | {error, term()}.
 load(StoreId, StreamId) ->
     StartTime = erlang:monotonic_time(),
 
-    Result = case reckon_db_snapshots_store:get_latest(StoreId, StreamId) of
-        undefined -> {error, not_found};
-        Snapshot -> {ok, Snapshot}
-    end,
+    Result =
+        case reckon_db_snapshots_store:get_latest(StoreId, StreamId) of
+            undefined ->
+                {error, not_found};
+            Snapshot ->
+                maybe_verify_snapshot_on_load(StoreId, StreamId, Snapshot)
+        end,
 
     Duration = erlang:monotonic_time() - StartTime,
 
@@ -123,12 +128,17 @@ load(StoreId, StreamId) ->
 
     Result.
 
-%% @doc Load a specific snapshot version
--spec load_at(atom(), binary(), non_neg_integer()) -> {ok, snapshot()} | {error, not_found}.
+%% @doc Load a specific snapshot version.
+%%
+%% Same verification semantics as load/2.
+-spec load_at(atom(), binary(), non_neg_integer()) ->
+    {ok, snapshot()} | {error, not_found} | {error, term()}.
 load_at(StoreId, StreamId, Version) ->
     case reckon_db_snapshots_store:get(StoreId, StreamId, Version) of
-        undefined -> {error, not_found};
-        Snapshot -> {ok, Snapshot}
+        undefined ->
+            {error, not_found};
+        Snapshot ->
+            maybe_verify_snapshot_on_load(StoreId, StreamId, Snapshot)
     end.
 
 %% @doc List all snapshots for a stream
@@ -169,3 +179,138 @@ estimate_size(Data) when is_map(Data) ->
     byte_size(term_to_binary(Data));
 estimate_size(Data) ->
     byte_size(term_to_binary(Data)).
+
+%% @private Emit save-side telemetry, mirroring the original
+%% telemetry/logging behaviour now that the save path branches on
+%% integrity outcome.
+emit_save_telemetry(ok, StartTime, StoreId, StreamId, Version, Data) ->
+    DataSize = estimate_size(Data),
+    Duration = erlang:monotonic_time() - StartTime,
+    telemetry:execute(
+        ?SNAPSHOT_CREATED,
+        #{system_time => erlang:system_time(millisecond),
+          size_bytes => DataSize, duration => Duration},
+        #{store_id => StoreId, stream_id => StreamId, version => Version}
+    ),
+    logger:debug("Snapshot saved: store=~p, stream=~s, version=~p",
+                 [StoreId, StreamId, Version]);
+emit_save_telemetry({error, Reason}, _StartTime, StoreId, StreamId, Version, _Data) ->
+    logger:warning(
+        "Failed to save snapshot: store=~p, stream=~s, version=~p, reason=~p",
+        [StoreId, StreamId, Version, Reason]).
+
+%%====================================================================
+%% Tamper-resistance — save side
+%%====================================================================
+
+%% @private Apply snapshot integrity if enabled on the store.
+%%
+%% For integrity-disabled stores: returns the snapshot unchanged.
+%%
+%% For integrity-enabled stores: computes the anchor_hash (the chain
+%% hash of the event at the snapshot's version) by reading that event
+%% from storage, then computes the snapshot MAC over the snapshot
+%% record with both fields populated. The resulting snapshot is what
+%% gets persisted.
+%%
+%% If integrity is enabled but the event at the snapshot version is
+%% not present or not integrity-bearing, the save is refused: a
+%% snapshot whose anchor cannot be established would be unverifiable
+%% at load time and is strictly worse than no snapshot at all.
+-spec apply_snapshot_integrity(
+    atom(), binary(), non_neg_integer(), snapshot()
+) -> {ok, snapshot()} | {error, term()}.
+apply_snapshot_integrity(StoreId, StreamId, Version, Snapshot) ->
+    case reckon_db_integrity_key:is_enabled(StoreId) of
+        false ->
+            {ok, Snapshot};
+        true ->
+            case compute_event_chain_hash(StoreId, StreamId, Version) of
+                {ok, AnchorHash} ->
+                    Key = reckon_db_integrity_key:get(StoreId),
+                    Snapshot1 = Snapshot#snapshot{anchor_hash = AnchorHash},
+                    Mac = reckon_gater_integrity:compute_snapshot_mac(
+                        Snapshot1, Key),
+                    {ok, Snapshot1#snapshot{mac = Mac}};
+                {error, _} = Err ->
+                    Err
+            end
+    end.
+
+%%====================================================================
+%% Tamper-resistance — load side
+%%====================================================================
+
+%% @private Run snapshot verification if integrity is enabled on the
+%% store AND the snapshot itself carries integrity fields. Returns
+%% {ok, Snapshot} unchanged in all other cases (the snapshot is
+%% treated as legacy data).
+maybe_verify_snapshot_on_load(StoreId, StreamId,
+                              #snapshot{version = Version} = Snapshot) ->
+    case should_verify_snapshot(StoreId, Snapshot) of
+        false ->
+            {ok, Snapshot};
+        true ->
+            case compute_event_chain_hash(StoreId, StreamId, Version) of
+                {ok, ActualAnchor} ->
+                    Key = reckon_db_integrity_key:get(StoreId),
+                    case reckon_gater_integrity:verify_snapshot(
+                            Snapshot, ActualAnchor, Key) of
+                        ok ->
+                            {ok, Snapshot};
+                        {integrity_violation, _} = Violation ->
+                            emit_load_violation_telemetry(
+                                StoreId, StreamId, Version, Violation),
+                            {error, Violation}
+                    end;
+                {error, _} = Err ->
+                    Err
+            end
+    end.
+
+should_verify_snapshot(StoreId, Snapshot) ->
+    reckon_db_integrity_key:is_enabled(StoreId)
+        andalso (not reckon_gater_integrity:is_legacy_snapshot(Snapshot)).
+
+emit_load_violation_telemetry(StoreId, StreamId, Version, _Violation) ->
+    telemetry:execute(
+        [reckon, db, snapshot, integrity, violation],
+        #{system_time => erlang:system_time(millisecond)},
+        #{store_id => StoreId, stream_id => StreamId, version => Version}
+    ).
+
+%%====================================================================
+%% Tamper-resistance — shared helper
+%%====================================================================
+
+%% @private Read the event at (StreamId, Version) and compute its
+%% chain hash. Returns {ok, Hash32} on success.
+%%
+%% Used by both save (to capture the anchor at snapshot time) and
+%% load (to verify that the anchor still matches). Bypasses the
+%% verifying read in reckon_db_streams because we want the raw
+%% record - if the stream itself has been tampered, the anchor
+%% comparison will catch it.
+compute_event_chain_hash(StoreId, StreamId, Version) ->
+    PaddedVersion = pad_version_for_event(Version),
+    Path = [streams, StreamId, PaddedVersion],
+    case khepri:get(StoreId, Path) of
+        {ok, #event{prev_event_hash = PrevHash} = Event}
+                when is_binary(PrevHash) ->
+            {ok, reckon_gater_integrity:compute_chain_hash(Event, PrevHash)};
+        {ok, #event{prev_event_hash = undefined}} ->
+            {error, {snapshot_anchor_unavailable,
+                     #{stream_id => StreamId,
+                       version => Version,
+                       reason => event_is_legacy}}};
+        _Other ->
+            {error, {snapshot_anchor_unavailable,
+                     #{stream_id => StreamId,
+                       version => Version,
+                       reason => event_not_found}}}
+    end.
+
+pad_version_for_event(Version) ->
+    VersionStr = integer_to_list(Version),
+    Padding = ?VERSION_PADDING - length(VersionStr),
+    list_to_binary(lists:duplicate(Padding, $0) ++ VersionStr).
