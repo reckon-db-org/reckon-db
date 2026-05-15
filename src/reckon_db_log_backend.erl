@@ -1,4 +1,4 @@
-%% @doc Behaviour for pluggable event-log backends.
+%% Behaviour for pluggable event-log backends.
 %%
 %% This is the HOT PATH contract. An implementation owns the append-only
 %% event log — how events are written to disk, how they are indexed,
@@ -117,7 +117,7 @@
 %% Lifecycle callbacks
 %% ------------------------------------------------------------------
 
-%% @doc Initialize a backend instance for a store.
+%% Initialize a backend instance for a store.
 %%
 %% `Opts' is backend-specific. Minimum expected keys:
 %%   - `store_id' :: store_id()
@@ -128,10 +128,10 @@
 -callback init(Opts :: map()) ->
     {ok, state()} | {error, Reason :: term()}.
 
-%% @doc Flush and close. Called on orderly shutdown.
+%% Flush and close. Called on orderly shutdown.
 -callback close(state()) -> ok.
 
-%% @doc Health check. Returns `ok' if the backend is serving requests,
+%% Health check. Returns `ok' if the backend is serving requests,
 %% `{error, Reason}' if degraded. The supervisor uses this to decide
 %% restart vs escalation.
 -callback health(state()) -> ok | {error, term()}.
@@ -140,7 +140,7 @@
 %% Write path
 %% ------------------------------------------------------------------
 
-%% @doc Append events to a single stream with optimistic concurrency.
+%% Append events to a single stream with optimistic concurrency.
 %%
 %% Returns `{ok, NewVersion}' where `NewVersion' is the version of the
 %% LAST event appended (0-based). On success the version monotonically
@@ -166,7 +166,7 @@
 %% Read path
 %% ------------------------------------------------------------------
 
-%% @doc Read a range of events from one stream.
+%% Read a range of events from one stream.
 %%
 %%   - `StartVersion' — 0-based. For `backward', start from this version
 %%     and read down.
@@ -181,7 +181,7 @@
 ) ->
     {ok, [event()]} | {error, term()}.
 
-%% @doc Read across all streams in global-offset order.
+%% Read across all streams in global-offset order.
 %%
 %% Every event has an implicit global offset (the `$all' stream in
 %% EventStoreDB terms). `Offset' is 0-based; events are returned in
@@ -214,7 +214,7 @@
 %% Optional callbacks
 %% ------------------------------------------------------------------
 
-%% @doc Atomic multi-stream append. Implementations that support cross-
+%% Atomic multi-stream append. Implementations that support cross-
 %% stream transactions return per-stream results. Implementations that
 %% don't should OMIT this callback — the facade will fall back to N
 %% serial `append_events/4' calls.
@@ -225,17 +225,17 @@
     {ok, [{stream_id(), {ok, version()} | {error, term()}}]}
     | {error, term()}.
 
-%% @doc Truncate a stream at/below a version. Used by scavenge and
+%% Truncate a stream at/below a version. Used by scavenge and
 %% retention policies. Implementations without truncation support
 %% should OMIT this callback.
 -callback truncate_stream(state(), stream_id(), version()) ->
     ok | {error, term()}.
 
-%% @doc Compact / scavenge the log. Backend-specific — RocksDB compacts
+%% Compact / scavenge the log. Backend-specific — RocksDB compacts
 %% LSM levels; a custom append-only engine rewrites segments.
 -callback compact(state()) -> ok | {error, term()}.
 
-%% @doc Total on-disk size in bytes, for observability. Best-effort.
+%% Total on-disk size in bytes, for observability. Best-effort.
 -callback disk_bytes(state()) -> {ok, non_neg_integer()} | {error, term()}.
 
 -optional_callbacks([

@@ -8,7 +8,7 @@
     <meta name="project" content="reckon_db v2.0.0">
 
 
-    <title>reckon_db_app — reckon_db v2.0.0</title>
+    <title>reckon_db_chain_watermark — reckon_db v2.0.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
@@ -93,7 +93,7 @@ reckon_db
 <div id="top-content">
   <div class="heading-with-actions top-heading">
     <h1>
-      <span translate="no">reckon_db_app</span> 
+      <span translate="no">reckon_db_chain_watermark</span> 
       <small class="app-vsn" translate="no">(reckon_db v2.0.0)</small>
 
     </h1>
@@ -107,7 +107,7 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Application behaviour for reckon-db</p>
+<p>Per-stream chain-start watermark for the tamper-resistance migration story.</p><p>Each stream that has ever held integrity-bearing events records the version at which integrity began. Events with version below the watermark are pre-integrity legacy; events at or above must carry prev_event_hash + mac.</p><h3 id="module-storage" class="section-heading"><a href="#module-storage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Storage">Storage</a></span></h3><p>Watermark lives in Khepri under [metadata, integrity, chain_start, StreamId] (the macro ?INTEGRITY_CHAIN_START_PATH from reckon_db.hrl, plus the stream ID). Value is a single non_neg_integer().</p><h3 id="module-lazy-enablement" class="section-heading"><a href="#module-lazy-enablement" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Lazy_enablement">Lazy enablement</a></span></h3><p>The watermark is created on the first integrity-bearing append to a stream. There is no explicit &quot;enable integrity on this stream&quot; operation - the act of appending under a store with integrity enabled implicitly sets the watermark if it does not already exist.</p><p>For a fresh stream (never had any events) this means the watermark is set to 0 when the first event is written.</p><p>For an existing legacy stream (events 0..N-1 already stored) being appended to for the first time AFTER integrity was enabled on the store, the watermark is set to N - the version that the new event is about to take. The first N legacy events stay legacy.</p><h3 id="module-read-side-use" class="section-heading"><a href="#module-read-side-use" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Read-side_use">Read-side use</a></span></h3><p>The read path consults the watermark to decide whether to verify integrity on an event. This module's responsibility ends at read/write of the watermark itself; verification logic lives in reckon_gater_integrity.</p>
     </section>
 
 </div>
@@ -126,21 +126,31 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#start/0" data-no-tooltip="" translate="no">start()</a>
+        <a href="#delete/2" data-no-tooltip="" translate="no">delete(StoreId, StreamId)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Start the reckon_db application</p></div>
+        <div class="summary-synopsis"><p>Delete a stream's watermark.</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#stop/0" data-no-tooltip="" translate="no">stop()</a>
+        <a href="#lookup/2" data-no-tooltip="" translate="no">lookup(StoreId, StreamId)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Stop the reckon_db application</p></div>
+        <div class="summary-synopsis"><p>Read the chain-start version for a stream.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#set_if_absent/3" data-no-tooltip="" translate="no">set_if_absent(StoreId, StreamId, Version)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Set the chain-start watermark for a stream if not already set.</p></div>
 
     </div>
 
@@ -158,14 +168,14 @@ reckon_db
     </h1>
 
     <div class="functions-list">
-<section class="detail" id="start/0">
+<section class="detail" id="delete/2">
 
   <div class="detail-header">
-    <a href="#start/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#delete/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">start()</h1>
+      <h1 class="signature" translate="no">delete(StoreId, StreamId)</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -179,21 +189,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> start() -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> delete(StoreId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), StreamId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> ok.</pre>
 
       </div>
 
-<p>Start the reckon_db application</p>
+<p>Delete a stream's watermark.</p><p>Used only when deleting the entire stream - the watermark is part of the stream's metadata and should not outlive it. Best-effort: any error is swallowed since this should never block stream deletion itself.</p>
   </section>
 </section>
-<section class="detail" id="stop/0">
+<section class="detail" id="lookup/2">
 
   <div class="detail-header">
-    <a href="#stop/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#lookup/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">stop()</h1>
+      <h1 class="signature" translate="no">lookup(StoreId, StreamId)</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -207,11 +217,40 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> stop() -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> lookup(StoreId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), StreamId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>() | undefined}.</pre>
 
       </div>
 
-<p>Stop the reckon_db application</p>
+<p>Read the chain-start version for a stream.</p><p>Returns the version at which integrity began for the stream, or 'undefined' if no watermark has been recorded (i.e., the stream has never had an integrity-bearing append).</p>
+  </section>
+</section>
+<section class="detail" id="set_if_absent/3">
+
+  <div class="detail-header">
+    <a href="#set_if_absent/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">set_if_absent(StoreId, StreamId, Version)</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> set_if_absent(StoreId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), StreamId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), Version :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()) ->
+                       {ok, RecordedVersion :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()}.</pre>
+
+      </div>
+
+<p>Set the chain-start watermark for a stream if not already set.</p><p>Returns the version that ended up recorded - either the value passed in (this call set it), or the value that was already present (a concurrent call set it first).</p><p>This function intentionally tolerates write-write races: multiple writers attempting to set the same watermark all converge on the same outcome, because the writer's &quot;next version about to write&quot; is itself serialized by reckon-db's per-stream append ordering. If two concurrent writers somehow both reach this code path with the same NextVersion, the watermark ends up equal to NextVersion regardless of who won.</p>
   </section>
 </section>
 

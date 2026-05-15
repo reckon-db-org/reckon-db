@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-7E229343.js"></script>
+    <script defer src="dist/sidebar_items-EC08F47B.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -98,7 +98,7 @@ reckon_db
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L12" title="View Source" class="icon-action" rel="help">
+      <a href="https://codeberg.org/reckon-db-org/reckon-db" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -142,7 +142,31 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
+        <a href="#t:integrity_ctx/0" data-no-tooltip="" translate="no">integrity_ctx/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
         <a href="#t:new_event/0" data-no-tooltip="" translate="no">new_event/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:read_opts/0" data-no-tooltip="" translate="no">read_opts/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:verify_mode/0" data-no-tooltip="" translate="no">verify_mode/0</a>
 
       </div>
 
@@ -234,6 +258,16 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
+        <a href="#read/6" data-no-tooltip="" translate="no">read(StoreId, StreamId, StartVersion, Count, Direction, Opts)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Read events from a stream with explicit options.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
         <a href="#read_all/4" data-no-tooltip="" translate="no">read_all(StoreId, StreamId, BatchSize, Direction)</a>
 
       </div>
@@ -296,7 +330,7 @@ reckon_db
       <h1 class="signature" translate="no">direction/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L52" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -324,7 +358,7 @@ reckon_db
       <h1 class="signature" translate="no">event/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/_build/default/lib/reckon_gater/include/reckon_gater_types.hrl#L76" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -346,7 +380,38 @@ reckon_db
                  timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
                  epoch_us :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
                  data_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
-                 metadata_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+                 metadata_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 prev_event_hash :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined,
+                 mac :: {KeyId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(), MacBytes :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} | undefined,
+                 signature :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:integrity_ctx/0">
+
+  <div class="detail-header">
+    <a href="#t:integrity_ctx/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">integrity_ctx/0</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> integrity_ctx() :: disabled | {enabled, Key :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), ChainStart :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()}.</pre>
 
       </div>
 
@@ -363,7 +428,7 @@ reckon_db
       <h1 class="signature" translate="no">new_event/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L44" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -380,6 +445,62 @@ reckon_db
             metadata => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
             tags => [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()],
             event_id => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:read_opts/0">
+
+  <div class="detail-header">
+    <a href="#t:read_opts/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">read_opts/0</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> read_opts() :: #{verify => <a href="#t:verify_mode/0">verify_mode</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:verify_mode/0">
+
+  <div class="detail-header">
+    <a href="#t:verify_mode/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">verify_mode/0</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> verify_mode() :: skip_legacy | strict | skip_all.</pre>
 
       </div>
 
@@ -409,7 +530,7 @@ reckon_db
       <h1 class="signature" translate="no">append(StoreId, StreamId, ExpectedVersion, Events)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L70" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -437,7 +558,7 @@ reckon_db
       <h1 class="signature" translate="no">append(StoreId, StreamId, ExpectedVersion, Events, Opts)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L75" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -466,7 +587,7 @@ reckon_db
       <h1 class="signature" translate="no">delete(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L427" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -494,7 +615,7 @@ reckon_db
       <h1 class="signature" translate="no">exists(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L381" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -522,7 +643,7 @@ reckon_db
       <h1 class="signature" translate="no">get_version(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L371" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -550,7 +671,7 @@ reckon_db
       <h1 class="signature" translate="no">has_events(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L394" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -578,7 +699,7 @@ reckon_db
       <h1 class="signature" translate="no">list_streams(StoreId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L402" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -606,7 +727,7 @@ reckon_db
       <h1 class="signature" translate="no">read(StoreId, StreamId, StartVersion, Count, Direction)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L120" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -625,6 +746,35 @@ reckon_db
 <p>Read events from a stream</p><p>Parameters: StoreId - The store identifier StreamId - The stream identifier StartVersion - Starting version (0-based) Count - Maximum number of events to read Direction - forward or backward</p><p>Returns {ok, [Event]} or {error, Reason}</p>
   </section>
 </section>
+<section class="detail" id="read/6">
+
+  <div class="detail-header">
+    <a href="#read/6" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">read(StoreId, StreamId, StartVersion, Count, Direction, Opts)</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> read(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(), <a href="#t:direction/0">direction</a>(), <a href="#t:read_opts/0">read_opts</a>()) ->
+              {ok, [<a href="#t:event/0">event</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Read events from a stream with explicit options.</p><p>Currently supported options:</p><p><code>verify</code> :: <code>skip_legacy</code> | <code>strict</code> | <code>skip_all</code> Tamper-resistance enforcement mode. Default: <code>skip_legacy</code>. - <code>skip_legacy</code> (default): events with version below the per-stream chain_start watermark are returned untouched (legacy data); events at or above the watermark are verified strictly and an integrity_violation is returned on any failure. - <code>strict</code>: every event must carry integrity fields and verify; legacy events surface as missing_integrity. - <code>skip_all</code>: no verification (dangerous; intended for migration tooling only).</p><p>Backward-direction reads always bypass chain verification in 2.1.0; the MAC alone could still be checked but is not in this release. Forward reads receive full chain + MAC verification.</p>
+  </section>
+</section>
 <section class="detail" id="read_all/4">
 
   <div class="detail-header">
@@ -635,7 +785,7 @@ reckon_db
       <h1 class="signature" translate="no">read_all(StoreId, StreamId, BatchSize, Direction)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L151" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -663,7 +813,7 @@ reckon_db
       <h1 class="signature" translate="no">read_all_global(StoreId, Offset, BatchSize)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L168" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -691,7 +841,7 @@ reckon_db
       <h1 class="signature" translate="no">read_by_event_types(StoreId, EventTypes, BatchSize)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L204" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -719,7 +869,7 @@ reckon_db
       <h1 class="signature" translate="no">read_by_tags(StoreId, Tags, Match, BatchSize)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_streams.erl#L287" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 

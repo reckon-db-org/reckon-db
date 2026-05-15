@@ -8,7 +8,7 @@
     <meta name="project" content="reckon_db v2.0.0">
 
 
-    <title>reckon_db_sup — reckon_db v2.0.0</title>
+    <title>reckon_db_subscription_backend — reckon_db v2.0.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
@@ -47,7 +47,7 @@ reckon_db
 
 <output role="status" id="toast"></output>
 
-<main class="content page-module" id="main" data-type="modules">
+<main class="content page-behaviour" id="main" data-type="modules">
   <div id="content" class="content-inner">
     <div class="top-search">
       <div class="search-settings">
@@ -93,7 +93,7 @@ reckon_db
 <div id="top-content">
   <div class="heading-with-actions top-heading">
     <h1>
-      <span translate="no">reckon_db_sup</span> 
+      <span translate="no">reckon_db_subscription_backend</span> <small>behaviour</small>
       <small class="app-vsn" translate="no">(reckon_db v2.0.0)</small>
 
     </h1>
@@ -107,7 +107,7 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Top-level supervisor for reckon-db</p><p>This supervisor manages all store instances configured in the application environment. Each store gets its own system supervisor subtree.</p>
+<p>Behaviour for pluggable subscription-state backends.</p><p>Subscription checkpoints track WHERE each consumer is in a stream (or global log). They are written frequently — every ack — but are small and not latency-critical. Most storage backends can handle them fine; the behaviour exists so that a backend can choose whether to keep checkpoints in its own store or delegate to the Khepri control plane.</p><p>The default implementation (<code>reckon_db_khepri_subscription_backend</code>) stores checkpoints in Khepri. This is the natural fit — subscription state IS a control-plane concern, and Ra consensus on checkpoints is exactly what you want for &quot;don't replay already-acknowledged events on leader failover.&quot;</p><p>Fast log backends (RocksDB, custom) will typically implement <code>reckon_db_log_backend</code> but NOT this — they defer to the Khepri implementation. Having the behaviour explicit makes the split clean.</p>
     </section>
 
 </div>
@@ -126,7 +126,7 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#t:integrity_config/0" data-no-tooltip="" translate="no">integrity_config/0</a>
+        <a href="#t:state/0" data-no-tooltip="" translate="no">state/0</a>
 
       </div>
 
@@ -134,63 +134,79 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#t:integrity_key_source/0" data-no-tooltip="" translate="no">integrity_key_source/0</a>
-
-      </div>
-
-    </div>
-
-    <div class="summary-row">
-      <div class="summary-signature">
-        <a href="#t:store_config/0" data-no-tooltip="" translate="no">store_config/0</a>
+        <a href="#t:subscription/0" data-no-tooltip="" translate="no">subscription/0</a>
 
       </div>
 
     </div>
 
 </div>
-<div class="summary-functions summary">
+<div class="summary-callbacks summary">
   <h2>
-    <a href="#functions">Functions</a>
+    <a href="#callbacks">Callbacks</a>
   </h2>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#start_link/0" data-no-tooltip="" translate="no">start_link()</a>
+        <a href="#c:ack/4" data-no-tooltip="" translate="no">ack/4</a>
 
       </div>
-
-        <div class="summary-synopsis"><p>Start the top-level supervisor</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#start_store/1" data-no-tooltip="" translate="no">start_store(StoreId)</a>
+        <a href="#c:close/1" data-no-tooltip="" translate="no">close/1</a>
 
       </div>
-
-        <div class="summary-synopsis"><p>Start a store dynamically</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#stop_store/1" data-no-tooltip="" translate="no">stop_store(StoreId)</a>
+        <a href="#c:exists/2" data-no-tooltip="" translate="no">exists/2</a>
 
       </div>
-
-        <div class="summary-synopsis"><p>Stop a store dynamically</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#which_stores/0" data-no-tooltip="" translate="no">which_stores()</a>
+        <a href="#c:get/2" data-no-tooltip="" translate="no">get/2</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Get list of running stores</p></div>
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:init/1" data-no-tooltip="" translate="no">init/1</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:list/1" data-no-tooltip="" translate="no">list/1</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:remove/3" data-no-tooltip="" translate="no">remove/3</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:save/4" data-no-tooltip="" translate="no">save/4</a>
+
+      </div>
 
     </div>
 
@@ -208,14 +224,14 @@ reckon_db
     </h1>
 
     <div class="types-list">
-<section class="detail" id="t:integrity_config/0">
+<section class="detail" id="t:state/0">
 
   <div class="detail-header">
-    <a href="#t:integrity_config/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+    <a href="#t:state/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">integrity_config/0</h1>
+      <h1 class="signature" translate="no">state/0</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -229,21 +245,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-type</span> integrity_config() :: disabled | #{enabled := true, key_source := <a href="#t:integrity_key_source/0">integrity_key_source</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-type</span> state() :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>().</pre>
 
       </div>
 
 
   </section>
 </section>
-<section class="detail" id="t:integrity_key_source/0">
+<section class="detail" id="t:subscription/0">
 
   <div class="detail-header">
-    <a href="#t:integrity_key_source/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+    <a href="#t:subscription/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">integrity_key_source/0</h1>
+      <h1 class="signature" translate="no">subscription/0</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -257,44 +273,12 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-type</span> integrity_key_source() :: {env_var, EnvName :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} | {sealed_file, Path :: <a href="https://www.erlang.org/doc/apps/kernel/file.html#t:filename/0">file:filename</a>()}.</pre>
-
-      </div>
-
-
-  </section>
-</section>
-<section class="detail" id="t:store_config/0">
-
-  <div class="detail-header">
-    <a href="#t:store_config/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
-      <i class="ri-link-m" aria-hidden="true"></i>
-    </a>
-    <div class="heading-with-actions">
-      <h1 class="signature" translate="no">store_config/0</h1>
-
-
-        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
-          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
-        </a>
-
-    </div>
-  </div>
-
-  <section class="docstring">
-
-      <div class="specs">
-
-          <pre translate="no"><span class="attribute">-type</span> store_config() ::
-          #store_config{store_id :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(),
-                        data_dir :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:string/0">string</a>(),
-                        mode :: single | cluster,
-                        timeout :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
-                        writer_pool_size :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
-                        reader_pool_size :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
-                        gateway_pool_size :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
-                        options :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
-                        integrity :: <a href="#t:integrity_config/0">integrity_config</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-type</span> subscription() ::
+          #{name := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+            selector := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(),
+            checkpoint := <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
+            consumer_pid => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>() | undefined,
+            metadata => <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()}.</pre>
 
       </div>
 
@@ -305,23 +289,23 @@ reckon_db
     </div>
   </section>
 
-  <section id="functions" class="details-list">
+  <section id="callbacks" class="details-list">
     <h1 class="section-heading">
-      <a class="hover-link" href="#functions">
+      <a class="hover-link" href="#callbacks">
         <i class="ri-link-m" aria-hidden="true"></i>
       </a>
-      <span class="text">Functions</span>
+      <span class="text">Callbacks</span>
     </h1>
 
-    <div class="functions-list">
-<section class="detail" id="start_link/0">
+    <div class="callbacks-list">
+<section class="detail" id="c:ack/4">
 
   <div class="detail-header">
-    <a href="#start_link/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#c:ack/4" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">start_link()</h1>
+      <h1 class="signature" translate="no">ack/4</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -335,21 +319,22 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> start_link() -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-callback</span> ack(<a href="#t:state/0">state</a>(), Name :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), Selector :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(), Checkpoint :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()) ->
+                 ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Start the top-level supervisor</p>
+
   </section>
 </section>
-<section class="detail" id="start_store/1">
+<section class="detail" id="c:close/1">
 
   <div class="detail-header">
-    <a href="#start_store/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#c:close/1" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">start_store(StoreId)</h1>
+      <h1 class="signature" translate="no">close/1</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -363,21 +348,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> start_store(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>() | <a href="#t:store_config/0">store_config</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-callback</span> close(<a href="#t:state/0">state</a>()) -> ok.</pre>
 
       </div>
 
-<p>Start a store dynamically</p>
+
   </section>
 </section>
-<section class="detail" id="stop_store/1">
+<section class="detail" id="c:exists/2">
 
   <div class="detail-header">
-    <a href="#stop_store/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#c:exists/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">stop_store(StoreId)</h1>
+      <h1 class="signature" translate="no">exists/2</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -391,21 +376,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> stop_store(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-callback</span> exists(<a href="#t:state/0">state</a>(), Name :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
 
       </div>
 
-<p>Stop a store dynamically</p>
+
   </section>
 </section>
-<section class="detail" id="which_stores/0">
+<section class="detail" id="c:get/2">
 
   <div class="detail-header">
-    <a href="#which_stores/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#c:get/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">which_stores()</h1>
+      <h1 class="signature" translate="no">get/2</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -419,11 +404,123 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> which_stores() -> [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()].</pre>
+          <pre translate="no"><span class="attribute">-callback</span> get(<a href="#t:state/0">state</a>(), Name :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> {ok, <a href="#t:subscription/0">subscription</a>()} | {error, not_found} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Get list of running stores</p>
+
+  </section>
+</section>
+<section class="detail" id="c:init/1">
+
+  <div class="detail-header">
+    <a href="#c:init/1" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">init/1</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-callback</span> init(Opts :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()) -> {ok, <a href="#t:state/0">state</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="c:list/1">
+
+  <div class="detail-header">
+    <a href="#c:list/1" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">list/1</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-callback</span> list(<a href="#t:state/0">state</a>()) -> {ok, [<a href="#t:subscription/0">subscription</a>()]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="c:remove/3">
+
+  <div class="detail-header">
+    <a href="#c:remove/3" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">remove/3</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-callback</span> remove(<a href="#t:state/0">state</a>(), Selector :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(), Name :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="c:save/4">
+
+  <div class="detail-header">
+    <a href="#c:save/4" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">save/4</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-callback</span> save(<a href="#t:state/0">state</a>(), Selector :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>(), Name :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), Data :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
   </section>
 </section>
 

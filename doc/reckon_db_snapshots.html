@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-7E229343.js"></script>
+    <script defer src="dist/sidebar_items-EC08F47B.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -98,7 +98,7 @@ reckon_db
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L16" title="View Source" class="icon-action" rel="help">
+      <a href="https://codeberg.org/reckon-db-org/reckon-db" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -210,7 +210,7 @@ reckon_db
 
       </div>
 
-        <div class="summary-synopsis"><p>Load the latest snapshot for a stream</p></div>
+        <div class="summary-synopsis"><p>Load the latest snapshot for a stream.</p></div>
 
     </div>
 
@@ -220,7 +220,7 @@ reckon_db
 
       </div>
 
-        <div class="summary-synopsis"><p>Load a specific snapshot version</p></div>
+        <div class="summary-synopsis"><p>Load a specific snapshot version.</p></div>
 
     </div>
 
@@ -268,7 +268,7 @@ reckon_db
       <h1 class="signature" translate="no">snapshot/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/_build/default/lib/reckon_gater/include/reckon_gater_types.hrl#L156" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -284,7 +284,9 @@ reckon_db
                     version :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
                     data :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
                     metadata :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
-                    timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>()}.</pre>
+                    timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
+                    anchor_hash :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined,
+                    mac :: {KeyId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(), MacBytes :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} | undefined}.</pre>
 
       </div>
 
@@ -301,7 +303,7 @@ reckon_db
       <h1 class="signature" translate="no">snapshot_data/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L38" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -329,7 +331,7 @@ reckon_db
       <h1 class="signature" translate="no">snapshot_metadata/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L39" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -370,7 +372,7 @@ reckon_db
       <h1 class="signature" translate="no">delete(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L141" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -398,7 +400,7 @@ reckon_db
       <h1 class="signature" translate="no">delete_at(StoreId, StreamId, Version)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L146" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -426,7 +428,7 @@ reckon_db
       <h1 class="signature" translate="no">exists(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L151" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -454,7 +456,7 @@ reckon_db
       <h1 class="signature" translate="no">exists_at(StoreId, StreamId, Version)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L156" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -482,7 +484,7 @@ reckon_db
       <h1 class="signature" translate="no">list(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L136" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -510,7 +512,7 @@ reckon_db
       <h1 class="signature" translate="no">load(StoreId, StreamId)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L101" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -521,11 +523,11 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> load(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> {ok, <a href="#t:snapshot/0">snapshot</a>()} | {error, not_found}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> load(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> {ok, <a href="#t:snapshot/0">snapshot</a>()} | {error, not_found} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Load the latest snapshot for a stream</p><p>Returns {ok, Snapshot} if found, {error, not_found} otherwise.</p>
+<p>Load the latest snapshot for a stream.</p><p>Returns {ok, Snapshot} if found and integrity-valid. Returns {error, not_found} if no snapshot exists. Returns {error, {integrity_violation, _}} if the store has integrity enabled and the loaded snapshot fails verification. Callers (typically aggregate rebuild) should treat an integrity violation as a directive to fall back to full event replay from the stream's chain_start_version watermark.</p>
   </section>
 </section>
 <section class="detail" id="load_at/3">
@@ -538,7 +540,7 @@ reckon_db
       <h1 class="signature" translate="no">load_at(StoreId, StreamId, Version)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L128" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -549,11 +551,12 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> load_at(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()) -> {ok, <a href="#t:snapshot/0">snapshot</a>()} | {error, not_found}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> load_at(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()) ->
+                 {ok, <a href="#t:snapshot/0">snapshot</a>()} | {error, not_found} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Load a specific snapshot version</p>
+<p>Load a specific snapshot version.</p><p>Same verification semantics as load/2.</p>
   </section>
 </section>
 <section class="detail" id="save/4">
@@ -566,7 +569,7 @@ reckon_db
       <h1 class="signature" translate="no">save(StoreId, StreamId, Version, Data)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L58" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -594,7 +597,7 @@ reckon_db
       <h1 class="signature" translate="no">save(StoreId, StreamId, Version, Data, Metadata)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_snapshots.erl#L64" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 

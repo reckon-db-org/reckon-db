@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-7E229343.js"></script>
+    <script defer src="dist/sidebar_items-EC08F47B.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -98,7 +98,7 @@ reckon_db
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_gateway_sup.erl#L23" title="View Source" class="icon-action" rel="help">
+      <a href="https://codeberg.org/reckon-db-org/reckon-db" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -123,6 +123,22 @@ reckon_db
   <h2>
     <a href="#types">Types</a>
   </h2>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:integrity_config/0" data-no-tooltip="" translate="no">integrity_config/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:integrity_key_source/0" data-no-tooltip="" translate="no">integrity_key_source/0</a>
+
+      </div>
+
+    </div>
 
     <div class="summary-row">
       <div class="summary-signature">
@@ -162,6 +178,62 @@ reckon_db
     </h1>
 
     <div class="types-list">
+<section class="detail" id="t:integrity_config/0">
+
+  <div class="detail-header">
+    <a href="#t:integrity_config/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">integrity_config/0</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> integrity_config() :: disabled | #{enabled := true, key_source := <a href="#t:integrity_key_source/0">integrity_key_source</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:integrity_key_source/0">
+
+  <div class="detail-header">
+    <a href="#t:integrity_key_source/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">integrity_key_source/0</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> integrity_key_source() :: {env_var, EnvName :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} | {sealed_file, Path :: <a href="https://www.erlang.org/doc/apps/kernel/file.html#t:filename/0">file:filename</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
 <section class="detail" id="t:store_config/0">
 
   <div class="detail-header">
@@ -172,7 +244,7 @@ reckon_db
       <h1 class="signature" translate="no">store_config/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/_build/default/lib/reckon_db/include/reckon_db.hrl#L71" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -191,7 +263,8 @@ reckon_db
                         writer_pool_size :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
                         reader_pool_size :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
                         gateway_pool_size :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pos_integer/0">pos_integer</a>(),
-                        options :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()}.</pre>
+                        options :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
+                        integrity :: <a href="#t:integrity_config/0">integrity_config</a>()}.</pre>
 
       </div>
 
@@ -221,7 +294,7 @@ reckon_db
       <h1 class="signature" translate="no">start_link(Store_config)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_gateway_sup.erl#L40" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 

@@ -37,8 +37,8 @@ dist/lato-latin-700-normal-2XVSBPG4.woff2
 dist/lato-latin-ext-400-normal-N27NCBWW.woff2
 dist/lato-latin-ext-700-normal-Q2L5DVMW.woff2
 dist/remixicon-QPNJX265.woff2
-dist/search_data-3330E54A.js
-dist/sidebar_items-7E229343.js
+dist/search_data-AA21B2BD.js
+dist/sidebar_items-EC08F47B.js
 event_sourcing.html
 event_sourcing_paradigms.html
 index.html
@@ -54,6 +54,7 @@ reckon_db_archive_nif.html
 reckon_db_backpressure.html
 reckon_db_capability_verifier.html
 reckon_db_causation.html
+reckon_db_chain_watermark.html
 reckon_db_cluster_sup.html
 reckon_db_config.html
 reckon_db_consistency_checker.html
@@ -71,10 +72,12 @@ reckon_db_gateway_worker.html
 reckon_db_graph_nif.html
 reckon_db_hash_nif.html
 reckon_db_health_prober.html
+reckon_db_integrity_key.html
 reckon_db_leader.html
 reckon_db_leader_sup.html
 reckon_db_leader_tracker.html
 reckon_db_links.html
+reckon_db_log_backend.html
 reckon_db_memory.html
 reckon_db_naming.html
 reckon_db_node_monitor.html
@@ -84,6 +87,7 @@ reckon_db_persistence_worker.html
 reckon_db_revocation.html
 reckon_db_scavenge.html
 reckon_db_schema.html
+reckon_db_snapshot_backend.html
 reckon_db_snapshots.html
 reckon_db_snapshots_store.html
 reckon_db_store.html
@@ -95,6 +99,7 @@ reckon_db_streams.html
 reckon_db_streams_reader.html
 reckon_db_streams_sup.html
 reckon_db_streams_writer.html
+reckon_db_subscription_backend.html
 reckon_db_subscription_health.html
 reckon_db_subscriptions.html
 reckon_db_subscriptions_store.html

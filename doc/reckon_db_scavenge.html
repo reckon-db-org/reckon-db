@@ -12,7 +12,7 @@
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-7E229343.js"></script>
+    <script defer src="dist/sidebar_items-EC08F47B.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -98,7 +98,7 @@ reckon_db
 
     </h1>
 
-      <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_scavenge.erl#L20" title="View Source" class="icon-action" rel="help">
+      <a href="https://codeberg.org/reckon-db-org/reckon-db" title="View Source" class="icon-action" rel="help">
         <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         <span class="sr-only">View Source</span>
       </a>
@@ -218,7 +218,7 @@ reckon_db
       <h1 class="signature" translate="no">event/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/_build/default/lib/reckon_gater/include/reckon_gater_types.hrl#L76" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -240,7 +240,10 @@ reckon_db
                  timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
                  epoch_us :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
                  data_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
-                 metadata_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}.</pre>
+                 metadata_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
+                 prev_event_hash :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined,
+                 mac :: {KeyId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(), MacBytes :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} | undefined,
+                 signature :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined}.</pre>
 
       </div>
 
@@ -257,7 +260,7 @@ reckon_db
       <h1 class="signature" translate="no">scavenge_opts/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_scavenge.erl#L36" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -290,7 +293,7 @@ reckon_db
       <h1 class="signature" translate="no">scavenge_result/0</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_scavenge.erl#L44" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -336,7 +339,7 @@ reckon_db
       <h1 class="signature" translate="no">archive_and_scavenge(StoreId, StreamId, _, Opts)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_scavenge.erl#L114" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -365,7 +368,7 @@ reckon_db
       <h1 class="signature" translate="no">dry_run(StoreId, StreamId, Opts)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_scavenge.erl#L142" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -393,7 +396,7 @@ reckon_db
       <h1 class="signature" translate="no">scavenge(StoreId, StreamId, Opts)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_scavenge.erl#L81" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 
@@ -409,11 +412,11 @@ reckon_db
       </div>
 
 <p>Scavenge a single stream.</p><p>Deletes old events based on the provided options. By default, requires a snapshot to exist (safety measure).</p><p>Options: - <code>before`: Delete events with epoch_us before this timestamp - `before_version`: Delete events before this version (alternative to `before`) - `keep_versions`: Always keep at least N latest versions (default: 0) - `require_snapshot`: Require snapshot exists (default: true) - `dry_run`: Preview only, don</code>t delete (default: false)</p><p>Example:</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Delete events older than 1 year, keep last 10 versions</span><span class="w">
-  </span><span class="n">OneYearAgo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">erlang</span><span class="p">:</span><span class="nf">system_time</span><span class="p" data-group-id="6349934605-1">(</span><span class="ss">microsecond</span><span class="p" data-group-id="6349934605-1">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p" data-group-id="6349934605-2">(</span><span class="mi">365</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">24</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000000</span><span class="p" data-group-id="6349934605-2">)</span><span class="p">,</span><span class="w">
-  </span><span class="p" data-group-id="6349934605-3">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Result</span><span class="p" data-group-id="6349934605-3">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_scavenge</span><span class="p">:</span><span class="nf">scavenge</span><span class="p" data-group-id="6349934605-4">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6349934605-5">&lt;&lt;</span><span class="s">&quot;orders-123&quot;</span><span class="p" data-group-id="6349934605-5">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6349934605-6">#{</span><span class="w">
+  </span><span class="n">OneYearAgo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">erlang</span><span class="p">:</span><span class="nf">system_time</span><span class="p" data-group-id="0790608103-1">(</span><span class="ss">microsecond</span><span class="p" data-group-id="0790608103-1">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p" data-group-id="0790608103-2">(</span><span class="mi">365</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">24</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000000</span><span class="p" data-group-id="0790608103-2">)</span><span class="p">,</span><span class="w">
+  </span><span class="p" data-group-id="0790608103-3">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Result</span><span class="p" data-group-id="0790608103-3">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_scavenge</span><span class="p">:</span><span class="nf">scavenge</span><span class="p" data-group-id="0790608103-4">(</span><span class="ss">my_store</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="0790608103-5">&lt;&lt;</span><span class="s">&quot;orders-123&quot;</span><span class="p" data-group-id="0790608103-5">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="0790608103-6">#{</span><span class="w">
       </span><span class="ss">before</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="n">OneYearAgo</span><span class="p">,</span><span class="w">
       </span><span class="ss">keep_versions</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="mi">10</span><span class="w">
-  </span><span class="p" data-group-id="6349934605-6">}</span><span class="p" data-group-id="6349934605-4">)</span><span class="p">.</span></code></pre>
+  </span><span class="p" data-group-id="0790608103-6">}</span><span class="p" data-group-id="0790608103-4">)</span><span class="p">.</span></code></pre>
   </section>
 </section>
 <section class="detail" id="scavenge_matching/3">
@@ -426,7 +429,7 @@ reckon_db
       <h1 class="signature" translate="no">scavenge_matching(StoreId, Pattern, Opts)</h1>
 
 
-        <a href="https://github.com/reckon-db-org/reckon-db/blob/v2.0.0/src/reckon_db_scavenge.erl#L97" class="icon-action" rel="help" aria-label="View Source">
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
           <i class="ri-code-s-slash-line" aria-hidden="true"></i>
         </a>
 

@@ -8,7 +8,7 @@
     <meta name="project" content="reckon_db v2.0.0">
 
 
-    <title>reckon_db_sup — reckon_db v2.0.0</title>
+    <title>reckon_db_integrity_key — reckon_db v2.0.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
@@ -93,7 +93,7 @@ reckon_db
 <div id="top-content">
   <div class="heading-with-actions top-heading">
     <h1>
-      <span translate="no">reckon_db_sup</span> 
+      <span translate="no">reckon_db_integrity_key</span> 
       <small class="app-vsn" translate="no">(reckon_db v2.0.0)</small>
 
     </h1>
@@ -107,7 +107,7 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Top-level supervisor for reckon-db</p><p>This supervisor manages all store instances configured in the application environment. Each store gets its own system supervisor subtree.</p>
+<p>Per-store HMAC key loader for the tamper-resistance layer.</p><p>Loads the integrity HMAC key for a store at startup, validates it, and stores it under a persistent_term key so the write/read paths can access it without process-state coupling. Refuses to start the store if integrity is configured but the key cannot be loaded.</p><h3 id="module-key-sources" class="section-heading"><a href="#module-key-sources" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Key_sources">Key sources</a></span></h3><p>Two sources supported in 2.1.0, in priority order:</p><ol><li>Environment variable: {env_var, &lt;&lt;&quot;VAR_NAME&quot;&gt;&gt;} - value is base64-decoded into the key bytes.</li><li>Sealed file: {sealed_file, &quot;/path/to/key&quot;} - file mode must be 0600 (refused otherwise); content read raw (no encoding).</li></ol><p>A future 2.2.0 release will add Vault/KMS providers and per-store keyrings for rotation; the {env_var, _} and {sealed_file, _} sources will remain supported.</p><h3 id="module-validation" class="section-heading"><a href="#module-validation" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Validation">Validation</a></span></h3><p>The key must be exactly 32 bytes (256 bits) after decoding. Anything else is a configuration error and the load fails. This matches the standard HMAC-SHA256 key size.</p><h3 id="module-storage" class="section-heading"><a href="#module-storage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Storage">Storage</a></span></h3><p>The loaded key is placed in persistent_term under the key {reckon_db, integrity_key, StoreId}. The integrity_enabled flag is placed under {reckon_db, integrity_enabled, StoreId} as a boolean. Callers should NOT read the key directly via persistent_term - they should use get/1 to keep the lookup pattern stable.</p><p>The key never appears in logs, error tuples, telemetry events, or process state dumps. This is enforced by convention; reviewers should reject any code that violates it.</p>
     </section>
 
 </div>
@@ -142,6 +142,14 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
+        <a href="#t:load_error/0" data-no-tooltip="" translate="no">load_error/0</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
         <a href="#t:store_config/0" data-no-tooltip="" translate="no">store_config/0</a>
 
       </div>
@@ -156,41 +164,41 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#start_link/0" data-no-tooltip="" translate="no">start_link()</a>
+        <a href="#clear/1" data-no-tooltip="" translate="no">clear(StoreId)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Start the top-level supervisor</p></div>
+        <div class="summary-synopsis"><p>Remove all integrity state for a store from persistent_term.</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#start_store/1" data-no-tooltip="" translate="no">start_store(StoreId)</a>
+        <a href="#get/1" data-no-tooltip="" translate="no">get(StoreId)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Start a store dynamically</p></div>
+        <div class="summary-synopsis"><p>Retrieve the loaded HMAC key for a store.</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#stop_store/1" data-no-tooltip="" translate="no">stop_store(StoreId)</a>
+        <a href="#is_enabled/1" data-no-tooltip="" translate="no">is_enabled(StoreId)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Stop a store dynamically</p></div>
+        <div class="summary-synopsis"><p>Whether integrity is enabled for a store.</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#which_stores/0" data-no-tooltip="" translate="no">which_stores()</a>
+        <a href="#load/1" data-no-tooltip="" translate="no">load(Store_config)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Get list of running stores</p></div>
+        <div class="summary-synopsis"><p>Load the integrity key for a store at startup.</p></div>
 
     </div>
 
@@ -264,6 +272,39 @@ reckon_db
 
   </section>
 </section>
+<section class="detail" id="t:load_error/0">
+
+  <div class="detail-header">
+    <a href="#t:load_error/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">load_error/0</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> load_error() ::
+          {error, {integrity_key_invalid_size, ActualBytes :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()}} |
+          {error, {integrity_key_env_var_not_set, EnvName :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}} |
+          {error, {integrity_key_env_var_not_base64, EnvName :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()}} |
+          {error, {integrity_key_file_not_readable, Path :: <a href="https://www.erlang.org/doc/apps/kernel/file.html#t:filename/0">file:filename</a>(), Reason :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}} |
+          {error, {integrity_key_file_insecure_mode, Path :: <a href="https://www.erlang.org/doc/apps/kernel/file.html#t:filename/0">file:filename</a>(), Mode :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>()}}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
 <section class="detail" id="t:store_config/0">
 
   <div class="detail-header">
@@ -314,14 +355,14 @@ reckon_db
     </h1>
 
     <div class="functions-list">
-<section class="detail" id="start_link/0">
+<section class="detail" id="clear/1">
 
   <div class="detail-header">
-    <a href="#start_link/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#clear/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">start_link()</h1>
+      <h1 class="signature" translate="no">clear(StoreId)</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -335,21 +376,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> start_link() -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> clear(StoreId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> ok.</pre>
 
       </div>
 
-<p>Start the top-level supervisor</p>
+<p>Remove all integrity state for a store from persistent_term.</p><p>Intended for store shutdown and for test isolation. Production code should not call this in the hot path.</p>
   </section>
 </section>
-<section class="detail" id="start_store/1">
+<section class="detail" id="get/1">
 
   <div class="detail-header">
-    <a href="#start_store/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#get/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">start_store(StoreId)</h1>
+      <h1 class="signature" translate="no">get(StoreId)</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -363,21 +404,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> start_store(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>() | <a href="#t:store_config/0">store_config</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> get(StoreId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined.</pre>
 
       </div>
 
-<p>Start a store dynamically</p>
+<p>Retrieve the loaded HMAC key for a store.</p><p>Returns the key binary if integrity is enabled and the key is loaded; returns 'undefined' if integrity is disabled for the store or the key has not been loaded (which should never happen if startup ordering is correct).</p><p>Callers in the write/read path call this on every operation; the persistent_term lookup is sub-microsecond.</p>
   </section>
 </section>
-<section class="detail" id="stop_store/1">
+<section class="detail" id="is_enabled/1">
 
   <div class="detail-header">
-    <a href="#stop_store/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#is_enabled/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">stop_store(StoreId)</h1>
+      <h1 class="signature" translate="no">is_enabled(StoreId)</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -391,21 +432,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> stop_store(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> is_enabled(StoreId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
 
       </div>
 
-<p>Stop a store dynamically</p>
+<p>Whether integrity is enabled for a store.</p><p>Reads a separate persistent_term flag so callers can quickly short-circuit on the disabled-store case without inspecting the (sensitive) key binary.</p>
   </section>
 </section>
-<section class="detail" id="which_stores/0">
+<section class="detail" id="load/1">
 
   <div class="detail-header">
-    <a href="#which_stores/0" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#load/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">which_stores()</h1>
+      <h1 class="signature" translate="no">load(Store_config)</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -419,11 +460,11 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> which_stores() -> [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()].</pre>
+          <pre translate="no"><span class="attribute">-spec</span> load(<a href="#t:store_config/0">store_config</a>()) -> ok | <a href="#t:load_error/0">load_error</a>().</pre>
 
       </div>
 
-<p>Get list of running stores</p>
+<p>Load the integrity key for a store at startup.</p><p>Reads the store config, and if integrity is enabled, fetches the key from the configured source, validates it, and installs it in persistent_term. Idempotent: re-loading a store overwrites the previously-loaded key.</p><p>Returns 'ok' on success (including the case where integrity is disabled - nothing to do), or a structured error.</p>
   </section>
 </section>
 

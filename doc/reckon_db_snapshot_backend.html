@@ -8,7 +8,7 @@
     <meta name="project" content="reckon_db v2.0.0">
 
 
-    <title>reckon_db_aggregator — reckon_db v2.0.0</title>
+    <title>reckon_db_snapshot_backend — reckon_db v2.0.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
@@ -47,7 +47,7 @@ reckon_db
 
 <output role="status" id="toast"></output>
 
-<main class="content page-module" id="main" data-type="modules">
+<main class="content page-behaviour" id="main" data-type="modules">
   <div id="content" class="content-inner">
     <div class="top-search">
       <div class="search-settings">
@@ -93,7 +93,7 @@ reckon_db
 <div id="top-content">
   <div class="heading-with-actions top-heading">
     <h1>
-      <span translate="no">reckon_db_aggregator</span> 
+      <span translate="no">reckon_db_snapshot_backend</span> <small>behaviour</small>
       <small class="app-vsn" translate="no">(reckon_db v2.0.0)</small>
 
     </h1>
@@ -107,7 +107,7 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Event aggregator for reckon-db</p><p>Aggregates events from an event stream using tagged rules. Supports special value tags for custom aggregation behavior:</p><p>Tagged value types: {sum, N} - Add N to current value (starts at 0) {overwrite, V} - Replace current value with V plain value - Replace current value (default behavior)</p>
+<p>Behaviour for pluggable snapshot backends.</p><p>Aggregate snapshots are a COLD PATH — written periodically by evoq's <code>maybe_snapshot/1</code> trigger, read only during aggregate rehydration. Not the bottleneck that drove the log-backend split, but equally worth isolating so a backend can specialise (e.g., a RocksDB log backend could either reuse its column families for snapshots, or delegate to the Khepri control plane).</p><p>The default implementation (<code>reckon_db_khepri_snapshot_backend</code>) stores snapshots in Khepri — completely fine for cold-path use. Alternative implementations exist primarily to avoid the Khepri dependency when a backend wants to be self-contained.</p>
     </section>
 
 </div>
@@ -126,7 +126,7 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#t:event/0" data-no-tooltip="" translate="no">event/0</a>
+        <a href="#t:snapshot_data/0" data-no-tooltip="" translate="no">snapshot_data/0</a>
 
       </div>
 
@@ -134,7 +134,17 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#t:snapshot/0" data-no-tooltip="" translate="no">snapshot/0</a>
+        <a href="#t:source_id/0" data-no-tooltip="" translate="no">source_id/0</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>aggregate id</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#t:state/0" data-no-tooltip="" translate="no">state/0</a>
 
       </div>
 
@@ -142,7 +152,7 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#t:tagged_map/0" data-no-tooltip="" translate="no">tagged_map/0</a>
+        <a href="#t:stream_id/0" data-no-tooltip="" translate="no">stream_id/0</a>
 
       </div>
 
@@ -150,75 +160,79 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#t:tagged_value/0" data-no-tooltip="" translate="no">tagged_value/0</a>
+        <a href="#t:version/0" data-no-tooltip="" translate="no">version/0</a>
 
       </div>
 
     </div>
 
 </div>
-<div class="summary-functions summary">
+<div class="summary-callbacks summary">
   <h2>
-    <a href="#functions">Functions</a>
+    <a href="#callbacks">Callbacks</a>
   </h2>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#aggregate/3" data-no-tooltip="" translate="no">aggregate(Events, Snapshot, Opts)</a>
+        <a href="#c:close/1" data-no-tooltip="" translate="no">close/1</a>
 
       </div>
-
-        <div class="summary-synopsis"><p>Aggregate events from a stream with optional snapshot</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#finalize/1" data-no-tooltip="" translate="no">finalize(TaggedMap)</a>
+        <a href="#c:delete/3" data-no-tooltip="" translate="no">delete/3</a>
 
       </div>
-
-        <div class="summary-synopsis"><p>Finalize a tagged map by unwrapping all tagged values</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#foldl/1" data-no-tooltip="" translate="no">foldl(Events)</a>
+        <a href="#c:exists/3" data-no-tooltip="" translate="no">exists/3</a>
 
       </div>
-
-        <div class="summary-synopsis"><p>Fold a list of events from left to right (chronological order)</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#foldl/2" data-no-tooltip="" translate="no">foldl(Events, InitialState)</a>
+        <a href="#c:init/1" data-no-tooltip="" translate="no">init/1</a>
 
       </div>
-
-        <div class="summary-synopsis"><p>Fold events with an initial state</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#foldr/1" data-no-tooltip="" translate="no">foldr(Events)</a>
+        <a href="#c:list/2" data-no-tooltip="" translate="no">list/2</a>
 
       </div>
-
-        <div class="summary-synopsis"><p>Fold a list of events from right to left</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#foldr/2" data-no-tooltip="" translate="no">foldr(Events, InitialState)</a>
+        <a href="#c:load/3" data-no-tooltip="" translate="no">load/3</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Fold events from right with an initial state</p></div>
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:load_at/4" data-no-tooltip="" translate="no">load_at/4</a>
+
+      </div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#c:save/5" data-no-tooltip="" translate="no">save/5</a>
+
+      </div>
 
     </div>
 
@@ -236,14 +250,14 @@ reckon_db
     </h1>
 
     <div class="types-list">
-<section class="detail" id="t:event/0">
+<section class="detail" id="t:snapshot_data/0">
 
   <div class="detail-header">
-    <a href="#t:event/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+    <a href="#t:snapshot_data/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">event/0</h1>
+      <h1 class="signature" translate="no">snapshot_data/0</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -257,35 +271,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-type</span> event() ::
-          #event{event_id :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
-                 event_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
-                 stream_id :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
-                 version :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
-                 data :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
-                 metadata :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
-                 tags :: [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()] | undefined,
-                 timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
-                 epoch_us :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
-                 data_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
-                 metadata_content_type :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
-                 prev_event_hash :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined,
-                 mac :: {KeyId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(), MacBytes :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} | undefined,
-                 signature :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined}.</pre>
+          <pre translate="no"><span class="attribute">-type</span> snapshot_data() :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>().</pre>
 
       </div>
 
 
   </section>
 </section>
-<section class="detail" id="t:snapshot/0">
+<section class="detail" id="t:source_id/0">
 
   <div class="detail-header">
-    <a href="#t:snapshot/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+    <a href="#t:source_id/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">snapshot/0</h1>
+      <h1 class="signature" translate="no">source_id/0</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -299,28 +299,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-type</span> snapshot() ::
-          #snapshot{stream_id :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
-                    version :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(),
-                    data :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(),
-                    metadata :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>(),
-                    timestamp :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(),
-                    anchor_hash :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() | undefined,
-                    mac :: {KeyId :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>(), MacBytes :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()} | undefined}.</pre>
+          <pre translate="no"><span class="attribute">-type</span> source_id() :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>().</pre>
 
       </div>
 
-
+<p>aggregate id</p>
   </section>
 </section>
-<section class="detail" id="t:tagged_map/0">
+<section class="detail" id="t:state/0">
 
   <div class="detail-header">
-    <a href="#t:tagged_map/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+    <a href="#t:state/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">tagged_map/0</h1>
+      <h1 class="signature" translate="no">state/0</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -334,21 +327,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-type</span> tagged_map() :: #{<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>() => <a href="#t:tagged_value/0">tagged_value</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-type</span> state() :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>().</pre>
 
       </div>
 
 
   </section>
 </section>
-<section class="detail" id="t:tagged_value/0">
+<section class="detail" id="t:stream_id/0">
 
   <div class="detail-header">
-    <a href="#t:tagged_value/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+    <a href="#t:stream_id/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">tagged_value/0</h1>
+      <h1 class="signature" translate="no">stream_id/0</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -362,7 +355,35 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-type</span> tagged_value() :: {sum, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:number/0">number</a>()} | {overwrite, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()} | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>().</pre>
+          <pre translate="no"><span class="attribute">-type</span> stream_id() :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>().</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="t:version/0">
+
+  <div class="detail-header">
+    <a href="#t:version/0" class="detail-link" data-no-tooltip="" aria-label="Link to this type">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">version/0</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-type</span> version() :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>().</pre>
 
       </div>
 
@@ -373,23 +394,23 @@ reckon_db
     </div>
   </section>
 
-  <section id="functions" class="details-list">
+  <section id="callbacks" class="details-list">
     <h1 class="section-heading">
-      <a class="hover-link" href="#functions">
+      <a class="hover-link" href="#callbacks">
         <i class="ri-link-m" aria-hidden="true"></i>
       </a>
-      <span class="text">Functions</span>
+      <span class="text">Callbacks</span>
     </h1>
 
-    <div class="functions-list">
-<section class="detail" id="aggregate/3">
+    <div class="callbacks-list">
+<section class="detail" id="c:close/1">
 
   <div class="detail-header">
-    <a href="#aggregate/3" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#c:close/1" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">aggregate(Events, Snapshot, Opts)</h1>
+      <h1 class="signature" translate="no">close/1</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -403,21 +424,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> aggregate([<a href="#t:event/0">event</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()], <a href="#t:snapshot/0">snapshot</a>() | undefined, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>().</pre>
+          <pre translate="no"><span class="attribute">-callback</span> close(<a href="#t:state/0">state</a>()) -> ok.</pre>
 
       </div>
 
-<p>Aggregate events from a stream with optional snapshot</p><p>This is a convenience function that: 1. Starts from a snapshot's data (if provided) or empty map 2. Applies events in order 3. Returns the finalized aggregate state</p>
+
   </section>
 </section>
-<section class="detail" id="finalize/1">
+<section class="detail" id="c:delete/3">
 
   <div class="detail-header">
-    <a href="#finalize/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#c:delete/3" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">finalize(TaggedMap)</h1>
+      <h1 class="signature" translate="no">delete/3</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -431,21 +452,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> finalize(<a href="#t:tagged_map/0">tagged_map</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>().</pre>
+          <pre translate="no"><span class="attribute">-callback</span> delete(<a href="#t:state/0">state</a>(), <a href="#t:source_id/0">source_id</a>(), <a href="#t:stream_id/0">stream_id</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Finalize a tagged map by unwrapping all tagged values</p><p>Converts {sum, N} to N and {overwrite, V} to V.</p>
+
   </section>
 </section>
-<section class="detail" id="foldl/1">
+<section class="detail" id="c:exists/3">
 
   <div class="detail-header">
-    <a href="#foldl/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#c:exists/3" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">foldl(Events)</h1>
+      <h1 class="signature" translate="no">exists/3</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -459,21 +480,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> foldl([<a href="#t:event/0">event</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()]) -> <a href="#t:tagged_map/0">tagged_map</a>().</pre>
+          <pre translate="no"><span class="attribute">-callback</span> exists(<a href="#t:state/0">state</a>(), <a href="#t:source_id/0">source_id</a>(), <a href="#t:stream_id/0">stream_id</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:boolean/0">boolean</a>().</pre>
 
       </div>
 
-<p>Fold a list of events from left to right (chronological order)</p><p>Events should be sorted by version in ascending order. Returns a tagged map that can be finalized with finalize/1.</p>
+
   </section>
 </section>
-<section class="detail" id="foldl/2">
+<section class="detail" id="c:init/1">
 
   <div class="detail-header">
-    <a href="#foldl/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#c:init/1" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">foldl(Events, InitialState)</h1>
+      <h1 class="signature" translate="no">init/1</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -487,21 +508,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> foldl([<a href="#t:event/0">event</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()], <a href="#t:tagged_map/0">tagged_map</a>()) -> <a href="#t:tagged_map/0">tagged_map</a>().</pre>
+          <pre translate="no"><span class="attribute">-callback</span> init(Opts :: <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()) -> {ok, <a href="#t:state/0">state</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Fold events with an initial state</p>
+
   </section>
 </section>
-<section class="detail" id="foldr/1">
+<section class="detail" id="c:list/2">
 
   <div class="detail-header">
-    <a href="#foldr/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#c:list/2" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">foldr(Events)</h1>
+      <h1 class="signature" translate="no">list/2</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -515,21 +536,22 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> foldr([<a href="#t:event/0">event</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()]) -> <a href="#t:tagged_map/0">tagged_map</a>().</pre>
+          <pre translate="no"><span class="attribute">-callback</span> list(<a href="#t:state/0">state</a>(), <a href="#t:stream_id/0">stream_id</a>()) ->
+                  {ok, [#{version := <a href="#t:version/0">version</a>(), source_id := <a href="#t:source_id/0">source_id</a>()}]} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Fold a list of events from right to left</p><p>Events should be sorted by version in ascending order. This will process them in reverse (newest first).</p>
+
   </section>
 </section>
-<section class="detail" id="foldr/2">
+<section class="detail" id="c:load/3">
 
   <div class="detail-header">
-    <a href="#foldr/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#c:load/3" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">foldr(Events, InitialState)</h1>
+      <h1 class="signature" translate="no">load/3</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -543,11 +565,71 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> foldr([<a href="#t:event/0">event</a>() | <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()], <a href="#t:tagged_map/0">tagged_map</a>()) -> <a href="#t:tagged_map/0">tagged_map</a>().</pre>
+          <pre translate="no"><span class="attribute">-callback</span> load(<a href="#t:state/0">state</a>(), <a href="#t:source_id/0">source_id</a>(), <a href="#t:stream_id/0">stream_id</a>()) ->
+                  {ok, #{version := <a href="#t:version/0">version</a>(), data := <a href="#t:snapshot_data/0">snapshot_data</a>()}} |
+                  {error, not_found} |
+                  {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Fold events from right with an initial state</p>
+
+  </section>
+</section>
+<section class="detail" id="c:load_at/4">
+
+  <div class="detail-header">
+    <a href="#c:load_at/4" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">load_at/4</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-callback</span> load_at(<a href="#t:state/0">state</a>(), <a href="#t:source_id/0">source_id</a>(), <a href="#t:stream_id/0">stream_id</a>(), <a href="#t:version/0">version</a>()) ->
+                     {ok, <a href="#t:snapshot_data/0">snapshot_data</a>()} | {error, not_found} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
+  </section>
+</section>
+<section class="detail" id="c:save/5">
+
+  <div class="detail-header">
+    <a href="#c:save/5" class="detail-link" data-no-tooltip="" aria-label="Link to this callback">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">save/5</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-callback</span> save(<a href="#t:state/0">state</a>(), <a href="#t:source_id/0">source_id</a>(), <a href="#t:stream_id/0">stream_id</a>(), <a href="#t:version/0">version</a>(), <a href="#t:snapshot_data/0">snapshot_data</a>()) -> ok | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+
   </section>
 </section>
 
