@@ -364,17 +364,30 @@ create_filter(by_event_payload, PayloadPattern) ->
 create_filter(by_tags, Tags) ->
     reckon_db_filters:by_tags(Tags).
 
-%% @private Setup event notification mechanism
+%% @private Setup event notification mechanism.
+%%
+%% Order matters: start the emitter pool BEFORE registering the
+%% Khepri trigger. The trigger fires on every event commit and
+%% broadcasts to whatever emitters are currently in the pg group;
+%% if the emitter hasn't joined yet, the trigger logs "No emitters"
+%% and the event is dropped. Starting the pool first guarantees
+%% at least one local pg member by the time the trigger goes live.
+%%
+%% (Cross-cluster pg propagation to OTHER nodes' pg copies is still
+%% async — a trigger firing on a remote leader may not yet see
+%% this node's emitter. The cross-node delivery fix in
+%% reckon_db_emitter:send_to_subscriber/4 absorbs that window by
+%% delivering correctly whichever emitter the broadcast lands on.)
 -spec setup_event_notification(atom(), binary(), term(), subscription()) -> ok.
 setup_event_notification(StoreId, SubscriptionKey, Filter, #subscription{pool_size = PoolSize} = Subscription) ->
     _Emitters = reckon_db_emitter_group:persist_emitters(StoreId, SubscriptionKey, PoolSize),
+    maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription),
     case register_trigger(StoreId, SubscriptionKey, Filter) of
         ok -> ok;
         {error, Reason} ->
             logger:warning("Trigger registration deferred for ~s (store: ~p): ~p",
                           [SubscriptionKey, StoreId, Reason])
     end,
-    maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription),
     ok.
 
 %% @private Attempt to start the emitter pool eagerly.
