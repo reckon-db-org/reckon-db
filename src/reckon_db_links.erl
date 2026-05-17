@@ -1,26 +1,151 @@
-%% @doc Stream linking and simple projections for reckon-db
+%% @doc Server-side stream linking and projections for reckon-db.
 %%
-%% Provides derived streams from source streams:
-%% - Filter events based on predicates
-%% - Transform event data
-%% - Create materialized streams for specialized queries
+%% A *link* is a derived stream computed from one or more source
+%% streams by applying an optional filter predicate and an optional
+%% transform function. The result is persisted under a stable name
+%% and exposed as just-another-subscribable-stream — consumers
+%% read it like any user stream.
 %%
-%% Links are live - new events are automatically propagated.
-%% Link streams can be subscribed to like regular streams.
+%% This is the same primitive Greg Young's EventStoreDB exposes
+%% as *projections*: `$ce-account' (category events for
+%% `account-*' streams), `$et-UserCreated' (all events of one
+%% type), or arbitrary user-defined JavaScript projections that
+%% emit into custom destination streams. reckon-db's links cover
+%% the same conceptual ground with native Erlang funs instead of a
+%% scripting layer.
 %%
-%% Usage:
+%% == Why links exist ==
+%%
+%% Reckon-db already has rich typed subscription filters
+%% (`by_event_type', `by_event_pattern', `by_event_payload',
+%% `by_tags') that filter the event stream on the fly. So why a
+%% separate "link" mechanism?
+%%
+%% <ul>
+%% <li>**Transform.** Typed subscriptions can only filter. Links
+%%     can rewrite events (add fields, re-key, redact, denormalise)
+%%     before delivery. The transform is server-side, deterministic,
+%%     and replayable.</li>
+%% <li>**Materialisation.** Typed subscriptions are recomputed for
+%%     every consumer. A link computes once, persists the derived
+%%     events on disk, and serves them like any other stream — N
+%%     consumers cost N stream-reads, not N×(source-scans + filter +
+%%     transform).</li>
+%% <li>**Stable named subscription targets.** Dynamically-created
+%%     source streams (`order-018f6a...', `order-018f6b...', ...)
+%%     can't be subscribed to as a group via the bare-id selector;
+%%     you'd need a wildcard pattern in the consumer. A link
+%%     (`$link:orders' filtered to source pattern `order-*') gives
+%%     you one durable, named, listable target.</li>
+%% <li>**Replayability.** A new consumer attaching to a link
+%%     replays the persisted derived events from the start, in
+%%     order, deterministically — same shape every time, regardless
+%%     of how the source streams have grown. Typed subscriptions
+%%     replay by re-scanning the entire global log and re-applying
+%%     the predicate, which is correct but expensive at scale.</li>
+%% <li>**Composability.** Links can source from other links —
+%%     `$link:high-value-orders' built on top of `$link:orders'.
+%%     Useful for incremental refinement of a view.</li>
+%% <li>**Operational visibility.** Named derived streams show up
+%%     in store listings (lazyreckon's `streams' pane, for
+%%     example) — operators can see "what derived views does this
+%%     store maintain" at a glance. Typed subscriptions are
+%%     ephemeral client state and invisible to tooling.</li>
+%% </ul>
+%%
+%% == Stream-id namespace ==
+%%
+%% Link streams live in the `$' system namespace:
+%%
+%%   `$link:&lt;human-readable-name&gt;'
+%%
+%% e.g. `$link:high-value-orders'. The `$' prefix is the
+%% reckon-db convention for "system / projected stream, not user
+%% data" — same role as EventStoreDB's `$ce-' / `$et-' /
+%% `$by_category' / `$stats-' prefixes. User streams follow the
+%% `&lt;prefix&gt;-&lt;hex&gt;' format (e.g. `account-018f6a7b8c9d4abc...').
+%% Both forms are accepted as subscription selectors via
+%% `reckon_db_filters:by_stream/1'.
+%%
+%% Link subscriptions themselves get a related namespace:
+%%
+%%   `$link-sub:&lt;link-name&gt;'
+%%
+%% so subscriptions managed by the link engine are
+%% distinguishable from user subscriptions in operational tooling.
+%%
+%% == Use cases (worked examples) ==
+%%
+%% <strong>1. Materialised category view.</strong>
+%% Collate every event from all `order-&lt;hex&gt;' streams into one
+%% subscribable stream:
 %% ```
-%% %% Create a link for high-value orders
 %% reckon_db_links:create(my_store, #{
-%%     name => <<"high-value-orders">>,
-%%     source => #{type => stream_pattern, pattern => <<"orders-*">>},
-%%     filter => fun(E) -> maps:get(total, E#event.data, 0) > 1000 end,
-%%     transform => fun(E) -> E#event{data = E#event.data#{flagged => true}} end
+%%     name   => <<"orders">>,
+%%     source => #{type => stream_pattern, pattern => <<"order-*">>}
 %% }).
-%%
-%% %% Subscribe to linked stream
-%% reckon_db_subscriptions:subscribe(my_store, stream, <<"$link:high-value-orders">>, ...).
+%% reckon_db_subscriptions:subscribe(
+%%     my_store, stream, <<"$link:orders">>, <<"orders-projector">>).
 %% '''
+%%
+%% <strong>2. Filtered derived stream.</strong>
+%% Just the high-value subset:
+%% ```
+%% reckon_db_links:create(my_store, #{
+%%     name   => <<"high-value-orders">>,
+%%     source => #{type => stream_pattern, pattern => <<"order-*">>},
+%%     filter => fun(E) ->
+%%         maps:get(total, E#event.data, 0) > 1000
+%%     end
+%% }).
+%% '''
+%%
+%% <strong>3. Transform / re-shape.</strong>
+%% Strip PII from outbound webhook events:
+%% ```
+%% reckon_db_links:create(my_store, #{
+%%     name      => <<"webhook-feed">>,
+%%     source    => #{type => stream_pattern, pattern => <<"order-*">>},
+%%     transform => fun(E) ->
+%%         D2 = maps:without([customer_email, customer_phone],
+%%                           E#event.data),
+%%         E#event{data = D2}
+%%     end
+%% }).
+%% '''
+%%
+%% <strong>4. Composition.</strong>
+%% Layer a filter on top of an existing link:
+%% ```
+%% reckon_db_links:create(my_store, #{
+%%     name   => <<"high-value-webhook">>,
+%%     source => #{type => stream, name => <<"$link:webhook-feed">>},
+%%     filter => fun(E) ->
+%%         maps:get(total, E#event.data, 0) > 1000
+%%     end
+%% }).
+%% '''
+%%
+%% == When NOT to use a link ==
+%%
+%% <ul>
+%% <li>Single-consumer one-off filter — a `by_event_type' or
+%%     `by_tags' subscription is cheaper and avoids persistent
+%%     derived data.</li>
+%% <li>Read model that lives in a database (postgres, sqlite, etc)
+%%     — subscribe directly with the appropriate typed filter and
+%%     project to the database. The link layer adds no value when
+%%     the materialised target is elsewhere.</li>
+%% <li>Aggregation across many sources where the math is
+%%     non-trivial — links emit one derived event per source event;
+%%     they don't fold. For aggregation, use a process manager.</li>
+%% </ul>
+%%
+%% == Status ==
+%%
+%% This module ships with the initial reckon-db release. The
+%% feature is wired but **not yet exercised in production**;
+%% treat as preview while we accumulate real usage.
 %%
 %% @author rgfaber
 

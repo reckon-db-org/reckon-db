@@ -19,12 +19,46 @@
     matches/3
 ]).
 
-%% @doc Create a filter for all events in a specific stream.
+%% @doc Build a Khepri tree-event filter for subscriptions of
+%% type `stream' (a.k.a. `by_stream').
 %%
-%% Special case: the binary &lt;&lt;"$all"&gt;&gt; matches events in all streams.
-%% Any other binary is used verbatim as the stream-id path segment;
-%% streams are stored at [streams, StreamId, PaddedVersion].
--spec by_stream(binary()) -> khepri_evf:tree_event_filter().
+%% == Selector grammar ==
+%%
+%% <ul>
+%% <li>`&lt;&lt;"$all"&gt;&gt;' — the only recognised wildcard sentinel.
+%%     Matches every event in every stream in the store.</li>
+%% <li>Any other non-empty binary — a literal stream id; the
+%%     filter matches events on that exact stream only.</li>
+%% </ul>
+%%
+%% == Stream id conventions ==
+%%
+%% The filter doesn't enforce stream-id shape (it just treats the
+%% selector as a path component), but reckon-db has two formats:
+%%
+%% <ul>
+%% <li>**User streams** — `&lt;prefix&gt;-&lt;hex&gt;', where prefix is
+%%     `[A-Za-z]+' and hex is `[A-Fa-f0-9]+' (typically a UUIDv7
+%%     with dashes stripped). Example:
+%%     `account-018f6a7b8c9d4abc8901234567890abc'.</li>
+%% <li>**System streams** — `$&lt;namespace&gt;:&lt;name&gt;', where the
+%%     `$' prefix marks "reckon-db-managed, not user data" and
+%%     `&lt;name&gt;' is intentionally human-readable. Example:
+%%     `$link:high-value-orders' from {@link reckon_db_links}.
+%%     Same role as EventStoreDB's `$ce-' / `$et-' / `$by_*'
+%%     prefixes.</li>
+%% </ul>
+%%
+%% Both formats subscribe identically — the filter doesn't care.
+%% The `$' namespace is only special at the sentinel level
+%% (`$all').
+%%
+%% Returns `{error, empty_selector}' for an empty binary; every
+%% other input builds a filter. Append-time validation of the
+%% user-stream-id shape lives in {@link reckon_db_streams} (and
+%% is currently advisory; a strict-rejection mode is a follow-up).
+-spec by_stream(binary()) ->
+    khepri_evf:tree_event_filter() | {error, empty_selector}.
 by_stream(<<"$all">>) ->
     khepri_evf:tree(
         [streams,
@@ -35,6 +69,8 @@ by_stream(<<"$all">>) ->
          ]}],
         #{on_actions => [create]}
     );
+by_stream(<<>>) ->
+    {error, empty_selector};
 by_stream(Stream) when is_binary(Stream) ->
     khepri_evf:tree(
         [streams,
