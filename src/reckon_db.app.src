@@ -1,6 +1,12 @@
 {application, reckon_db, [
-    {description, "BEAM-native Event Store built on Khepri/Ra"},
-    {vsn, "2.3.0"},
+    {description, "BEAM-native Event Store built on Khepri/Ra with Raft consensus. "
+                  "Event sourcing, persistent subscriptions, snapshots, and "
+                  "automatic cluster formation via UDP multicast discovery. "
+                  "Ships embedded Rust NIFs for 3-15x acceleration of crypto, "
+                  "hashing, compression, aggregation, filter matching, and graph "
+                  "algorithms — with pure-Erlang fallbacks when the toolchain "
+                  "isn't available."},
+    {vsn, "2.3.1"},
     {registered, []},
     {mod, {reckon_db_app, []}},
     {applications, [
@@ -23,6 +29,56 @@
     {modules, []},
     {licenses, ["Apache-2.0"]},
     {links, [
-        {"Codeberg", "https://codeberg.org/reckon-db-org/reckon-db"}
+        {"Codeberg", "https://codeberg.org/reckon-db-org/reckon-db"},
+        {"Documentation", "https://hexdocs.pm/reckon_db"},
+        {"Changelog", "https://codeberg.org/reckon-db-org/reckon-db/src/branch/main/CHANGELOG.md"}
+    ]},
+    %% Hex packaging: explicit file list for `rebar3 hex publish`.
+    %% rebar3_hex reads `files' from THIS app.src, not from
+    %% rebar.config's `{hex, [...]}` block. v2.3.0 was published
+    %% with the default file glob and dropped the embedded NIFs
+    %% entirely (no native/, no priv/build-nifs.sh). v2.3.1 fixes
+    %% that.
+    %%
+    %% NOTE: rebar3_hex automatically strips compiled `.so' / `.dll' /
+    %% `.dylib' binaries from the published tarball (security +
+    %% reproducibility). So we ship the Rust *sources* and the
+    %% `build-nifs.sh' script — consumers WITH cargo get full NIF
+    %% acceleration via the rebar.config pre_hook; consumers WITHOUT
+    %% cargo see a warning in their build output and silently fall
+    %% back to the pure-Erlang implementations in each
+    %% reckon_db_*_nif wrapper module. macula uses the same pattern.
+    {files, [
+        "src",
+        "include",
+        "assets",
+        "rebar.config",
+        "rebar.lock",
+        "README.md",
+        "LICENSE",
+        "CHANGELOG.md",
+        "CONTRIBUTING.md",
+        "CODE_OF_CONDUCT.md",
+        "guides",
+        "docs",
+        "native/reckon_db_crypto_nif/Cargo.toml",
+        "native/reckon_db_crypto_nif/Cargo.lock",
+        "native/reckon_db_crypto_nif/src",
+        "native/reckon_db_archive_nif/Cargo.toml",
+        "native/reckon_db_archive_nif/Cargo.lock",
+        "native/reckon_db_archive_nif/src",
+        "native/reckon_db_hash_nif/Cargo.toml",
+        "native/reckon_db_hash_nif/Cargo.lock",
+        "native/reckon_db_hash_nif/src",
+        "native/reckon_db_aggregate_nif/Cargo.toml",
+        "native/reckon_db_aggregate_nif/Cargo.lock",
+        "native/reckon_db_aggregate_nif/src",
+        "native/reckon_db_filter_nif/Cargo.toml",
+        "native/reckon_db_filter_nif/Cargo.lock",
+        "native/reckon_db_filter_nif/src",
+        "native/reckon_db_graph_nif/Cargo.toml",
+        "native/reckon_db_graph_nif/Cargo.lock",
+        "native/reckon_db_graph_nif/src",
+        "priv/build-nifs.sh"
     ]}
 ]}.

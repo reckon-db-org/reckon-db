@@ -5,7 +5,79 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.3.0] - 2026-05-17
+## [2.3.1] - 2026-05-17
+
+### Fixed — Embedded NIFs actually ship in the hex tarball
+
+reckon-db 2.3.0 published with a `files` list living in the
+wrong block (`{pkg, [...]}` in `rebar.config` instead of
+`{files, [...]}` in `src/reckon_db.app.src`). rebar3_hex
+silently fell back to its default file glob, which excluded
+`native/` entirely. So 2.3.0 on hex contained zero Rust crate
+sources — consumers got `priv/build-nifs.sh` with nothing to
+build.
+
+2.3.1 puts the `files` list in `.app.src` where rebar3_hex
+reads it, matching macula's pattern.
+
+**`rebar3 hex publish --dry-run` now reports:**
+
+```
+Included files:
+  native/reckon_db_crypto_nif/{Cargo.toml,Cargo.lock,src/lib.rs}
+  native/reckon_db_archive_nif/{Cargo.toml,Cargo.lock,src/lib.rs}
+  native/reckon_db_hash_nif/{Cargo.toml,Cargo.lock,src/lib.rs}
+  native/reckon_db_aggregate_nif/{Cargo.toml,Cargo.lock,src/lib.rs}
+  native/reckon_db_filter_nif/{Cargo.toml,Cargo.lock,src/lib.rs}
+  native/reckon_db_graph_nif/{Cargo.toml,Cargo.lock,src/lib.rs}
+  priv/build-nifs.sh
+  docs/{dialyzer-backlog.md, dialyzer-warnings-2.2.2.raw, genai-policy.md}
+  CONTRIBUTING.md
+  CODE_OF_CONDUCT.md
+  ...
+```
+
+#### Consumer expectations clarified
+
+rebar3_hex automatically strips compiled `.so` / `.dll` /
+`.dylib` binaries from the published tarball (a security +
+reproducibility measure that applies to every hex package).
+v2.3.0's CHANGELOG implied otherwise — that the prebuilt `.so`
+files would ship "so consumers without cargo still get
+acceleration". They don't. macula has always worked the same
+way: the published tarball contains only Rust source + the
+`build-nifs.sh` script.
+
+So:
+
+- **Consumers with `cargo` installed** get full NIF acceleration —
+  `rebar.config`'s `pre_hooks` invoke `priv/build-nifs.sh` which
+  runs `cargo build --release` for each crate during
+  `rebar3 compile`.
+- **Consumers without `cargo`** get a warning in their build
+  output and silently fall back to the pure-Erlang
+  implementations baked into each `reckon_db_*_nif` wrapper
+  module. Everything still works; acceleration is just absent.
+
+For reckon-gateway specifically: the Docker base image
+(`erlang:27-slim`) does NOT include Rust. Operators wanting
+NIF acceleration on the cluster will need to add a Rust install
+step to the gateway's Dockerfile builder stage (a 2.3.x
+follow-up release of reckon-gateway is the natural place for
+that change).
+
+### Documentation
+
+- `src/reckon_db.app.src`: longer `description` field that
+  mentions the NIF acceleration and pure-Erlang fallback;
+  `links` extended with `Documentation` (hexdocs) and
+  `Changelog` entries.
+
+## [2.3.0] - 2026-05-17 — UNUSABLE, superseded by 2.3.1
+
+> ⚠️ **This release published without any Rust crate sources due to
+> a misplaced `files` list. Treat 2.3.0 as functionally equivalent
+> to 2.2.2 — bump straight to 2.3.1.**
 
 ### Added — Embedded Rust NIF acceleration
 
