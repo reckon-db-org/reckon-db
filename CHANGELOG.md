@@ -5,6 +5,83 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4] - 2026-05-17
+
+### Fixed — Cluster bootstrap robustness
+
+Four bugs in `reckon_db_store_coordinator` that, between them,
+could permanently strand a node outside the Raft cluster after a
+rough restart cycle:
+
+#### Infinite-timeout join
+
+`khepri_cluster:join/2' internally uses
+`khepri_app:get_default_timeout/0', which defaults to `infinity'.
+Combined with the global lock acquired during the join, simultaneous-
+boot nodes could deadlock on lock contention forever. (Setting
+khepri's `default_timeout' app env globally would also affect every
+other khepri operation, so that's not a usable workaround.)
+
+The exported 2-arg version is now wrapped in a side process that's
+killed after `?KHEPRI_JOIN_TIMEOUT' (20s). On timeout the coordinator
+returns `failed' and the retry-with-jitter timer picks up the next
+round.
+
+(`khepri_cluster:join/3' is defined in the source but NOT exported
+in khepri 0.17.2 — only `join/1' and `join/2' are. Passing an
+explicit timeout via the 3-arg form fails with `{undef, ...}'.)
+
+#### Self-clusters treated as active
+
+`has_active_cluster/2` treated `{ok, [SingleSelf]}' as an active
+cluster. Every freshly-booted Khepri node is a 1-member standalone
+cluster, so during a simultaneous boot every node saw every other
+node as a cluster and they all raced to join each other under the
+same global lock — the worst possible bootstrap shape. Tightened
+to `length(Members) > 1'.
+
+#### Coordinator election didn't drive cluster formation
+
+The original `handle_no_existing_clusters` just logged the elected
+coordinator and returned. Coordinator stayed as a 1-node cluster,
+non-coordinators sat in `waiting' forever, nothing grew the cluster.
+With the self-clusters fix above, this previously-latent stalemate
+became reachable: 4 standalone clusters forever.
+
+Now: the elected coordinator stays as its 1-node cluster, but each
+non-coordinator actively joins via the coordinator. Once anyone
+joins, the coordinator's cluster has 2 members and subsequent
+retries from remaining non-coordinators find an active cluster
+via the regular `has_active_cluster' path.
+
+#### No retry on transient failure
+
+After `waiting | failed | no_nodes', the coordinator gave up
+permanently. Added a jittered retry (3-8s) on the coordinator's
+own gen_server that re-attempts `do_join_cluster/1' until status
+becomes `joined'.
+
+#### Diagnostic for stale local state
+
+Before `khepri_cluster:join' is called, verify the local Ra
+server is registered under the StoreId. If not, log a pointer
+to the `wipe-and-rejoin.sh' script in
+reckon-cluster-compose instead of hanging on infrastructure
+that never arrived.
+
+#### Verified end-to-end
+
+Cold-start torture against the 4-node beam cluster:
+  * Wipe all 4 data dirs, parallel `docker compose up` on all 4
+  * All 4 nodes converge to 4-of-4 Raft membership without
+    manual intervention
+  * Existing torture trio (leader_kill / partition_heal /
+    subscription_failover) all pass against the freshly-formed
+    cluster
+  * Killing the new leader during the subscription scenario:
+    new leader elected on the formerly-stuck beam00 node
+    (proves it's a first-class member)
+
 ## [2.1.3] - 2026-05-17
 
 ### Fixed — Cross-node subscription delivery + registration race
