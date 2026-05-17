@@ -5,6 +5,58 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.3] - 2026-05-17
+
+### Fixed — Cross-node subscription delivery + registration race
+
+Two bugs that, together, caused stream-scoped subscriptions to
+silently miss roughly half their events whenever the subscription
+was opened against a non-leader gateway.
+
+#### Cross-node delivery
+
+`reckon_db_emitter:send_to_subscriber/4` had a single clause
+guarded on `node(Pid) =:= node()` plus a catch-all that returned
+`ok`. `maybe_forward_events/2` had the same shape. When the Khepri
+trigger fired on the Raft leader and `reckon_db_emitter_group:broadcast/3`
+picked an emitter that wasn't co-located with the subscriber pid,
+the emitter silently dropped the event.
+
+Each cluster node spins up its own emitter pool for every
+subscription (via `reckon_db_leader_tracker` and `setup_event_notification`),
+so the pg group typically holds 2+ emitters on different nodes —
+all carrying the same subscriber pid (the one captured by the
+client that called `save_subscription`). The random pick had a
+~50% chance of landing on an emitter whose node didn't host the
+subscriber, and those events were lost.
+
+`Pid ! Msg` works fine across Erlang distribution; the local-only
+guard was the bug. Remote pids now receive via
+`catch (Pid ! Msg)`. Liveness probing stays local-only because
+`erlang:is_process_alive/1` is undefined for remote pids — the
+runtime's own dead-process semantics cover remote delivery to a
+dead pid.
+
+#### Registration race
+
+`setup_event_notification` registered the Khepri trigger BEFORE
+starting the emitter pool. Between those two steps, any event
+commit fired the trigger into an empty pg group — `broadcast/3`
+logged "No emitters for ..." and dropped the event. Particularly
+noticeable on a hot stream during sub registration.
+
+Swapped the order to (persist names → start pool → register
+trigger), so the local emitter is in pg before the trigger goes
+live.
+
+#### Verification
+
+End-to-end on a 4-node cluster: `subscriber received 25 events
+from our stream` out of 25 writer-acked, contiguous version range
+0..24, both pre- and post-leader-kill events delivered, zero
+cross-stream events received (the 2.1.2 catch-up filter still
+holds).
+
 ## [2.1.2] - 2026-05-17
 
 ### Fixed — Catch-up filter
