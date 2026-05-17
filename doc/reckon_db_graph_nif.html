@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.39.1">
-    <meta name="project" content="reckon_db v2.1.1">
+    <meta name="project" content="reckon_db v2.1.2">
 
 
-    <title>reckon_db_graph_nif — reckon_db v2.1.1</title>
+    <title>reckon_db_graph_nif — reckon_db v2.1.2</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-58A9BA7E.js"></script>
+    <script defer src="dist/sidebar_items-17A01FC7.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v2.1.1
+          v2.1.2
         </div>
       </div>
     </div>
@@ -94,7 +94,7 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_graph_nif</span> 
-      <small class="app-vsn" translate="no">(reckon_db v2.1.1)</small>
+      <small class="app-vsn" translate="no">(reckon_db v2.1.2)</small>
 
     </h1>
 
@@ -108,15 +108,15 @@ reckon_db
 
     <section id="moduledoc">
 <p>Optimized graph operations for causation analysis in reckon-db.</p><p>This module provides high-performance graph algorithms:</p><ul><li><b>Graph building</b>: Build edges from event causation relationships</li><li><b>Topological sort</b>: Order events by causation (causes before effects)</li><li><b>Path finding</b>: Check paths, find ancestors/descendants</li><li><b>DOT export</b>: Generate Graphviz visualization</li></ul><p>The mode is automatically detected at startup based on whether the NIF library is available. Community edition users (hex.pm) will always use the Erlang fallbacks, which provide identical functionality.</p><h3 id="module-usage" class="section-heading"><a href="#module-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Usage">Usage</a></span></h3><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Build edges from events (event_id, causation_id pairs)</span><span class="w">
-  </span><span class="n">Nodes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="0793959939-1">[</span><span class="p" data-group-id="0793959939-2">{</span><span class="p" data-group-id="0793959939-3">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="0793959939-3">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="ss">undefined</span><span class="p" data-group-id="0793959939-2">}</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="0793959939-4">{</span><span class="p" data-group-id="0793959939-5">&lt;&lt;</span><span class="s">&quot;evt-2&quot;</span><span class="p" data-group-id="0793959939-5">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="0793959939-6">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="0793959939-6">&gt;&gt;</span><span class="p" data-group-id="0793959939-4">}</span><span class="p" data-group-id="0793959939-1">]</span><span class="p">,</span><span class="w">
-  </span><span class="n">Edges</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_graph_nif</span><span class="p">:</span><span class="nf">build_edges</span><span class="p" data-group-id="0793959939-7">(</span><span class="n">Nodes</span><span class="p" data-group-id="0793959939-7">)</span><span class="p">.</span><span class="w">
+  </span><span class="n">Nodes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="7795266379-1">[</span><span class="p" data-group-id="7795266379-2">{</span><span class="p" data-group-id="7795266379-3">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="7795266379-3">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="ss">undefined</span><span class="p" data-group-id="7795266379-2">}</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="7795266379-4">{</span><span class="p" data-group-id="7795266379-5">&lt;&lt;</span><span class="s">&quot;evt-2&quot;</span><span class="p" data-group-id="7795266379-5">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="7795266379-6">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="7795266379-6">&gt;&gt;</span><span class="p" data-group-id="7795266379-4">}</span><span class="p" data-group-id="7795266379-1">]</span><span class="p">,</span><span class="w">
+  </span><span class="n">Edges</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_graph_nif</span><span class="p">:</span><span class="nf">build_edges</span><span class="p" data-group-id="7795266379-7">(</span><span class="n">Nodes</span><span class="p" data-group-id="7795266379-7">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Topological sort</span><span class="w">
-  </span><span class="p" data-group-id="0793959939-8">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Sorted</span><span class="p" data-group-id="0793959939-8">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_graph_nif</span><span class="p">:</span><span class="nf">topo_sort</span><span class="p" data-group-id="0793959939-9">(</span><span class="p" data-group-id="0793959939-10">[</span><span class="p" data-group-id="0793959939-11">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="0793959939-11">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="0793959939-12">&lt;&lt;</span><span class="s">&quot;evt-2&quot;</span><span class="p" data-group-id="0793959939-12">&gt;&gt;</span><span class="p" data-group-id="0793959939-10">]</span><span class="p">,</span><span class="w"> </span><span class="n">Edges</span><span class="p" data-group-id="0793959939-9">)</span><span class="p">.</span><span class="w">
+  </span><span class="p" data-group-id="7795266379-8">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Sorted</span><span class="p" data-group-id="7795266379-8">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_graph_nif</span><span class="p">:</span><span class="nf">topo_sort</span><span class="p" data-group-id="7795266379-9">(</span><span class="p" data-group-id="7795266379-10">[</span><span class="p" data-group-id="7795266379-11">&lt;&lt;</span><span class="s">&quot;evt-1&quot;</span><span class="p" data-group-id="7795266379-11">&gt;&gt;</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="7795266379-12">&lt;&lt;</span><span class="s">&quot;evt-2&quot;</span><span class="p" data-group-id="7795266379-12">&gt;&gt;</span><span class="p" data-group-id="7795266379-10">]</span><span class="p">,</span><span class="w"> </span><span class="n">Edges</span><span class="p" data-group-id="7795266379-9">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Check which mode is active</span><span class="w">
-  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_graph_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="0793959939-13">(</span><span class="p" data-group-id="0793959939-13">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
-  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_graph_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="0793959939-14">(</span><span class="p" data-group-id="0793959939-14">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
+  </span><span class="ss">nif</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_graph_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="7795266379-13">(</span><span class="p" data-group-id="7795266379-13">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
+  </span><span class="ss">erlang</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_graph_nif</span><span class="p">:</span><span class="nf">implementation</span><span class="p" data-group-id="7795266379-14">(</span><span class="p" data-group-id="7795266379-14">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
     </section>
 
 </div>
@@ -654,9 +654,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/2.1.1" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/2.1.2" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/2.1.1">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/2.1.2">Hex Preview</a>
 
           </span>
 

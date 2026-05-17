@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.39.1">
-    <meta name="project" content="reckon_db v2.1.1">
+    <meta name="project" content="reckon_db v2.1.2">
 
 
-    <title>Changelog — reckon_db v2.1.1</title>
+    <title>Changelog — reckon_db v2.1.2</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-58A9BA7E.js"></script>
+    <script defer src="dist/sidebar_items-17A01FC7.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v2.1.1
+          v2.1.2
         </div>
       </div>
     </div>
@@ -104,7 +104,28 @@ reckon_db
 
 
 <p>All notable changes to reckon-db will be documented in this file.</p><p>The format is based on <a href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a>,
-and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p><h2 id="2-1-1-2026-05-15" class="section-heading"><a href="#2-1-1-2026-05-15" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">[2.1.1] - 2026-05-15</span></h2><h3 id="added-backward-direction-chain-verification" class="section-heading"><a href="#added-backward-direction-chain-verification" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Added — Backward-direction chain verification</span></h3><p>Closes the documented gap from 2.1.0. On integrity-enabled stores,
+and this project adheres to <a href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>.</p><h2 id="2-1-2-2026-05-17" class="section-heading"><a href="#2-1-2-2026-05-17" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">[2.1.2] - 2026-05-17</span></h2><h3 id="fixed-catch-up-filter" class="section-heading"><a href="#fixed-catch-up-filter" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Fixed — Catch-up filter</span></h3><p>Catch-up replay (the path that delivers historical events to a
+newly-registered subscription) ignored the subscription's selector
+and pushed the entire global event log to the subscriber, regardless
+of its declared filter. The Khepri trigger filter (live path) was
+correct; only the catch-up path was unfiltered.</p><p>Net effect on an active store: every subscription opened with
+<code class="inline">start_from = 0</code> received the full history of every stream, then
+flipped to correctly filtered live deliveries. Stream-scoped
+consumers had to discard 99%+ of what they received on attach.</p><h4>Implementation</h4><ul><li>New <a href="reckon_db_filters.html#matches/3"><code class="inline">reckon_db_filters:matches/3</code></a> — in-memory predicate that
+evaluates a <code class="inline">(Type, Selector)</code> pair against an <code class="inline">#event{}</code> record.
+Handles <code class="inline">by_stream</code> (exact stream id; <code class="inline">&lt;&lt;&quot;$all&quot;&gt;&gt;</code> matches all),
+<code class="inline">by_event_type</code>, and <code class="inline">by_tags</code> (set inclusion). <code class="inline">by_event_pattern</code>
+and <code class="inline">by_event_payload</code> pass through; live trigger filters them
+correctly so the gap is narrower. A real map-pattern evaluator
+is a follow-up.</li><li><code class="inline">do_catchup/5</code> now takes the subscription's type + selector and
+applies the predicate to each batch before sending. Read window
+through <code class="inline">read_all_global</code> still advances by raw batch size so the
+scan progresses even when nothing in a window matches.</li><li><code class="inline">deliver_catchup_batch</code> separated into filtered/raw counts; logs
+&quot;events scanned&quot; rather than &quot;delivered&quot; so the metric reflects
+what catch-up actually saw.</li></ul><h4>Behaviour change</h4><p>Subscribers that relied on receiving cross-stream events from a
+single <code class="inline">by_stream</code> subscription will now miss them. The intended
+contract is &quot;subscribe per stream; use <code class="inline">&lt;&lt;&quot;$all&quot;&gt;&gt;</code> for the global
+firehose&quot; — this release makes the implementation match.</p><h2 id="2-1-1-2026-05-15" class="section-heading"><a href="#2-1-1-2026-05-15" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">[2.1.1] - 2026-05-15</span></h2><h3 id="added-backward-direction-chain-verification" class="section-heading"><a href="#added-backward-direction-chain-verification" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Added — Backward-direction chain verification</span></h3><p>Closes the documented gap from 2.1.0. On integrity-enabled stores,
 <code class="inline">reckon_db_streams:read/5,6</code> now verifies the chain for backward
 reads in exactly the same way as forward reads. The only
 behavioural difference between directions is the result-ordering
@@ -131,14 +152,14 @@ subscriptions) = 556 tests pass.</p><h2 id="2-1-0-2026-05-15" class="section-hea
 HMAC-protected, chain-hashed events when integrity is enabled
 on a store, and verifies them on every read surface.</p><p>Requires <code class="inline">reckon_gater &gt;= 2.1.0</code> for the schema and
 verification primitives.</p><h4>Configuration</h4><p><code class="inline">#store_config{}</code> gains an <code class="inline">integrity</code> field (default <code class="inline">disabled</code>).
-To enable:</p><pre><code class="makeup erlang" translate="no"><span class="o">#</span><span class="ss">store_config</span><span class="p" data-group-id="1685311043-1">{</span><span class="w">
+To enable:</p><pre><code class="makeup erlang" translate="no"><span class="o">#</span><span class="ss">store_config</span><span class="p" data-group-id="6616335766-1">{</span><span class="w">
     </span><span class="c1">%% ... existing fields ...</span><span class="w">
-    </span><span class="ss">integrity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="1685311043-2">#{</span><span class="w">
+    </span><span class="ss">integrity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p" data-group-id="6616335766-2">#{</span><span class="w">
         </span><span class="ss">enabled</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="ss">true</span><span class="p">,</span><span class="w">
-        </span><span class="ss">key_source</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="1685311043-3">{</span><span class="ss">env_var</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="1685311043-4">&lt;&lt;</span><span class="s">&quot;RECKON_DB_KEY_MY_STORE&quot;</span><span class="p" data-group-id="1685311043-4">&gt;&gt;</span><span class="p" data-group-id="1685311043-3">}</span><span class="w">
+        </span><span class="ss">key_source</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p" data-group-id="6616335766-3">{</span><span class="ss">env_var</span><span class="p">,</span><span class="w"> </span><span class="p" data-group-id="6616335766-4">&lt;&lt;</span><span class="s">&quot;RECKON_DB_KEY_MY_STORE&quot;</span><span class="p" data-group-id="6616335766-4">&gt;&gt;</span><span class="p" data-group-id="6616335766-3">}</span><span class="w">
         </span><span class="c1">%% or: {sealed_file, &quot;/path/to/key&quot;}  (mode 0600 required)</span><span class="w">
-    </span><span class="p" data-group-id="1685311043-2">}</span><span class="w">
-</span><span class="p" data-group-id="1685311043-1">}</span></code></pre><p>Keys are 32 random bytes (HMAC-SHA256). Loaded into
+    </span><span class="p" data-group-id="6616335766-2">}</span><span class="w">
+</span><span class="p" data-group-id="6616335766-1">}</span></code></pre><p>Keys are 32 random bytes (HMAC-SHA256). Loaded into
 <code class="inline">persistent_term</code> at store startup; cleared on shutdown.
 Misconfiguration (missing env, bad base64, insecure file mode,
 wrong size) is fail-fast — the store refuses to start.</p><h4>Write path (Layer 2)</h4><ul><li><code class="inline">reckon_db_streams:append/4,5</code> populates <code class="inline">prev_event_hash</code> + <code class="inline">mac</code>
@@ -194,10 +215,10 @@ through <code class="inline">reckon_gater_api</code> and should not be affected 
 any code that reaches into reckon-db internal modules must update:</p><table><thead><tr><th style="text-align: left;">Old module</th><th style="text-align: left;">New module</th></tr></thead><tbody><tr><td style="text-align: left;"><code class="inline">esdb_aggregate_nif</code></td><td style="text-align: left;"><code class="inline">reckon_db_aggregate_nif</code></td></tr><tr><td style="text-align: left;"><code class="inline">esdb_archive_nif</code></td><td style="text-align: left;"><code class="inline">reckon_db_archive_nif</code></td></tr><tr><td style="text-align: left;"><code class="inline">esdb_crypto_nif</code></td><td style="text-align: left;"><code class="inline">reckon_db_crypto_nif</code></td></tr><tr><td style="text-align: left;"><code class="inline">esdb_filter_nif</code></td><td style="text-align: left;"><code class="inline">reckon_db_filter_nif</code></td></tr><tr><td style="text-align: left;"><code class="inline">esdb_graph_nif</code></td><td style="text-align: left;"><code class="inline">reckon_db_graph_nif</code></td></tr><tr><td style="text-align: left;"><code class="inline">esdb_hash_nif</code></td><td style="text-align: left;"><code class="inline">reckon_db_hash_nif</code></td></tr><tr><td style="text-align: left;"><code class="inline">esdb_capability_verifier</code></td><td style="text-align: left;"><code class="inline">reckon_db_capability_verifier</code></td></tr><tr><td style="text-align: left;"><code class="inline">esdb_revocation</code></td><td style="text-align: left;"><code class="inline">reckon_db_revocation</code></td></tr></tbody></table><p>ETS table atoms also renamed:</p><ul><li><code class="inline">esdb_revoked_tokens</code>  → <code class="inline">reckon_db_revoked_tokens</code></li><li><code class="inline">esdb_revoked_issuers</code> → <code class="inline">reckon_db_revoked_issuers</code></li></ul><h3 id="dependencies" class="section-heading"><a href="#dependencies" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Dependencies</span></h3><ul><li>Bumped <code class="inline">reckon_gater</code> to <code class="inline">~&gt; 2.0</code> (requires the corresponding renamed API
 from reckon-gater 2.0.0).</li><li>NIF binaries now loaded as <code class="inline">reckon_db_*_nif.so</code> — requires reckon-nifs 2.0.0.</li></ul><h3 id="migration" class="section-heading"><a href="#migration" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Migration</span></h3><p>Applications that go through <code class="inline">reckon_gater_api</code> see only the
 reckon-gater 2.0.0 renames. Direct-internal users:</p><pre><code class="makeup erlang" translate="no"><span class="c1">%% Before</span><span class="w">
-</span><span class="p" data-group-id="0463520681-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Verified</span><span class="p" data-group-id="0463520681-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_capability_verifier</span><span class="p">:</span><span class="nf">verify</span><span class="p" data-group-id="0463520681-2">(</span><span class="n">Token</span><span class="p" data-group-id="0463520681-2">)</span><span class="p">.</span><span class="w">
+</span><span class="p" data-group-id="2874162186-1">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Verified</span><span class="p" data-group-id="2874162186-1">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">esdb_capability_verifier</span><span class="p">:</span><span class="nf">verify</span><span class="p" data-group-id="2874162186-2">(</span><span class="n">Token</span><span class="p" data-group-id="2874162186-2">)</span><span class="p">.</span><span class="w">
 
 </span><span class="c1">%% After</span><span class="w">
-</span><span class="p" data-group-id="0463520681-3">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Verified</span><span class="p" data-group-id="0463520681-3">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_capability_verifier</span><span class="p">:</span><span class="nf">verify</span><span class="p" data-group-id="0463520681-4">(</span><span class="n">Token</span><span class="p" data-group-id="0463520681-4">)</span><span class="p">.</span></code></pre><p>Rebuild from clean: <code class="inline">rm -rf _build rebar.lock &amp;&amp; rebar3 compile</code> will
+</span><span class="p" data-group-id="2874162186-3">{</span><span class="ss">ok</span><span class="p">,</span><span class="w"> </span><span class="n">Verified</span><span class="p" data-group-id="2874162186-3">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_capability_verifier</span><span class="p">:</span><span class="nf">verify</span><span class="p" data-group-id="2874162186-4">(</span><span class="n">Token</span><span class="p" data-group-id="2874162186-4">)</span><span class="p">.</span></code></pre><p>Rebuild from clean: <code class="inline">rm -rf _build rebar.lock &amp;&amp; rebar3 compile</code> will
 re-fetch reckon_gater 2.0+ and reckon_nifs 2.0+ and recompile the renamed
 NIFs via the rustler hooks.</p><h2 id="1-7-5-2026-03-22" class="section-heading"><a href="#1-7-5-2026-03-22" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">[1.7.5] - 2026-03-22</span></h2><h3 id="fixed-1" class="section-heading"><a href="#fixed-1" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Fixed</span></h3><ul><li><strong>Gateway worker version check bypass</strong> — <code class="inline">reckon_db_gateway_worker</code> had a
 duplicate version check (<code class="inline">version_matches/2</code>) that used atoms (<code class="inline">any</code>,
@@ -355,11 +376,11 @@ Event Sourcing Paradigms
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/2.1.1" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/2.1.2" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/2.1.1">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/2.1.2">Hex Preview</a>
 
-              (<a href="https://preview.hex.pm/preview/reckon_db/2.1.1/show/CHANGELOG.md">current file</a>)
+              (<a href="https://preview.hex.pm/preview/reckon_db/2.1.2/show/CHANGELOG.md">current file</a>)
 
           </span>
 

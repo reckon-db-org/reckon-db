@@ -5,6 +5,45 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2] - 2026-05-17
+
+### Fixed — Catch-up filter
+
+Catch-up replay (the path that delivers historical events to a
+newly-registered subscription) ignored the subscription's selector
+and pushed the entire global event log to the subscriber, regardless
+of its declared filter. The Khepri trigger filter (live path) was
+correct; only the catch-up path was unfiltered.
+
+Net effect on an active store: every subscription opened with
+`start_from = 0` received the full history of every stream, then
+flipped to correctly filtered live deliveries. Stream-scoped
+consumers had to discard 99%+ of what they received on attach.
+
+#### Implementation
+
+- New `reckon_db_filters:matches/3` — in-memory predicate that
+  evaluates a `(Type, Selector)` pair against an `#event{}` record.
+  Handles `by_stream` (exact stream id; `<<"$all">>` matches all),
+  `by_event_type`, and `by_tags` (set inclusion). `by_event_pattern`
+  and `by_event_payload` pass through; live trigger filters them
+  correctly so the gap is narrower. A real map-pattern evaluator
+  is a follow-up.
+- `do_catchup/5` now takes the subscription's type + selector and
+  applies the predicate to each batch before sending. Read window
+  through `read_all_global` still advances by raw batch size so the
+  scan progresses even when nothing in a window matches.
+- `deliver_catchup_batch` separated into filtered/raw counts; logs
+  "events scanned" rather than "delivered" so the metric reflects
+  what catch-up actually saw.
+
+#### Behaviour change
+
+Subscribers that relied on receiving cross-stream events from a
+single `by_stream` subscription will now miss them. The intended
+contract is "subscribe per stream; use `<<"$all">>` for the global
+firehose" — this release makes the implementation match.
+
 ## [2.1.1] - 2026-05-15
 
 ### Added — Backward-direction chain verification
