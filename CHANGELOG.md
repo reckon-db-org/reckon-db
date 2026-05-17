@@ -5,6 +5,20 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2026-05-17
+
+### Fixed — Normalize cluster status vocabulary
+
+Follow-up to 2.2.1's `reckon_db_cluster` facade.
+`reckon_db_consistency_checker` uses `consensus`/`no_consensus` in
+its result maps; the gateway's `cluster_status/1` converter
+expects `healthy`/`degraded`/`split_brain`/`no_quorum` and falls
+through to `CLUSTER_STATUS_DEGRADED` for anything else. So a fully
+healthy 4-node cluster was being reported as `DEGRADED` over gRPC
+despite consistency_checker correctly saying "consensus". The
+facade now translates `consensus -> healthy`,
+`no_consensus -> split_brain` before returning.
+
 ## [2.2.1] - 2026-05-17
 
 ### Fixed — Add missing `reckon_db_cluster` facade
