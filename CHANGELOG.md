@@ -5,6 +5,83 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-05-17
+
+### Added — Embedded Rust NIF acceleration
+
+reckon-db now ships its own NIF acceleration in-tree, modelled on
+macula's pattern. The six previously-separate Rust crates from the
+[reckon-nifs](https://codeberg.org/reckon-db-org/reckon-nifs) sidecar
+are absorbed into `native/` and `priv/` of this package:
+
+| Crate | Speedup |
+|-------|---------|
+| `reckon_db_crypto_nif` | Ed25519 verify, SHA256 — 3-5× |
+| `reckon_db_archive_nif` | LZ4 compression — 5-8× |
+| `reckon_db_hash_nif` | xxHash, FNV-1a — 10-15× |
+| `reckon_db_aggregate_nif` | Vectorised aggregation — 5-10× |
+| `reckon_db_filter_nif` | Regex/pattern matching — 3-5× |
+| `reckon_db_graph_nif` | Graph algorithms — 5-10× |
+
+#### How it works
+
+- `rebar.config` pre_hook invokes `priv/build-nifs.sh` before
+  Erlang compilation. The script runs `cargo build --release` for
+  each crate and copies the resulting `.so` into `priv/`.
+- Build script is **idempotent** (skips `.so` files already
+  present) and **tolerant** (logs a warning and continues if the
+  Rust toolchain isn't installed — wrapper modules then use the
+  Erlang fallbacks).
+- Prebuilt `.so` files are shipped in the hex package, so
+  consumers without `cargo` still get acceleration.
+- Each wrapper module's `-on_load(init/0)` looks in
+  `code:priv_dir(reckon_db)` for the `.so`, with a fallback to
+  `code:priv_dir(reckon_nifs)` so users still pinned to the legacy
+  sidecar package keep working.
+
+#### Why this consolidation
+
+The previous reckon-nifs sidecar had three layered problems:
+
+1. **Name drift.** Crates were renamed `esdb_* → reckon_db_*` in
+   v2.0.0 but the `rustler::init!` macros inside each crate kept
+   declaring the OLD module name. So `erlang:load_nif/2` from the
+   reckon-db wrappers refused to load with
+   `{bad_lib, "Library module name 'esdb_hash_nif' does not match
+   calling module 'reckon_db_hash_nif'"}`.
+2. **Dead loader.** A central `reckon_nifs_loader:load_all/0` set
+   `esdb_*_loaded` persistent_term keys that nothing read — the
+   actual loading happens in each wrapper's own `-on_load`, not
+   from a central place. The loader's `erlang:load_nif/2` calls
+   couldn't have worked anyway because NIFs can only be loaded
+   into the module that owns the stub declarations.
+3. **Cross-application priv lookup.** The fallback to
+   `code:priv_dir(reckon_nifs)` only fires when the consumer has
+   explicitly listed reckon_nifs as a dep. Plenty of consumers
+   (including the gateway) hadn't.
+
+All three issues disappear when the NIFs live in the same package
+that uses them — which is how macula has been doing it all along.
+
+reckon-nifs 2.0.1 (the cleanup release shipped a few minutes
+before this one) is now the **final** release of that sidecar
+package. New consumers should depend only on `reckon_db ~> 2.3`;
+existing consumers pinned to reckon-nifs keep working because the
+wrappers retain the legacy lookup path.
+
+### Other
+
+- `rebar.config`: package `links` updated from `{"GitHub", ...}`
+  (which already pointed at codeberg.org but had a misleading
+  label) to `{"Codeberg", ...}`.
+- `rebar.config`: `pkg.files` extended to include `native/`,
+  `priv/build-nifs.sh`, the six `priv/reckon_db_*.so` binaries,
+  and the `CONTRIBUTING.md` + `CODE_OF_CONDUCT.md` files that
+  landed in 2.2.2.
+- `docs/dialyzer-backlog.md`: the cleanup release that this
+  document scheduled as v2.3.0 is bumped to **v2.4.0** since 2.3.0
+  is now this NIF-absorption release.
+
 ## [2.2.2] - 2026-05-17
 
 ### Fixed — Normalize cluster status vocabulary

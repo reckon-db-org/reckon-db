@@ -33,3 +33,9 @@ ebin/
 # Crash dumps
 rebar3.crashdump
 erl_crash.dump
+
+# Rust build artefacts under native/<crate>/target — committed
+# .so files in priv/ are the released artifact; the target/ dirs
+# are intermediate output from `cargo build --release` and not
+# worth committing.
+native/*/target/

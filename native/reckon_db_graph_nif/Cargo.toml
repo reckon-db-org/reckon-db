@@ -1,0 +1,13 @@
+[package]
+name = "reckon_db_graph_nif"
+version = "0.1.0"
+edition = "2021"
+description = "NIF optimizations for causation graph operations"
+
+[lib]
+name = "reckon_db_graph_nif"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.34"
+petgraph = "0.6"

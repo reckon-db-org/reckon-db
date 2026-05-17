@@ -1,0 +1,18 @@
+[package]
+name = "reckon_db_aggregate_nif"
+version = "0.1.0"
+authors = ["rgfaber"]
+edition = "2021"
+description = "NIF optimizations for reckon-db event aggregation operations"
+
+[lib]
+name = "reckon_db_aggregate_nif"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Rustler for Erlang NIF bindings
+rustler = "0.34"
+
+[profile.release]
+lto = true
+opt-level = 3

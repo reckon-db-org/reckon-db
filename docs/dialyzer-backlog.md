@@ -66,7 +66,9 @@ The top 6 files account for 88 warnings (~48% of the total). Concentrating clean
 
 ## Scheduling
 
-This backlog is **not** a release blocker for v2.2.2 — it inherits the dialyzer state of v2.2.0 unchanged. It SHOULD be cleared as a dedicated cleanup release, candidate version **v2.3.0**, to give the work a clean changelog entry and let the SemVer minor bump signal "internal-quality refresh."
+This backlog is **not** a release blocker for v2.2.2 — it inherits the dialyzer state of v2.2.0 unchanged. It SHOULD be cleared as a dedicated cleanup release, candidate version **v2.4.0**, to give the work a clean changelog entry and let the SemVer minor bump signal "internal-quality refresh."
+
+(Originally scheduled as v2.3.0, bumped to v2.4.0 because v2.3.0 became the NIF-absorption release — see CHANGELOG.)
 
 Suggested order, hot files first:
 

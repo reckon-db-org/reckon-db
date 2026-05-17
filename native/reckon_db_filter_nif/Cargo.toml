@@ -1,0 +1,24 @@
+[package]
+name = "reckon_db_filter_nif"
+version = "0.1.0"
+authors = ["rgfaber"]
+edition = "2021"
+description = "NIF optimizations for reckon-db pattern matching and filtering operations"
+
+[lib]
+name = "reckon_db_filter_nif"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Rustler for Erlang NIF bindings
+rustler = "0.34"
+
+# Fast regex implementation
+regex = "1.11"
+
+# Glob pattern matching
+glob = "0.3"
+
+[profile.release]
+lto = true
+opt-level = 3
