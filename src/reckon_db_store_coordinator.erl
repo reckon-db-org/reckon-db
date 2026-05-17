@@ -244,22 +244,44 @@ join_existing_cluster(StoreId, TargetNode) ->
     end.
 
 do_join_with_timeout(StoreId, TargetNode) ->
-    case khepri_cluster:join(StoreId, TargetNode, ?KHEPRI_JOIN_TIMEOUT) of
-        ok ->
+    %% khepri_cluster:join/3 exists in the source but is NOT exported
+    %% in the installed khepri version (0.17.2 exports only join/1
+    %% and join/2). The 2-arg form internally calls
+    %% khepri_app:get_default_timeout/0, which defaults to `infinity'
+    %% — so a stuck join hangs forever. Setting that app-wide env
+    %% would also affect every other khepri operation, so we wrap
+    %% the call in a side process and kill it on timeout.
+    Parent = self(),
+    Ref = make_ref(),
+    Joiner = spawn(fun() ->
+        Parent ! {join_result, Ref, khepri_cluster:join(StoreId, TargetNode)}
+    end),
+    MRef = erlang:monitor(process, Joiner),
+    receive
+        {join_result, Ref, ok} ->
+            erlang:demonitor(MRef, [flush]),
             logger:info("Successfully joined cluster via ~p (store: ~p)",
                        [TargetNode, StoreId]),
             verify_cluster_membership(StoreId);
-        {error, {timeout, _}} ->
-            logger:warning(
-                "Join via ~p timed out after ~bms (store: ~p). The remote "
-                "node is reachable but cluster membership change is "
-                "stuck. Operator may need to wipe local state.",
-                [TargetNode, ?KHEPRI_JOIN_TIMEOUT, StoreId]),
-            failed;
-        {error, Reason} ->
+        {join_result, Ref, {error, Reason}} ->
+            erlang:demonitor(MRef, [flush]),
             logger:warning("Failed to join cluster via ~p: ~p (store: ~p)",
                           [TargetNode, Reason, StoreId]),
+            failed;
+        {'DOWN', MRef, process, Joiner, Reason} ->
+            logger:warning("Join helper crashed via ~p: ~p (store: ~p)",
+                          [TargetNode, Reason, StoreId]),
             failed
+    after ?KHEPRI_JOIN_TIMEOUT ->
+        exit(Joiner, kill),
+        receive {'DOWN', MRef, _, _, _} -> ok after 100 -> ok end,
+        logger:warning(
+            "Join via ~p timed out after ~bms (store: ~p). The remote "
+            "node is reachable but cluster membership change is stuck. "
+            "Will retry. If the node has stale Ra state, recover with "
+            "scripts/wipe-and-rejoin.sh.",
+            [TargetNode, ?KHEPRI_JOIN_TIMEOUT, StoreId]),
+        failed
     end.
 
 %% @private Verify cluster membership after join
