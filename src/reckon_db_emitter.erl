@@ -169,7 +169,12 @@ maybe_forward_events(Pid, Events) when is_pid(Pid), node(Pid) =:= node() ->
         true -> Pid ! {events, Events};
         false -> ok
     end;
-maybe_forward_events(_RemotePid, _Events) ->
+maybe_forward_events(Pid, Events) when is_pid(Pid) ->
+    %% Remote pid — `!' works across Erlang distribution. The previous
+    %% silent-drop here caused subscriptions to lose events whenever
+    %% the broadcast/catch-up source ran on a node other than the
+    %% subscriber's node.
+    catch (Pid ! {events, Events}),
     ok.
 
 deliver_event(undefined, Event, StoreId, _SubscriptionKey, Topic) ->
@@ -192,7 +197,18 @@ broadcast_to_topic(StoreId, Topic, Event) ->
     ),
     ok.
 
-%% @private Send event directly to subscriber, stop pool if subscriber is dead
+%% @private Send event directly to subscriber. Liveness probing only
+%% runs for local pids — `erlang:is_process_alive/1' is undefined for
+%% remote pids. For remote subscribers we rely on Erlang distribution
+%% delivery semantics (the message is dropped silently by the runtime
+%% if the remote pid is dead — same effect as the local liveness
+%% short-circuit, just less observable).
+%%
+%% The previous implementation silently dropped EVERY remote-pid
+%% delivery, which made `by_stream' subscriptions miss events whenever
+%% the trigger fired on a node other than the subscriber's node
+%% (i.e. virtually always, for subscribers attached to a non-leader
+%% gateway).
 -spec send_to_subscriber(pid(), event(), atom(), binary()) -> ok.
 send_to_subscriber(Pid, Event, StoreId, SubscriptionKey) when node(Pid) =:= node() ->
     case erlang:is_process_alive(Pid) of
@@ -208,5 +224,6 @@ send_to_subscriber(Pid, Event, StoreId, SubscriptionKey) when node(Pid) =:= node
             spawn(fun() -> reckon_db_emitter_pool:stop(StoreId, SubscriptionKey) end),
             ok
     end;
-send_to_subscriber(_RemotePid, _Event, _StoreId, _SubscriptionKey) ->
+send_to_subscriber(Pid, Event, _StoreId, _SubscriptionKey) when is_pid(Pid) ->
+    catch (Pid ! {events, [Event]}),
     ok.
