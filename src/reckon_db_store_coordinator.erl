@@ -29,6 +29,18 @@
 
 -define(JOIN_TIMEOUT, 30000).
 -define(RPC_TIMEOUT, 5000).
+%% khepri_cluster:join/2 defaults to khepri's `default_timeout' which
+%% is `infinity'. Combined with a global lock acquired during the
+%% join, a simultaneous-boot cluster can wedge a node forever waiting
+%% on the lock. Pass an explicit timeout less than the outer
+%% gen_server:call's JOIN_TIMEOUT so a stuck join surfaces as an
+%% error instead of an infinite hang.
+-define(KHEPRI_JOIN_TIMEOUT, 20000).
+%% Retry delay when initial join finds nothing to join yet (all peers
+%% are still booting), or when the join failed transiently. With
+%% jitter, simultaneous boots can stagger their join attempts.
+-define(JOIN_RETRY_BASE_MS, 3000).
+-define(JOIN_RETRY_MAX_MS,  8000).
 
 -record(state, {
     store_id :: atom(),
@@ -103,9 +115,12 @@ init(#store_config{store_id = StoreId} = Config) ->
 handle_call({join_cluster, StoreId}, _From, State) ->
     Result = do_join_cluster(StoreId),
     NewState = case Result of
-        ok -> State#state{join_status = joined};
+        ok          -> State#state{join_status = joined};
         coordinator -> State#state{join_status = joined};
-        _ -> State
+        waiting     -> schedule_retry(State);
+        no_nodes    -> schedule_retry(State);
+        failed      -> schedule_retry(State);
+        _           -> State
     end,
     {reply, Result, NewState};
 
@@ -127,8 +142,33 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info({retry_join, StoreId}, #state{join_status = joined} = State) ->
+    %% Already joined while we were waiting — drop the retry.
+    logger:debug("retry_join: already joined (store: ~p)", [StoreId]),
+    {noreply, State};
+handle_info({retry_join, StoreId}, State) ->
+    logger:info("retry_join: re-attempting cluster join (store: ~p)", [StoreId]),
+    Result = do_join_cluster(StoreId),
+    NewState = case Result of
+        ok          -> State#state{join_status = joined};
+        coordinator -> State#state{join_status = joined};
+        waiting     -> schedule_retry(State);
+        no_nodes    -> schedule_retry(State);
+        failed      -> schedule_retry(State);
+        _           -> State
+    end,
+    {noreply, NewState};
 handle_info(_Info, State) ->
     {noreply, State}.
+
+%% @private Schedule a single retry of the cluster-join sequence.
+%% Uses rand jitter so simultaneous boots don't keep colliding on the
+%% same retry tick.
+schedule_retry(#state{store_id = StoreId} = State) ->
+    Jitter = rand:uniform(?JOIN_RETRY_MAX_MS - ?JOIN_RETRY_BASE_MS),
+    Delay = ?JOIN_RETRY_BASE_MS + Jitter,
+    erlang:send_after(Delay, self(), {retry_join, StoreId}),
+    State.
 
 terminate(Reason, #state{store_id = StoreId}) ->
     logger:info("Store coordinator terminating (store: ~p, reason: ~p)", [StoreId, Reason]),
@@ -185,10 +225,37 @@ handle_no_existing_clusters(StoreId, ConnectedNodes) ->
 -spec join_existing_cluster(atom(), node()) -> ok | failed.
 join_existing_cluster(StoreId, TargetNode) ->
     logger:info("Joining cluster via ~p (store: ~p)", [TargetNode, StoreId]),
-    case khepri_cluster:join(StoreId, TargetNode) of
+    %% Verify the local Ra server is registered before attempting
+    %% join. If not, khepri_cluster:join will block waiting on
+    %% infrastructure that never arrives. Explicit fail-fast lets
+    %% the operator run wipe-and-rejoin instead of waiting on a
+    %% silent hang.
+    case erlang:whereis(StoreId) of
+        undefined ->
+            logger:error(
+                "Local Ra server for store ~p is not registered. "
+                "This typically means the local data dir has stale "
+                "membership state from a previous cluster generation. "
+                "Recover with reckon-cluster-compose/scripts/wipe-and-rejoin.sh.",
+                [StoreId]),
+            failed;
+        _Pid ->
+            do_join_with_timeout(StoreId, TargetNode)
+    end.
+
+do_join_with_timeout(StoreId, TargetNode) ->
+    case khepri_cluster:join(StoreId, TargetNode, ?KHEPRI_JOIN_TIMEOUT) of
         ok ->
-            logger:info("Successfully joined cluster via ~p (store: ~p)", [TargetNode, StoreId]),
+            logger:info("Successfully joined cluster via ~p (store: ~p)",
+                       [TargetNode, StoreId]),
             verify_cluster_membership(StoreId);
+        {error, {timeout, _}} ->
+            logger:warning(
+                "Join via ~p timed out after ~bms (store: ~p). The remote "
+                "node is reachable but cluster membership change is "
+                "stuck. Operator may need to wipe local state.",
+                [TargetNode, ?KHEPRI_JOIN_TIMEOUT, StoreId]),
+            failed;
         {error, Reason} ->
             logger:warning("Failed to join cluster via ~p: ~p (store: ~p)",
                           [TargetNode, Reason, StoreId]),
@@ -222,15 +289,24 @@ verify_cluster_membership(StoreId) ->
 find_existing_cluster_nodes(StoreId, Nodes) ->
     lists:filter(fun(Node) -> has_active_cluster(Node, StoreId) end, Nodes).
 
-%% @private Check if a node has an active cluster
+%% @private Check if a node has an active (multi-node) cluster.
+%%
+%% A freshly-started Khepri node reports itself as a 1-member
+%% cluster — that's the default standalone configuration. If we
+%% accept that as "active cluster" during simultaneous boots, every
+%% node sees every other node as a cluster and they all race to
+%% join each other under the same global lock. Only treat a node
+%% as having an active cluster when it has MORE than one member —
+%% i.e. it has actually been joined.
 -spec has_active_cluster(node(), atom()) -> boolean().
 has_active_cluster(Node, StoreId) ->
     case rpc:call(Node, khepri_cluster, members, [StoreId], ?RPC_TIMEOUT) of
-        {ok, Members} when is_list(Members), Members =/= [] ->
-            logger:debug("Found existing cluster on ~p with ~p members",
+        {ok, Members} when length(Members) > 1 ->
+            logger:debug("Found existing multi-node cluster on ~p with ~p members",
                         [Node, length(Members)]),
             true;
-        {ok, []} ->
+        {ok, _} ->
+            %% Single-member (standalone) or empty — not an active cluster.
             false;
         {badrpc, Reason} ->
             logger:debug("RPC to ~p failed: ~p", [Node, Reason]),
