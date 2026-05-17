@@ -63,8 +63,8 @@ verify_consistency(StoreId) ->
         {ok, #{has_quorum := false} = Q} ->
             {ok, Q#{status => no_quorum}};
         {ok, Quorum} ->
-            Membership = reckon_db_consistency_checker:verify_membership_consensus(StoreId),
-            Leader = reckon_db_consistency_checker:verify_leader_consensus(StoreId),
+            Membership = normalize(reckon_db_consistency_checker:verify_membership_consensus(StoreId)),
+            Leader = normalize(reckon_db_consistency_checker:verify_leader_consensus(StoreId)),
             Status = overall_status(Membership, Leader),
             {ok, #{
                 status     => Status,
@@ -83,7 +83,7 @@ verify_consistency(StoreId) ->
 %% `HealthService.VerifyMembershipConsensus' RPC.
 -spec verify_membership(atom()) -> {ok, map()} | {error, term()}.
 verify_membership(StoreId) ->
-    reckon_db_consistency_checker:verify_membership_consensus(StoreId).
+    normalize(reckon_db_consistency_checker:verify_membership_consensus(StoreId)).
 
 %% @doc Verify Raft log consistency across followers.
 %%
@@ -92,7 +92,7 @@ verify_membership(StoreId) ->
 %% RPC.
 -spec check_log_consistency(atom()) -> {ok, map()} | {error, term()}.
 check_log_consistency(StoreId) ->
-    reckon_db_consistency_checker:verify_raft_consistency(StoreId).
+    normalize(reckon_db_consistency_checker:verify_raft_consistency(StoreId)).
 
 %%====================================================================
 %% Internal
@@ -108,6 +108,19 @@ overall_status({ok, #{status := healthy}}, {ok, #{status := healthy}}) -> health
 overall_status({error, _}, _) -> degraded;
 overall_status(_, {error, _}) -> degraded;
 overall_status(_, _) -> degraded.
+
+%% @private The consistency_checker uses `consensus' to mean
+%% "all nodes agree" and `no_consensus' to mean "they don't". This
+%% facade exposes the gateway's vocabulary: `healthy | degraded |
+%% split_brain | no_quorum'. Rewrite the status atom in-place.
+normalize({ok, #{status := Status} = Map}) ->
+    {ok, Map#{status => normalize_status(Status)}};
+normalize(Other) ->
+    Other.
+
+normalize_status(consensus)    -> healthy;
+normalize_status(no_consensus) -> split_brain;
+normalize_status(Other)        -> Other.
 
 check_to_map({ok, Map}) -> Map;
 check_to_map({error, Reason}) -> #{error => Reason}.
