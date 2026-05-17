@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.39.1">
-    <meta name="project" content="reckon_db v2.1.4">
+    <meta name="project" content="reckon_db v2.2.0">
 
 
-    <title>reckon_db_crypto_nif — reckon_db v2.1.4</title>
+    <title>reckon_db_crypto_nif — reckon_db v2.2.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-BFBD6E46.js"></script>
+    <script defer src="dist/sidebar_items-42510483.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v2.1.4
+          v2.2.0
         </div>
       </div>
     </div>
@@ -94,7 +94,7 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_crypto_nif</span> 
-      <small class="app-vsn" translate="no">(reckon_db v2.1.4)</small>
+      <small class="app-vsn" translate="no">(reckon_db v2.2.0)</small>
 
     </h1>
 
@@ -108,14 +108,14 @@ reckon_db
 
     <section id="moduledoc">
 <p>Optimized cryptographic operations for reckon-db.</p><p>This module provides high-performance implementations of cryptographic operations used throughout reckon-db. It supports two modes:</p><ul><li><b>Enterprise mode</b>: Uses Rust NIFs for maximum performance</li><li><b>Community mode</b>: Uses pure Erlang fallbacks (fully functional)</li></ul><p>The mode is automatically detected at startup based on whether the NIF library is available. Community edition users (hex.pm) will always use the Erlang fallbacks, which provide identical functionality.</p><h3 id="module-usage" class="section-heading"><a href="#module-usage" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Usage">Usage</a></span></h3><p>All functions work identically regardless of which implementation is active:</p><pre><code class="makeup erlang" translate="no"><span class="w">  </span><span class="c1">%% Verify Ed25519 signature</span><span class="w">
-  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_crypto_nif</span><span class="p">:</span><span class="nf">verify_ed25519</span><span class="p" data-group-id="7083176527-1">(</span><span class="n">Message</span><span class="p">,</span><span class="w"> </span><span class="n">Signature</span><span class="p">,</span><span class="w"> </span><span class="n">PublicKey</span><span class="p" data-group-id="7083176527-1">)</span><span class="p">.</span><span class="w">
+  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_crypto_nif</span><span class="p">:</span><span class="nf">verify_ed25519</span><span class="p" data-group-id="0634447266-1">(</span><span class="n">Message</span><span class="p">,</span><span class="w"> </span><span class="n">Signature</span><span class="p">,</span><span class="w"> </span><span class="n">PublicKey</span><span class="p" data-group-id="0634447266-1">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Generate token CID (SHA256 + base64)</span><span class="w">
-  </span><span class="n">CID</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_crypto_nif</span><span class="p">:</span><span class="nf">hash_sha256_base64</span><span class="p" data-group-id="7083176527-2">(</span><span class="n">Data</span><span class="p" data-group-id="7083176527-2">)</span><span class="p">.</span><span class="w">
+  </span><span class="n">CID</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_crypto_nif</span><span class="p">:</span><span class="nf">hash_sha256_base64</span><span class="p" data-group-id="0634447266-2">(</span><span class="n">Data</span><span class="p" data-group-id="0634447266-2">)</span><span class="p">.</span><span class="w">
  
   </span><span class="c1">%% Check which mode is active</span><span class="w">
-  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_crypto_nif</span><span class="p">:</span><span class="nf">is_nif_loaded</span><span class="p" data-group-id="7083176527-3">(</span><span class="p" data-group-id="7083176527-3">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
-  </span><span class="ss">false</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_crypto_nif</span><span class="p">:</span><span class="nf">is_nif_loaded</span><span class="p" data-group-id="7083176527-4">(</span><span class="p" data-group-id="7083176527-4">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
+  </span><span class="ss">true</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_crypto_nif</span><span class="p">:</span><span class="nf">is_nif_loaded</span><span class="p" data-group-id="0634447266-3">(</span><span class="p" data-group-id="0634447266-3">)</span><span class="p">.</span><span class="w">  </span><span class="c1">%% Enterprise</span><span class="w">
+  </span><span class="ss">false</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nc">reckon_db_crypto_nif</span><span class="p">:</span><span class="nf">is_nif_loaded</span><span class="p" data-group-id="0634447266-4">(</span><span class="p" data-group-id="0634447266-4">)</span><span class="p">.</span><span class="w"> </span><span class="c1">%% Community</span></code></pre>
     </section>
 
 </div>
@@ -458,9 +458,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/2.1.4" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/2.2.0" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/2.1.4">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/2.2.0">Hex Preview</a>
 
           </span>
 

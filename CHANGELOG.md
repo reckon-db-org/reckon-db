@@ -5,6 +5,71 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-05-17
+
+### Added — Cluster-wide store discovery + watcher API
+
+`reckon_db_store_registry' now provides genuine cluster-wide
+discovery for the EventStore-style "ephemeral store" model: stores
+exist when their supervision tree is running on at least one
+cluster node, and the registry tracks the union of who is
+currently announcing themselves. No CreateStore/DeleteStore —
+lifecycle stays a deployment concern.
+
+#### `subscribe/1' + `unsubscribe/1' (new)
+
+Public API for live store-topology events. Subscribed processes
+receive:
+
+    {store_event, announced | retired, EntryMap}
+
+as stores come and go anywhere in the cluster. EntryMap matches
+the `list_stores/0' shape. Subscribers are monitored — dead pids
+are pruned automatically via the registry's `DOWN' handler, so
+no explicit unsubscribe is needed when the watcher crashes.
+
+This is the substrate for the new gRPC
+`reckon.gateway.v1.StoresService.WatchStores' RPC in
+reckon-gateway 0.4.0.
+
+### Fixed — Cluster-wide discovery actually works
+
+Two latent bugs that meant each node only knew about its own
+local store, despite the cluster being healthy:
+
+1. The previous version subscribed to a pg-mailbox message
+   pattern that pg never emits (`{pg, Scope, Group, {leave, _,
+   _}}'). Node-down cleanup was silently broken.
+
+2. Announcement was one-way: when a registry came up, it
+   broadcast its local store to peers but never asked peers
+   for THEIR current state. A registry that booted after its
+   peers had already announced ended up knowing only about
+   itself.
+
+Fix:
+
+- Use `pg:monitor/2', which returns CURRENT members and
+  subscribes to live join/leave events idiomatically. The
+  initial member list seeds a bilateral state-sync; later
+  joins trigger a fresh state request to the new arrival.
+- `peer_state_request' / `peer_state_reply' cast pair —
+  fully async, no try/catch around dead-peer calls, no
+  timeouts. A dead peer just doesn't reply; merge proceeds
+  with whatever arrived.
+
+Verified end-to-end against the 4-node beam cluster: every node
+sees all 4 store-instances after `pg:monitor' bootstrap.
+
+### Other cleanups
+
+- `find_entry/3' uses `lists:search/2', returns `not_found'
+  (was: a `lists:filter' returning `false')
+- announce/unannounce handlers are clause-based on entry
+  presence; the "no such entry" path is a no-op early return
+- `notify_subscribers' uses plain `Pid ! Msg' — runtime drops
+  to dead pids silently, no `catch' wrapper needed
+
 ## [2.1.4] - 2026-05-17
 
 ### Fixed — Cluster bootstrap robustness

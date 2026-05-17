@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.39.1">
-    <meta name="project" content="reckon_db v2.1.4">
+    <meta name="project" content="reckon_db v2.2.0">
 
 
-    <title>reckon_db_store_registry — reckon_db v2.1.4</title>
+    <title>reckon_db_store_registry — reckon_db v2.2.0</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-BFBD6E46.js"></script>
+    <script defer src="dist/sidebar_items-42510483.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v2.1.4
+          v2.2.0
         </div>
       </div>
     </div>
@@ -94,7 +94,7 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_store_registry</span> 
-      <small class="app-vsn" translate="no">(reckon_db v2.1.4)</small>
+      <small class="app-vsn" translate="no">(reckon_db v2.2.0)</small>
 
     </h1>
 
@@ -246,6 +246,16 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
+        <a href="#subscribe/1" data-no-tooltip="" translate="no">subscribe(Pid)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Subscribe a process to live store-registry events. The subscriber receives messages of the form <code>{store_event, announced | retired, EntryMap}</code> as stores come and go anywhere in the cluster. Used by the gRPC <code>WatchStores</code> RPC and any in-BEAM watcher that needs live cluster topology.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
         <a href="#terminate/2" data-no-tooltip="" translate="no">terminate(Reason, State)</a>
 
       </div>
@@ -259,6 +269,14 @@ reckon_db
       </div>
 
         <div class="summary-synopsis"><p>Unannounce a store from the cluster</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#unsubscribe/1" data-no-tooltip="" translate="no">unsubscribe(Pid)</a>
+
+      </div>
 
     </div>
 
@@ -642,6 +660,34 @@ reckon_db
 <p>Start the store registry</p>
   </section>
 </section>
+<section class="detail" id="subscribe/1">
+
+  <div class="detail-header">
+    <a href="#subscribe/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">subscribe(Pid)</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> subscribe(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()) -> ok.</pre>
+
+      </div>
+
+<p>Subscribe a process to live store-registry events. The subscriber receives messages of the form <code>{store_event, announced | retired, EntryMap}</code> as stores come and go anywhere in the cluster. Used by the gRPC <code>WatchStores</code> RPC and any in-BEAM watcher that needs live cluster topology.</p><p>Subscribers are automatically removed if they crash (we monitor them). Safe to call multiple times — no-op if already subscribed.</p>
+  </section>
+</section>
 <section class="detail" id="terminate/2">
 
   <div class="detail-header">
@@ -692,6 +738,34 @@ reckon_db
 <p>Unannounce a store from the cluster</p><p>Called when a store is stopping. Removes the store from local registry and broadcasts removal to all other registries.</p>
   </section>
 </section>
+<section class="detail" id="unsubscribe/1">
+
+  <div class="detail-header">
+    <a href="#unsubscribe/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">unsubscribe(Pid)</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> unsubscribe(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()) -> ok.</pre>
+
+      </div>
+
+
+  </section>
+</section>
 
     </div>
   </section>
@@ -700,9 +774,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/2.1.4" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/2.2.0" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/2.1.4">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/2.2.0">Hex Preview</a>
 
           </span>
 
