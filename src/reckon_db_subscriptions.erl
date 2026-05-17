@@ -525,12 +525,16 @@ map_to_event(Map) ->
 -spec maybe_start_catchup(atom(), subscription()) -> ok.
 maybe_start_catchup(_StoreId, #subscription{subscriber_pid = undefined}) ->
     ok;
-maybe_start_catchup(StoreId, #subscription{subscriber_pid = Pid, checkpoint = Checkpoint}) ->
+maybe_start_catchup(StoreId,
+                   #subscription{subscriber_pid = Pid,
+                                 checkpoint = Checkpoint,
+                                 type = Type,
+                                 selector = Selector}) ->
     StartFrom = case Checkpoint of
         undefined -> 0;
         N when is_integer(N) -> N
     end,
-    spawn_link(fun() -> do_catchup(StoreId, Pid, StartFrom) end),
+    spawn_link(fun() -> do_catchup(StoreId, Pid, StartFrom, Type, Selector) end),
     ok.
 
 %% @private Read historical events in batches and deliver to subscriber.
@@ -547,8 +551,9 @@ maybe_start_catchup(StoreId, #subscription{subscriber_pid = Pid, checkpoint = Ch
 %% to the subscriber. Silently delivering a tampered event would
 %% leave the consumer's read model inconsistent with no warning,
 %% which is strictly worse than failing loudly.
--spec do_catchup(atom(), pid(), non_neg_integer()) -> ok.
-do_catchup(StoreId, SubscriberPid, Offset) ->
+-spec do_catchup(atom(), pid(), non_neg_integer(),
+                 atom(), binary() | map() | [binary()]) -> ok.
+do_catchup(StoreId, SubscriberPid, Offset, Type, Selector) ->
     BatchSize = 500,
     case reckon_db_streams:read_all_global(StoreId, Offset, BatchSize) of
         {ok, []} ->
@@ -558,8 +563,18 @@ do_catchup(StoreId, SubscriberPid, Offset) ->
         {ok, Events} ->
             case verify_catchup_batch(StoreId, Events) of
                 ok ->
+                    %% read_all_global returns the WHOLE event log
+                    %% across all streams. Filter to events that
+                    %% actually match this subscription's selector
+                    %% — otherwise every catch-up subscription
+                    %% receives the entire store regardless of its
+                    %% declared filter.
+                    Filtered = [E || E <- Events,
+                                     reckon_db_filters:matches(
+                                         Type, Selector, E)],
                     deliver_catchup_batch(
-                        StoreId, SubscriberPid, Offset, Events, BatchSize);
+                        StoreId, SubscriberPid, Offset,
+                        Filtered, Events, BatchSize, Type, Selector);
                 {error, {integrity_violation, _} = Violation} ->
                     notify_integrity_violation(
                         StoreId, SubscriberPid, Offset, Violation),
@@ -616,20 +631,27 @@ verify_one_event_mac(#event{mac = {_KeyId, _}} = Event, Key) ->
             }}}
     end.
 
-%% @private Deliver a verified batch to the subscriber and continue.
-deliver_catchup_batch(StoreId, SubscriberPid, Offset, Events, BatchSize) ->
+%% @private Deliver a verified+filtered batch to the subscriber and continue.
+%% Offset advances by the RAW batch size (not the filtered count) so
+%% the read window through the global log moves forward correctly.
+deliver_catchup_batch(StoreId, SubscriberPid, Offset,
+                      Filtered, Raw, BatchSize, Type, Selector) ->
     case is_local_process_alive(SubscriberPid) of
         true ->
-            SubscriberPid ! {events, Events},
-            case length(Events) < BatchSize of
+            case Filtered of
+                [] -> ok;
+                _  -> SubscriberPid ! {events, Filtered}
+            end,
+            case length(Raw) < BatchSize of
                 true ->
-                    Total = Offset + length(Events),
+                    Total = Offset + length(Raw),
                     logger:info(
-                        "[catchup] Store ~p: replay complete (~b events delivered)",
+                        "[catchup] Store ~p: replay complete (~b events scanned)",
                         [StoreId, Total]),
                     ok;
                 false ->
-                    do_catchup(StoreId, SubscriberPid, Offset + BatchSize)
+                    do_catchup(StoreId, SubscriberPid, Offset + BatchSize,
+                               Type, Selector)
             end;
         false ->
             logger:warning("[catchup] Store ~p: subscriber died during replay",

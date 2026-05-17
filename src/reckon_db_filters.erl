@@ -15,7 +15,8 @@
     by_event_type/1,
     by_event_pattern/1,
     by_event_payload/1,
-    by_tags/1
+    by_tags/1,
+    matches/3
 ]).
 
 %% @doc Create a filter for all events in a specific stream
@@ -119,3 +120,60 @@ by_tags(Tags) when is_list(Tags) ->
          ]}],
         #{on_actions => [create]}
     ).
+
+%% @doc In-memory predicate matching an `#event{}' record against a
+%% subscription's (Type, Selector) pair.
+%%
+%% The Khepri event filters above are evaluated by Khepri itself on
+%% live triggers, but the catch-up replay path bypasses Khepri's
+%% trigger engine — it reads the global stream and delivers events
+%% directly to the subscriber. Without this predicate, every
+%% subscription with `start_from = 0' would receive the entire log
+%% regardless of its declared selector. Use this to filter the
+%% catch-up batch before sending.
+%%
+%% Tag membership uses set inclusion: the event must carry ALL of
+%% the requested tags (consistent with `read_by_tags' default match
+%% semantics).
+-spec matches(subscription_type(), binary() | map() | [binary()], event()) ->
+    boolean().
+matches(by_stream, <<"$all">>, _Event) ->
+    true;
+matches(stream, <<"$all">>, _Event) ->
+    true;
+matches(by_stream, StreamId, #event{stream_id = StreamId}) when is_binary(StreamId) ->
+    true;
+matches(stream, StreamId, #event{stream_id = StreamId}) when is_binary(StreamId) ->
+    true;
+matches(by_stream, _Other, _Event) ->
+    false;
+matches(stream, _Other, _Event) ->
+    false;
+matches(by_event_type, EventType, #event{event_type = EventType}) when is_binary(EventType) ->
+    true;
+matches(event_type, EventType, #event{event_type = EventType}) when is_binary(EventType) ->
+    true;
+matches(by_event_type, _Other, _Event) ->
+    false;
+matches(event_type, _Other, _Event) ->
+    false;
+matches(by_tags, RequestedTags, #event{tags = EventTags})
+        when is_list(RequestedTags), is_list(EventTags) ->
+    lists:all(fun(T) -> lists:member(T, EventTags) end, RequestedTags);
+matches(tags, RequestedTags, Event) ->
+    matches(by_tags, RequestedTags, Event);
+matches(by_tags, _Other, _Event) ->
+    false;
+%% by_event_pattern / by_event_payload — for now, deliver all (catch-up
+%% replays the full log and the live trigger handles real filtering).
+%% Tightening these is a separate task that needs map-pattern eval here.
+matches(by_event_pattern, _Pattern, _Event) ->
+    true;
+matches(event_pattern, _Pattern, _Event) ->
+    true;
+matches(by_event_payload, _Pattern, _Event) ->
+    true;
+matches(event_payload, _Pattern, _Event) ->
+    true;
+matches(_Type, _Selector, _Event) ->
+    false.
