@@ -5,6 +5,25 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4] - 2026-05-18
+
+### Fixed — Validator errors no longer time out gRPC clients
+
+Pins `reckon_gater` to `~> 2.1.1` (was `~> 2.0`). 2.1.1 adds
+`{invalid_stream_id, _, _}` to the non-retriable allowlist in
+`reckon_gater_retry:is_retriable_error/1`.
+
+Without this fix the validator introduced in 2.3.3 worked
+correctly at the storage layer — but its error tuple was treated
+as transient by the retry layer, which burned through 10×
+exponential backoff (~30 seconds) before giving up. gRPC clients
+saw `DeadlineExceeded` instead of the real `InvalidArgument`
+cause they were supposed to get.
+
+With 2.3.4, malformed appends fail fast (single call, no retry)
+and the gateway surfaces `InvalidArgument` to the caller as
+designed. Verified live against the 4-node beam cluster.
+
 ## [2.3.3] - 2026-05-18
 
 ### Added — Stream-id format validator (guards against malformed writes)
