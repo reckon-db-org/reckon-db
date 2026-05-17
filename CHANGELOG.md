@@ -5,6 +5,42 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-05-17
+
+### Fixed — Add missing `reckon_db_cluster` facade
+
+`reckon_db_gateway_worker` had four `handle_call/3` clauses
+(`{verify_cluster_consistency, _}`, `{quick_health_check, _}`,
+`{verify_membership_consensus, _}`, `{check_log_consistency, _}`)
+that all called into a `reckon_db_cluster` module which never
+existed — a dangling reference left over from the `esdb_* →
+reckon_db_*` rename in v2.0.0.
+
+The bug was invisible until reckon-gateway 0.4.x exposed those
+RPCs over gRPC and a client (the new reckon-go SDK) actually
+called them — at which point they hung in `reckon_gater_retry`'s
+exponential-backoff loop until the caller timed out, because
+each retry attempt died on `{undef, [{reckon_db_cluster, ...}]}`
+inside the gateway worker.
+
+This release adds `reckon_db_cluster` as a thin facade over
+[[reckon_db_consistency_checker]] and `ra_leaderboard`:
+
+- `health_check/1` — cheap liveness check (quorum + leader presence).
+  Used by `HealthService.Check`.
+- `verify_consistency/1` — full cluster consistency verdict
+  (membership + leader consensus + quorum). Used by
+  `HealthService.VerifyClusterConsistency`.
+- `verify_membership/1` — membership consensus across nodes.
+  Used by `HealthService.VerifyMembershipConsensus`.
+- `check_log_consistency/1` — Raft log replication check.
+  Used by `HealthService.CheckRaftLogConsistency`.
+
+The facade is intentionally stateless — it gathers state from
+ra/khepri on demand rather than depending on the (unsupervised)
+`reckon_db_consistency_checker` gen_server, so it works in both
+`single` and `cluster` modes.
+
 ## [2.2.0] - 2026-05-17
 
 ### Added — Cluster-wide store discovery + watcher API
