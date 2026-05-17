@@ -94,11 +94,18 @@ data_dir_for(StoreId) ->
 %% Test Data Generation
 %%====================================================================
 
-%% @doc Generate a unique stream ID
+%% @doc Generate a unique stream ID conforming to reckon-db's user-
+%% stream format (`<prefix>-<hex>'). See reckon_db_stream_id.
 -spec generate_stream_id() -> binary().
 generate_stream_id() ->
-    Uuid = generate_uuid(),
-    <<"test$", Uuid/binary>>.
+    Hex = generate_hex(),
+    <<"test-", Hex/binary>>.
+
+%% @private 32 chars of lowercase hex (16 random bytes encoded).
+-spec generate_hex() -> binary().
+generate_hex() ->
+    Bytes = crypto:strong_rand_bytes(16),
+    binary:encode_hex(Bytes, lowercase).
 
 %% @doc Generate a single test event
 -spec generate_event(binary()) -> map().

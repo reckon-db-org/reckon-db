@@ -165,7 +165,7 @@ end_per_testcase(_TestCase, _Config) ->
 %% @doc Test subscribing to a stream
 subscribe_to_stream(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"test$stream-sub">>,
+    StreamId = <<"teststreamsub-001">>,
 
     {ok, Key} = reckon_db_subscriptions:subscribe(
         StoreId,
@@ -222,7 +222,7 @@ subscribe_to_event_pattern(Config) ->
 %% @doc Test subscribing with custom pool size
 subscribe_with_pool_size(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"test$pooled-stream">>,
+    StreamId = <<"testpooledstream-001">>,
 
     {ok, Key} = reckon_db_subscriptions:subscribe(
         StoreId,
@@ -245,7 +245,7 @@ subscribe_with_pool_size(Config) ->
 %% @doc Test that duplicate subscriptions fail
 subscribe_duplicate_fails(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"test$dup-stream">>,
+    StreamId = <<"testdupstream-001">>,
     SubName = <<"duplicate_test">>,
 
     %% First subscription should succeed
@@ -273,7 +273,7 @@ subscribe_duplicate_fails(Config) ->
 %% @doc Test unsubscribing by key
 unsubscribe_by_key(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"test$unsub-stream">>,
+    StreamId = <<"testunsubstream-001">>,
 
     {ok, Key} = reckon_db_subscriptions:subscribe(
         StoreId,
@@ -305,7 +305,7 @@ unsubscribe_nonexistent(Config) ->
 %% @doc Test that subscriptions are persisted
 subscription_persisted(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"test$persist-stream">>,
+    StreamId = <<"testpersiststream-001">>,
 
     {ok, Key} = reckon_db_subscriptions:subscribe(
         StoreId,
@@ -331,10 +331,10 @@ list_subscriptions(Config) ->
 
     %% Create multiple subscriptions
     {ok, Key1} = reckon_db_subscriptions:subscribe(
-        StoreId, stream, <<"test$list1">>, <<"list_test_1">>
+        StoreId, stream, <<"testlist-001">>, <<"list_test_1">>
     ),
     {ok, Key2} = reckon_db_subscriptions:subscribe(
-        StoreId, stream, <<"test$list2">>, <<"list_test_2">>
+        StoreId, stream, <<"testlist-002">>, <<"list_test_2">>
     ),
 
     %% List all subscriptions
@@ -352,7 +352,7 @@ subscription_exists(Config) ->
     StoreId = proplists:get_value(store_id, Config),
 
     {ok, Key} = reckon_db_subscriptions:subscribe(
-        StoreId, stream, <<"test$exists">>, <<"exists_test">>
+        StoreId, stream, <<"testexists-001">>, <<"exists_test">>
     ),
 
     ?assertEqual(true, reckon_db_subscriptions:exists(StoreId, Key)),
@@ -424,7 +424,7 @@ emitter_group_broadcast(Config) ->
     TestEvent = #event{
         event_id = <<"test-event-1">>,
         event_type = <<"test_event">>,
-        stream_id = <<"test$stream">>,
+        stream_id = <<"teststream-001">>,
         version = 0,
         data = #{<<"key">> => <<"value">>},
         metadata = #{},

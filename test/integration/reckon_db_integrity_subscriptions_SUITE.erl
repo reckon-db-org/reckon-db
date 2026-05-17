@@ -112,7 +112,7 @@ end_per_testcase(_TestCase, Config) ->
 %% subscription_error.
 intact_catchup_delivers_all_events(Config) ->
     StoreId = setup_integrity_store(Config),
-    StreamId = <<"sub$intact-catchup">>,
+    StreamId = <<"subintactcatchup-001">>,
     write_n_events(StoreId, StreamId, 5),
 
     Self = self(),
@@ -132,7 +132,7 @@ intact_catchup_delivers_all_events(Config) ->
 %% subscription_error, not a silent delivery.
 tampered_event_halts_catchup(Config) ->
     StoreId = setup_integrity_store(Config),
-    StreamId = <<"sub$tampered-catchup">>,
+    StreamId = <<"subtamperedcatchup-001">>,
     write_n_events(StoreId, StreamId, 5),
 
     %% Tamper the underlying event at version 2 (changes data; MAC
@@ -155,7 +155,7 @@ tampered_event_halts_catchup(Config) ->
 %% Validates the skip_legacy semantics at the subscription layer.
 catchup_continues_past_legacy_events(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"sub$mixed-catchup">>,
+    StreamId = <<"submixedcatchup-001">>,
 
     %% Start with legacy: write 2 events on a disabled store.
     write_legacy_events(StoreId, StreamId, 2),
@@ -178,7 +178,7 @@ catchup_continues_past_legacy_events(Config) ->
 %% verification, even if events happen to carry integrity fields.
 integrity_disabled_store_skips_catchup_verification(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"sub$disabled-catchup">>,
+    StreamId = <<"subdisabledcatchup-001">>,
     write_legacy_events(StoreId, StreamId, 3),
 
     Self = self(),

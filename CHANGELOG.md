@@ -5,6 +5,64 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3] - 2026-05-18
+
+### Added — Stream-id format validator (guards against malformed writes)
+
+Stores no longer accept malformed stream ids at append time.
+The validator is enforced at the head of
+`reckon_db_streams:append/4`, so every write path (gateway,
+links, direct API) goes through the same gate.
+
+**Accepted formats** (see `guides/system_streams.md` for the
+full rationale):
+
+- **User stream:** `<prefix>-<hex>` where prefix is `[A-Za-z]+`
+  and hex is `[A-Fa-f0-9]+`. Example:
+  `account-018f6a7b8c9d4abc8901234567890abc`.
+- **System stream:** `$<namespace>:<name>` where namespace is
+  `[a-z][a-z0-9-]*` and name is `[A-Za-z0-9][A-Za-z0-9_.-]*`.
+  Example: `$link:high-value-orders`.
+
+**Rejected with `{error, {invalid_stream_id, Reason, StreamId}}`:**
+empty ids, non-binary inputs, mid-string `$` (e.g. `partition$XYZ`,
+`test$basic-stream`), bare ids without a hex tail, and `$`-prefixed
+ids that don't match the system format. The gateway maps these to
+gRPC `InvalidArgument`.
+
+The new module `reckon_db_stream_id` is the single source of
+truth for the rules; 38 unit tests cover the grammar.
+
+### Fixed — Test fixtures (58 stream-id literals)
+
+Test suites that produced malformed ids have been cleaned up so
+they pass the validator:
+
+- `reckon_db_test_helpers:generate_stream_id/0` — now emits
+  `test-<lowercase-hex-32>`, was `test$<uuid-with-dashes>`.
+- Integration suites swept (49 literals): `reckon_db_snapshots`,
+  `reckon_db_subscriptions`, `reckon_db_subscription_delivery`,
+  `reckon_db_emitter_autostart`, `reckon_db_integrity_subscriptions`,
+  `reckon_db_pg_scope`, `reckon_db_streams`. Pattern
+  `<<"test$X-Y">>` → `<<"testXY-001">>` (alpha-only prefix +
+  hex tail).
+- The companion `reckon-e2e` torture suites
+  (`integrity_torture`, `multi_node_*`, `adapter_swap_torture`)
+  use the same convention now — `<<"partition$">>` → `<<"partition-">>`
+  before concatenating the random hex nonce.
+
+### Compatibility
+
+This is the **first release where appending a malformed stream
+id fails**. Existing stores with old malformed paths
+(`leader-kill$XYZ`, etc) continue to read fine — the validator
+only gates new writes. Wipe + redeploy if you want them gone.
+
+If a downstream test suite generates non-compliant ids that
+weren't covered above, the fix is to mirror the helper change:
+`<<prefix-lowercase>-<lowercase-hex>>>`. See
+`reckon_db_stream_id:validate/1` for the precise grammar.
+
 ## [2.3.2] - 2026-05-17
 
 ### Fixed — Gateway-facing subscription, lag, and snapshot bugs

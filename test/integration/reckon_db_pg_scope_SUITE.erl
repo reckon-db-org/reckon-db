@@ -185,7 +185,7 @@ emitter_can_join_pg_group_after_scope_restart(_Config) ->
 
     %% Subscribe — emitter pool joins pg group under the restarted scope
     {ok, SubKey} = reckon_db_subscriptions:subscribe(
-        StoreId, stream, <<"test$pg-restart">>, <<"pg_restart_test">>,
+        StoreId, stream, <<"testpgrestart-001">>, <<"pg_restart_test">>,
         #{subscriber => self()}
     ),
     timer:sleep(300),
@@ -199,7 +199,7 @@ emitter_can_join_pg_group_after_scope_restart(_Config) ->
         event_type => <<"test_event_v1">>,
         data => #{<<"key">> => <<"value">>}
     },
-    {ok, _} = reckon_db_streams:append(StoreId, <<"test$pg-restart">>, -2, [Event]),
+    {ok, _} = reckon_db_streams:append(StoreId, <<"testpgrestart-002">>, -2, [Event]),
 
     receive
         {events, [ReceivedEvent]} ->
