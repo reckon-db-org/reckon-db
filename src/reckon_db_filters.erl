@@ -22,7 +22,7 @@
 %% @doc Create a filter for all events in a specific stream
 %%
 %% Special case: the binary &lt;&lt;"$all"&gt;&gt; matches events in all streams.
--spec by_stream(binary()) -> khepri_evf:tree() | {error, invalid_stream}.
+-spec by_stream(binary()) -> khepri_evf:tree_event_filter() | {error, invalid_stream}.
 by_stream(<<"$all">>) ->
     khepri_evf:tree(
         [streams,
@@ -56,7 +56,7 @@ by_stream(Stream) when is_binary(Stream) ->
 %% @doc Create a filter for events of a specific type
 %%
 %% Uses #event{} record pattern matching since events are stored as records.
--spec by_event_type(binary()) -> khepri_evf:tree().
+-spec by_event_type(binary()) -> khepri_evf:tree_event_filter().
 by_event_type(EventType) when is_binary(EventType) ->
     khepri_evf:tree(
         [streams,
@@ -72,7 +72,7 @@ by_event_type(EventType) when is_binary(EventType) ->
 %% @doc Create a filter matching events with a specific pattern in their metadata
 %%
 %% The pattern is a map that must be a subset of the event record.
--spec by_event_pattern(map()) -> khepri_evf:tree().
+-spec by_event_pattern(map()) -> khepri_evf:tree_event_filter().
 by_event_pattern(EventPattern) when is_map(EventPattern) ->
     khepri_evf:tree(
         [streams,
@@ -88,7 +88,7 @@ by_event_pattern(EventPattern) when is_map(EventPattern) ->
 %% @doc Create a filter matching events with a specific pattern in their payload
 %%
 %% The pattern is checked against the data field of the event.
--spec by_event_payload(map()) -> khepri_evf:tree().
+-spec by_event_payload(map()) -> khepri_evf:tree_event_filter().
 by_event_payload(PayloadPattern) when is_map(PayloadPattern) ->
     khepri_evf:tree(
         [streams,
@@ -107,7 +107,7 @@ by_event_payload(PayloadPattern) when is_map(PayloadPattern) ->
 %% so this creates a broad filter that matches all events with tags.
 %% The actual tag filtering must be done by the subscription consumer.
 %% For efficient tag-based queries, use {@link reckon_db_streams:read_by_tags/4}.
--spec by_tags([binary()]) -> khepri_evf:tree().
+-spec by_tags([binary()]) -> khepri_evf:tree_event_filter().
 by_tags(Tags) when is_list(Tags) ->
     %% Create a filter that matches events with any tags field
     %% The consumer must filter for specific tag membership

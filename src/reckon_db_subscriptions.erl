@@ -75,8 +75,15 @@ subscribe(StoreId, Type, Selector, SubscriptionName) ->
 subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
     StartTime = erlang:monotonic_time(),
 
-    %% Create subscription record
-    Subscription = #subscription{
+    %% Build a draft with id = <<>>; the key (and final id) is
+    %% derived from the draft's content (type + selector +
+    %% subscription_name), so we need the draft to compute Key.
+    %% Using <<>> rather than undefined keeps the record type
+    %% (#subscription.id :: binary()) honest at construction time —
+    %% dialyzer otherwise sees undefined here and propagates none()
+    %% through every downstream helper.
+    Draft = #subscription{
+        id = <<>>,
         type = Type,
         selector = Selector,
         subscription_name = SubscriptionName,
@@ -96,14 +103,13 @@ subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
     ),
 
     %% Check if subscription already exists
-    Key = reckon_db_subscriptions_store:key(Subscription),
-    %% Set id on the subscription so emitter pools use the correct key
-    SubscriptionWithId = Subscription#subscription{id = Key},
+    Key = reckon_db_subscriptions_store:key(Draft),
+    Subscription = Draft#subscription{id = Key},
     case reckon_db_subscriptions_store:exists(StoreId, Key) of
         true ->
             reregister_subscriber(StoreId, Key, SubscriptionName, Opts);
         false ->
-            store_and_setup(StoreId, Key, Type, Selector, SubscriptionWithId, StartTime)
+            store_and_setup(StoreId, Key, Type, Selector, Subscription, StartTime)
     end.
 
 %% @private

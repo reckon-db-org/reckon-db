@@ -19,6 +19,46 @@ despite consistency_checker correctly saying "consensus". The
 facade now translates `consensus -> healthy`,
 `no_consensus -> split_brain` before returning.
 
+### Fixed — Documentation builds clean
+
+`rebar3 ex_doc` now completes with zero warnings (was 24).
+Concrete fixes:
+
+- `src/reckon_db_archive_backend.erl`: dropped the `reckon_db.hrl`
+  include (only the `#event{}` type alias was needed, not the
+  record itself) and defined `event/0` locally. Matches the
+  pattern in `reckon_db_log_backend.erl`.
+- `src/reckon_db_filters.erl`: corrected five `-spec` return
+  types from the non-existent `khepri_evf:tree/0` to the actual
+  exported type `khepri_evf:tree_event_filter/0`.
+- `rebar.config` (`ex_doc` block): added `docs/genai-policy.md`
+  to the `extras` list so the README's link resolves on hexdocs,
+  and added `skip_undefined_reference_warnings_on` for
+  `CHANGELOG.md` (the changelog legitimately references historic
+  internal functions that are now private — those refs are
+  documenting past fixes, not pointing at current API surface).
+
+### Added — `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md`
+
+Closes two gaps from the release checklist. CoC is the
+[Contributor Covenant 2.1](https://www.contributor-covenant.org/)
+verbatim.
+
+### Documented — Dialyzer backlog
+
+`rebar3 dialyzer` currently surfaces 182 warnings under the
+strict `[underspecs, unmatched_returns, error_handling, unknown]`
+configuration. None were introduced by 2.2.1 or 2.2.2 — these are
+latent issues inherited from earlier 2.x releases (the v2.2.0
+already on hex carries the same count, minus 15 cleared as a
+side-effect of the `reckon_db_cluster` and
+`reckon_db_subscriptions:subscribe/5` work in 2.2.1/2.2.2).
+
+The full categorized backlog is at
+[`docs/dialyzer-backlog.md`](docs/dialyzer-backlog.md), with the
+raw warnings file at `docs/dialyzer-warnings-2.2.2.raw` for
+posterity. Clearing the backlog is scheduled as **v2.3.0**.
+
 ## [2.2.1] - 2026-05-17
 
 ### Fixed — Add missing `reckon_db_cluster` facade

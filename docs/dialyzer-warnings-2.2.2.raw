@@ -1,0 +1,1722 @@
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_app.erl:24:2: The specification for reckon_db_app:start/0 states that the function might also return 
+          {'ok', pid()} but the inferred return is 
+          {'error', {atom(), _}} | {'ok', [atom()]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_app.erl:87:5: Expression produces a value of type 
+          'ok' | {'error', 'already_exists'}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_archive_backend.erl:67:2: Type specification reckon_db_archive_backend:parse_key
+          (binary()) -> {'ok', map()} | {'error', 'invalid_key'} is a supertype of the success typing: reckon_db_archive_backend:parse_key
+          (binary()) ->
+             {'error', 'invalid_key'} |
+             {'ok',
+              #{'from_version' := integer(),
+                'store_id' := atom(),
+                'stream_id' := binary(),
+                'to_version' := integer()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_archive_file.erl:44:2: Type specification reckon_db_archive_file:init
+          (map()) -> {'ok', #state{}} | {'error', term()} is a supertype of the success typing: reckon_db_archive_file:init
+          (map()) ->
+             {'error', {'failed_to_create_dir', atom()}} |
+             {'ok', #state{base_dir :: string()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_archive_file.erl:118:2: Type specification reckon_db_archive_file:delete
+          (#state{}, binary()) -> {'ok', #state{}} | {'error', term()} is a supertype of the success typing: reckon_db_archive_file:delete
+          (#state{base_dir :: string()}, binary()) ->
+             {'error', {'delete_failed', atom()}} |
+             {'ok', #state{base_dir :: string()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_archive_file.erl:147:2: Type specification reckon_db_archive_file:path_to_key
+          (atom(), binary(), string()) -> binary() is a supertype of the success typing: reckon_db_archive_file:path_to_key
+          (atom(), binary(), [byte()]) -> binary()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:149:9: The pattern 
+          'infinity' can never match the type 
+          non_neg_integer()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:159:9: The pattern 
+          'infinity' can never match the type 
+          non_neg_integer()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:201:1: Matching of pattern 
+          {'bp_queue', _, _, _, _, _, 'infinity', _, _, _} tagged with a record name violates the declared type of 
+          #bp_queue{queue :: queue:queue(_),
+                    max_size :: pos_integer(),
+                    strategy ::
+                        'block' | 'drop_newest' | 'drop_oldest' |
+                        'error',
+                    mode :: 'pull' | 'push',
+                    warning_threshold :: pos_integer(),
+                    demand :: non_neg_integer(),
+                    dropped :: non_neg_integer(),
+                    store_id :: atom(),
+                    subscription_key :: binary()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:207:2: The specification for reckon_db_backpressure:get_demand/1 states that the function might also return 
+          'infinity' but the inferred return is 
+          non_neg_integer()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:108:2: Type specification reckon_db_capability_verifier:check_permission
+          (capability(), binary(), binary()) ->
+             'ok' | {'error', capability_error()} is a supertype of the success typing: reckon_db_capability_verifier:check_permission
+          (#capability{alg :: binary(),
+                      typ :: binary(),
+                      iss :: binary(),
+                      aud :: binary(),
+                      nbf :: 'undefined' | integer(),
+                      exp :: integer(),
+                      iat :: integer(),
+                      nnc :: binary(),
+                      att :: [#{'can' := binary(), 'with' := binary()}],
+                      fct :: map(),
+                      prf :: [binary()],
+                      sig :: 'undefined' | binary()},
+          binary(),
+          binary()) ->
+             'ok' | {'error', {'insufficient_permissions', binary()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:125:2: The specification for reckon_db_capability_verifier:is_revoked/1 states that the function might also return 
+          'true' but the inferred return is 
+          'false'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:197:2: Type specification reckon_db_capability_verifier:verify_signature
+          (capability()) -> 'ok' | {'error', capability_error()} is a supertype of the success typing: reckon_db_capability_verifier:verify_signature
+          (#capability{alg :: binary(),
+                      typ :: binary(),
+                      iss :: binary(),
+                      aud :: binary(),
+                      nbf :: 'undefined' | integer(),
+                      exp :: integer(),
+                      iat :: integer(),
+                      nnc :: binary(),
+                      att :: [#{'can' := binary(), 'with' := binary()}],
+                      fct :: map(),
+                      prf :: [binary()],
+                      sig :: 'undefined' | binary()}) ->
+             'ok' | {'error', {'invalid_signature', binary()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:243:2: The specification for reckon_db_capability_verifier:maybe_check_revocation/2 states that the function might also return 
+          {'error',
+           {'expired' | 'insufficient_permissions' | 'invalid_action' |
+            'invalid_delegation' | 'invalid_resource' |
+            'invalid_signature' | 'not_yet_valid' | 'parse_error' |
+            'revoked',
+            _}} but the inferred return is 
+          'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:251:9: The pattern 
+          'true' can never match the type 
+          'false'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_causation.erl:378:2: Type specification reckon_db_causation:emit_telemetry
+          (atom(), binary(), atom(), integer(), term()) -> 'ok' is a supertype of the success typing: reckon_db_causation:emit_telemetry
+          (atom(),
+          binary(),
+          'causation_cause' | 'causation_chain' |
+          'causation_correlated' | 'causation_effects',
+          integer(),
+          {'error', _} |
+          {'ok',
+           [{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _}] |
+           #event{event_id :: binary(),
+                  event_type :: binary(),
+                  stream_id :: binary(),
+                  version :: non_neg_integer(),
+                  data :: binary() | map(),
+                  metadata :: map(),
+                  tags :: 'undefined' | [any()],
+                  timestamp :: integer(),
+                  epoch_us :: integer(),
+                  data_content_type :: binary(),
+                  metadata_content_type :: binary(),
+                  prev_event_hash :: 'undefined' | binary(),
+                  mac :: 'undefined' | {_, _},
+                  signature :: 'undefined' | binary()}}) ->
+             'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:38:2: Type specification reckon_db_cluster:health_check
+          (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_cluster:health_check
+          (atom()) ->
+             {'error', _} |
+             {'ok',
+              #{'available_nodes' := non_neg_integer(),
+                'can_lose' := integer(),
+                'has_quorum' := boolean(),
+                'leader' := 'has_leader' | 'no_leader',
+                'quorum_margin' := integer(),
+                'required_quorum' := pos_integer(),
+                'status' := 'degraded' | 'healthy' | 'no_quorum',
+                'total_nodes' := non_neg_integer()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:60:2: Type specification reckon_db_cluster:verify_consistency
+          (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_cluster:verify_consistency
+          (atom()) ->
+             {'error', _} |
+             {'ok',
+              #{'status' :=
+                    'degraded' | 'healthy' | 'no_quorum' | 'split_brain',
+                'available_nodes' => non_neg_integer(),
+                'can_lose' => integer(),
+                'has_quorum' => 'false',
+                'leader' =>
+                    #{'commit_index_range' => {_, _},
+                      'conflicting_views' => pos_integer(),
+                      'consistent_view' => [any(), ...],
+                      'error' => _,
+                      'failed_nodes' => [any()],
+                      'leader' => _,
+                      'leaders_reported' => [any()],
+                      'max_commit_lag' => number(),
+                      'message' => <<_:144, _:_*40>>,
+                      'nodes_checked' => non_neg_integer(),
+                      'nodes_responded' => non_neg_integer(),
+                      'status' =>
+                          'error' | 'healthy' | 'no_leader' |
+                          'split_brain' | 'warning',
+                      'terms' => [any()],
+                      'terms_consistent' => boolean(),
+                      'views' => map()},
+                'membership' =>
+                    #{'commit_index_range' => {_, _},
+                      'conflicting_views' => pos_integer(),
+                      'consistent_view' => [any(), ...],
+                      'error' => _,
+                      'failed_nodes' => [any()],
+                      'leader' => _,
+                      'leaders_reported' => [any()],
+                      'max_commit_lag' => number(),
+                      'message' => <<_:144, _:_*40>>,
+                      'nodes_checked' => non_neg_integer(),
+                      'nodes_responded' => non_neg_integer(),
+                      'status' =>
+                          'error' | 'healthy' | 'no_leader' |
+                          'split_brain' | 'warning',
+                      'terms' => [any()],
+                      'terms_consistent' => boolean(),
+                      'views' => map()},
+                'quorum' =>
+                    #{'available_nodes' := non_neg_integer(),
+                      'can_lose' := integer(),
+                      'has_quorum' := 'true',
+                      'quorum_margin' := integer(),
+                      'required_quorum' := pos_integer(),
+                      'total_nodes' := non_neg_integer()},
+                'quorum_margin' => integer(),
+                'required_quorum' => pos_integer(),
+                'total_nodes' => non_neg_integer()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:84:2: Type specification reckon_db_cluster:verify_membership
+          (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_cluster:verify_membership
+          (atom()) ->
+             {'error', _} |
+             {'ok',
+              #{'status' :=
+                    'error' | 'healthy' | 'no_leader' | 'split_brain' |
+                    'warning',
+                'commit_index_range' => {_, _},
+                'conflicting_views' => pos_integer(),
+                'consistent_view' => [any(), ...],
+                'failed_nodes' => [any()],
+                'leader' => _,
+                'leaders_reported' => [any()],
+                'max_commit_lag' => number(),
+                'message' => <<_:144, _:_*40>>,
+                'nodes_checked' => non_neg_integer(),
+                'nodes_responded' => non_neg_integer(),
+                'terms' => [any()],
+                'terms_consistent' => boolean(),
+                'views' => map()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:93:2: Type specification reckon_db_cluster:check_log_consistency
+          (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_cluster:check_log_consistency
+          (atom()) ->
+             {'error', _} |
+             {'ok',
+              #{'status' :=
+                    'error' | 'healthy' | 'no_leader' | 'split_brain' |
+                    'warning',
+                'commit_index_range' => {_, _},
+                'conflicting_views' => pos_integer(),
+                'consistent_view' => [any(), ...],
+                'failed_nodes' => [any()],
+                'leader' => _,
+                'leaders_reported' => [any()],
+                'max_commit_lag' => number(),
+                'message' => <<_:144, _:_*40>>,
+                'nodes_checked' => non_neg_integer(),
+                'nodes_responded' => non_neg_integer(),
+                'terms' => [any()],
+                'terms_consistent' => boolean(),
+                'views' => map()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:114:2: Type specification reckon_db_consistency_checker:verify_membership_consensus
+          (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_consistency_checker:verify_membership_consensus
+          (atom()) ->
+             {'error', _} |
+             {'ok',
+              #{'nodes_checked' := non_neg_integer(),
+                'nodes_responded' := non_neg_integer(),
+                'status' := 'consensus' | 'error' | 'split_brain',
+                'conflicting_views' => pos_integer(),
+                'consistent_view' => [any(), ...],
+                'failed_nodes' => [any()],
+                'message' => <<_:144>>,
+                'views' => map()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:126:2: Type specification reckon_db_consistency_checker:verify_leader_consensus
+          (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_consistency_checker:verify_leader_consensus
+          (atom()) ->
+             {'error', _} |
+             {'ok',
+              #{'nodes_checked' := non_neg_integer(),
+                'nodes_responded' := non_neg_integer(),
+                'status' := 'consensus' | 'no_consensus' | 'no_leader',
+                'leader' => _,
+                'leaders_reported' => [any()],
+                'views' => map()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:141:2: Type specification reckon_db_consistency_checker:verify_raft_consistency
+          (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_consistency_checker:verify_raft_consistency
+          (atom()) ->
+             {'error', _} |
+             {'ok',
+              #{'status' := 'consensus' | 'error' | 'warning',
+                'commit_index_range' => {_, _},
+                'leader' => {_, _},
+                'max_commit_lag' => number(),
+                'message' => <<_:184>>,
+                'nodes_checked' => non_neg_integer(),
+                'nodes_responded' => non_neg_integer(),
+                'terms' => [any()],
+                'terms_consistent' => boolean()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:156:2: Type specification reckon_db_consistency_checker:get_quorum_status
+          (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_consistency_checker:get_quorum_status
+          (atom()) ->
+             {'error', _} |
+             {'ok',
+              #{'available_nodes' := non_neg_integer(),
+                'can_lose' := integer(),
+                'has_quorum' := boolean(),
+                'quorum_margin' := integer(),
+                'required_quorum' := pos_integer(),
+                'total_nodes' := non_neg_integer()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:213:5: Expression produces a value of type 
+          'ok' | reference(), but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:338:2: Type specification reckon_db_consistency_checker:determine_overall_status
+          (#{atom() => check_detail()}) -> consistency_status() is a supertype of the success typing: reckon_db_consistency_checker:determine_overall_status
+          (#{'leader' :=
+                #{'data' := map(),
+                  'message' := binary(),
+                  'status' := 'error' | 'ok' | 'warning'},
+            'membership' :=
+                #{'data' := map(),
+                  'message' := binary(),
+                  'status' := 'error' | 'ok' | 'warning'},
+            'quorum' :=
+                #{'data' := map(),
+                  'message' := binary(),
+                  'status' := 'error' | 'ok' | 'warning'},
+            'raft' :=
+                #{'data' := map(),
+                  'message' := binary(),
+                  'status' := 'error' | 'ok' | 'warning'}}) ->
+             'degraded' | 'healthy' | 'no_quorum' | 'split_brain'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:382:2: Type specification reckon_db_consistency_checker:analyze_membership_consensus
+          (#{node() => term()}, [term()]) -> {'ok', map()} is a supertype of the success typing: reckon_db_consistency_checker:analyze_membership_consensus
+          (#{atom() => {'error', _} | {'ok', [any()]}},
+          [{atom(), atom()}, ...]) ->
+             {'ok',
+              #{'nodes_checked' := non_neg_integer(),
+                'nodes_responded' := non_neg_integer(),
+                'status' := 'consensus' | 'error' | 'split_brain',
+                'conflicting_views' => pos_integer(),
+                'consistent_view' => [any(), ...],
+                'failed_nodes' => [any()],
+                'message' => <<_:144>>,
+                'views' => map()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:440:2: Type specification reckon_db_consistency_checker:analyze_leader_consensus
+          (#{node() => term()}) -> {'ok', map()} is a supertype of the success typing: reckon_db_consistency_checker:analyze_leader_consensus
+          (#{atom() => _}) ->
+             {'ok',
+              #{'nodes_checked' := non_neg_integer(),
+                'nodes_responded' := non_neg_integer(),
+                'status' := 'consensus' | 'no_consensus' | 'no_leader',
+                'leader' => _,
+                'leaders_reported' => [any()],
+                'views' => map()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:494:13: The pattern 
+          #{'commit_index' := CommitIdx,
+            'current_term' := Term,
+            'last_applied' := LastApplied,
+            'state' := RaftState} can never match the type 
+          {'error', _} |
+          {'timeout', {atom(), atom()}} |
+          {'ok', map(), {atom(), atom()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:511:2: Type specification reckon_db_consistency_checker:analyze_raft_consistency
+          (#{node() => term()}, term()) -> {'ok', map()} is a supertype of the success typing: reckon_db_consistency_checker:analyze_raft_consistency
+          (#{atom() => _}, {atom(), atom()}) ->
+             {'ok',
+              #{'status' := 'consensus' | 'error' | 'warning',
+                'commit_index_range' => {_, _},
+                'leader' => {_, _},
+                'max_commit_lag' => number(),
+                'message' => <<_:184>>,
+                'nodes_checked' => non_neg_integer(),
+                'nodes_responded' => non_neg_integer(),
+                'terms' => [any()],
+                'terms_consistent' => boolean()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:547:2: Type specification reckon_db_consistency_checker:count_available_nodes
+          (atom(), [term()]) -> non_neg_integer() is a supertype of the success typing: reckon_db_consistency_checker:count_available_nodes
+          (atom(), [{atom(), atom()}, ...]) -> non_neg_integer()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:592:2: Type specification reckon_db_consistency_checker:notify_callbacks
+          (#{reference() => fun()}, consistency_status()) -> 'ok' is a supertype of the success typing: reckon_db_consistency_checker:notify_callbacks
+          (#{reference() =>
+                fun(('degraded' | 'healthy' | 'no_quorum' |
+                     'split_brain') ->
+                        any())},
+          'degraded' | 'healthy' | 'no_quorum' | 'split_brain') ->
+             'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_discovery.erl:75:18: Record construction 
+          #state{store_id :: atom(),
+                 config ::
+                     #store_config{store_id :: atom(),
+                                   data_dir :: string(),
+                                   mode :: 'cluster' | 'single',
+                                   timeout :: pos_integer(),
+                                   writer_pool_size :: pos_integer(),
+                                   reader_pool_size :: pos_integer(),
+                                   gateway_pool_size :: pos_integer(),
+                                   options :: map(),
+                                   integrity ::
+                                       'disabled' |
+                                       #{'enabled' := 'true',
+                                         'key_source' :=
+                                             {'env_var', binary()} |
+                                             {'sealed_file', string()}}},
+                 port :: 'undefined',
+                 multicast_addr :: 'undefined',
+                 cluster_secret :: 'undefined',
+                 broadcast_interval :: 'undefined',
+                 discovered_nodes :: []} violates the declared type of field port ::
+          non_neg_integer() and multicast_addr ::
+          {byte(), byte(), byte(), byte()} and cluster_secret ::
+          binary() and broadcast_interval ::
+          non_neg_integer()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_discovery.erl:156:2: Type specification reckon_db_discovery:open_multicast_socket
+          (non_neg_integer(), inet:ip4_address()) ->
+             {'ok', gen_udp:socket()} | {'error', term()} is a supertype of the success typing: reckon_db_discovery:open_multicast_socket
+          (char(), {byte(), byte(), byte(), byte()}) ->
+             {'error', atom()} | {'ok', port() | {'$inet', atom(), _}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_discovery.erl:266:2: Type specification reckon_db_discovery:get_config_value
+          (atom(), term()) -> term() is a supertype of the success typing: reckon_db_discovery:get_config_value
+          ('broadcast_interval' | 'discovery_port' | 'multicast_addr',
+          5000 | 45892 | {239, 255, 0, 1}) ->
+             any()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_emitter.erl:118:5: Expression produces a value of type 
+          'ok' | {'events', maybe_improper_list()}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_emitter_pool.erl:55:2: Type specification reckon_db_emitter_pool:stop_emitter
+          (atom(), subscription()) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_emitter_pool:stop_emitter
+          (atom(),
+          #subscription{id :: binary(),
+                        type ::
+                            'by_event_pattern' | 'by_event_payload' |
+                            'by_event_type' | 'by_stream' | 'by_tags' |
+                            'event_pattern' | 'event_payload' |
+                            'event_type' | 'stream' | 'tags',
+                        selector :: binary() | map(),
+                        subscription_name :: binary(),
+                        subscriber_pid :: 'undefined' | pid(),
+                        created_at :: integer(),
+                        pool_size :: pos_integer(),
+                        checkpoint :: 'undefined' | non_neg_integer(),
+                        options :: map()}) ->
+             'ok' |
+             {'error',
+              'not_found' | 'restarting' | 'running' |
+              'simple_one_for_one'}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_emitter_pool.erl:82:2: Type specification reckon_db_emitter_pool:stop
+          (atom(), binary()) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_emitter_pool:stop
+          (atom(), binary()) ->
+             'ok' |
+             {'error',
+              'not_found' | 'restarting' | 'running' |
+              'simple_one_for_one'}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_emitter_sup.erl:38:2: Type specification reckon_db_emitter_sup:stop_emitter_pool
+          (atom(), binary()) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_emitter_sup:stop_emitter_pool
+          (atom(), binary()) ->
+             'ok' |
+             {'error',
+              'not_found' | 'restarting' | 'running' |
+              'simple_one_for_one'}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filter_nif.erl:284:9: Guard test is_list
+         (Result :: binary()) can never succeed
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:59:2: Invalid type specification for function reckon_db_filters:by_event_type/1.
+ The success typing is reckon_db_filters:by_event_type
+          (_) -> none()
+ But the spec is reckon_db_filters:by_event_type
+          (binary()) -> khepri_evf:tree_event_filter()
+ The return types do not overlap
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:60:1: Function by_event_type/1 has no local return
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:62:9: Cons will produce an improper list since its 2nd argument is 
+          none()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:63:10: Cons will produce an improper list since its 2nd argument is 
+          none()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:64:31: Cons will produce an improper list since its 2nd argument is 
+          none()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:66:14: Cons will produce an improper list since its 2nd argument is 
+          none()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:67:76: Record construction 
+          #event{event_id :: '_',
+                 event_type :: binary(),
+                 stream_id :: '_',
+                 version :: '_',
+                 data :: '_',
+                 metadata :: '_',
+                 tags :: '_',
+                 timestamp :: '_',
+                 epoch_us :: '_',
+                 data_content_type :: '_',
+                 metadata_content_type :: '_',
+                 prev_event_hash :: '_',
+                 mac :: '_',
+                 signature :: '_'} violates the declared type of field event_id ::
+          binary() and stream_id ::
+          binary() and version ::
+          non_neg_integer() and data ::
+          binary() | map() and metadata ::
+          map() and tags ::
+          'undefined' | [binary()] and timestamp ::
+          integer() and epoch_us ::
+          integer() and data_content_type ::
+          binary() and metadata_content_type ::
+          binary() and prev_event_hash ::
+          'undefined' | binary() and mac ::
+          'undefined' | {non_neg_integer(), binary()} and signature ::
+          'undefined' | binary()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:405:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:428:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:438:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:444:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:454:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:460:5: Expression produces a value of type 
+          {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:470:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:476:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:482:5: Expression produces a value of type 
+          {'error', 'not_found'}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:508:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:540:2: Type specification reckon_db_gateway_worker:subscription_to_map
+          (subscription() | map()) -> map() is a supertype of the success typing: reckon_db_gateway_worker:subscription_to_map
+          (#subscription{id :: binary(),
+                        type ::
+                            'by_event_pattern' | 'by_event_payload' |
+                            'by_event_type' | 'by_stream' | 'by_tags' |
+                            'event_pattern' | 'event_payload' |
+                            'event_type' | 'stream' | 'tags',
+                        selector :: binary() | map(),
+                        subscription_name :: binary(),
+                        subscriber_pid :: 'undefined' | pid(),
+                        created_at :: integer(),
+                        pool_size :: pos_integer(),
+                        checkpoint :: 'undefined' | non_neg_integer(),
+                        options :: map()}) ->
+             #{'checkpoint' := 'undefined' | non_neg_integer(),
+               'created_at' := integer(),
+               'options' := map(),
+               'pool_size' := pos_integer(),
+               'selector' := binary() | map(),
+               'subscriber_pid' := 'undefined' | pid(),
+               'subscription_name' := binary(),
+               'type' :=
+                   'by_event_pattern' | 'by_event_payload' |
+                   'by_event_type' | 'by_stream' | 'by_tags' |
+                   'event_pattern' | 'event_payload' | 'event_type' |
+                   'stream' | 'tags'}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:552:1: The variable Map can never match since previous clauses completely covered the type 
+          #subscription{id :: binary(),
+                        type ::
+                            'by_event_pattern' | 'by_event_payload' |
+                            'by_event_type' | 'by_stream' | 'by_tags' |
+                            'event_pattern' | 'event_payload' |
+                            'event_type' | 'stream' | 'tags',
+                        selector :: binary() | map(),
+                        subscription_name :: binary(),
+                        subscriber_pid :: 'undefined' | pid(),
+                        created_at :: integer(),
+                        pool_size :: pos_integer(),
+                        checkpoint :: 'undefined' | non_neg_integer(),
+                        options :: map()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_graph_nif.erl:435:2: Type specification reckon_db_graph_nif:erlang_graph_stats
+          ([binary()], [{binary(), binary()}]) -> map() is a supertype of the success typing: reckon_db_graph_nif:erlang_graph_stats
+          ([binary()], [{binary(), binary()}]) ->
+             #{'edge_count' := non_neg_integer(),
+               'leaf_count' := non_neg_integer(),
+               'max_depth' := non_neg_integer(),
+               'node_count' := non_neg_integer(),
+               'root_count' := non_neg_integer()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:175:5: Expression produces a value of type 
+          'ok' | reference(), but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:275:5: Expression produces a value of type 
+          'error' | 'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:398:2: Type specification reckon_db_health_prober:handle_probe_result
+          (#node_state{},
+          'ok' | {'error', term()},
+          non_neg_integer(),
+          pos_integer(),
+          atom(),
+          map(),
+          map()) ->
+             {#node_state{}, 0 | 1, 0 | 1} is a supertype of the success typing: reckon_db_health_prober:handle_probe_result
+          (#node_state{node :: atom(),
+                      status ::
+                          'failed' | 'healthy' | 'suspect' | 'unknown',
+                      consecutive_failures :: non_neg_integer(),
+                      last_success :: 'undefined' | integer(),
+                      last_failure :: 'undefined' | integer(),
+                      last_probe_duration ::
+                          'undefined' | non_neg_integer()},
+          'ok' | {'error', _},
+          non_neg_integer(),
+          pos_integer(),
+          atom(),
+          #{reference() => fun((atom()) -> any())},
+          #{reference() => fun((atom()) -> any())}) ->
+             {#node_state{node :: atom(),
+                          status :: 'failed' | 'healthy' | 'suspect',
+                          consecutive_failures :: non_neg_integer(),
+                          last_success :: 'undefined' | integer(),
+                          last_failure :: 'undefined' | integer(),
+                          last_probe_duration :: non_neg_integer()},
+              0 | 1,
+              0 | 1}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:478:2: Type specification reckon_db_health_prober:notify_failed_callbacks
+          (#{reference() => fun()}, node()) -> 'ok' is a supertype of the success typing: reckon_db_health_prober:notify_failed_callbacks
+          (#{reference() => fun((atom()) -> any())}, atom()) -> 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:494:2: Type specification reckon_db_health_prober:notify_recovered_callbacks
+          (#{reference() => fun()}, node()) -> 'ok' is a supertype of the success typing: reckon_db_health_prober:notify_recovered_callbacks
+          (#{reference() => fun((atom()) -> any())}, atom()) -> 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader.erl:43:2: Type specification reckon_db_leader:activate
+          (atom()) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_leader:activate
+          (atom()) -> 'ok' | {'error', 'not_started'}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader.erl:89:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader.erl:100:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader_tracker.erl:176:2: Type specification reckon_db_leader_tracker:format_subscription_data
+          (map() | subscription()) -> subscription() is a supertype of the success typing: reckon_db_leader_tracker:format_subscription_data
+          (#subscription{id :: binary(),
+                        type ::
+                            'by_event_pattern' | 'by_event_payload' |
+                            'by_event_type' | 'by_stream' | 'by_tags' |
+                            'event_pattern' | 'event_payload' |
+                            'event_type' | 'stream' | 'tags',
+                        selector :: binary() | map(),
+                        subscription_name :: binary(),
+                        subscriber_pid :: 'undefined' | pid(),
+                        created_at :: integer(),
+                        pool_size :: pos_integer(),
+                        checkpoint :: 'undefined' | non_neg_integer(),
+                        options :: map()}) ->
+             #subscription{id :: binary(),
+                           type ::
+                               'by_event_pattern' | 'by_event_payload' |
+                               'by_event_type' | 'by_stream' |
+                               'by_tags' | 'event_pattern' |
+                               'event_payload' | 'event_type' |
+                               'stream' | 'tags',
+                           selector :: binary() | map(),
+                           subscription_name :: binary(),
+                           subscriber_pid :: 'undefined' | pid(),
+                           created_at :: integer(),
+                           pool_size :: pos_integer(),
+                           checkpoint :: 'undefined' | non_neg_integer(),
+                           options :: map()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader_tracker.erl:180:5: Record construction 
+          #subscription{options :: 'undefined'} violates the declared type of field options ::
+          map()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader_tracker.erl:192:5: Record construction 
+          #subscription{id :: 'undefined',
+                        type :: 'by_stream',
+                        selector :: <<_:56>>,
+                        subscription_name :: <<_:56>>,
+                        created_at :: 'undefined',
+                        pool_size :: 1,
+                        options :: 'undefined'} violates the declared type of field id ::
+          binary() and created_at ::
+          integer() and options ::
+          map()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:184:2: The specification for reckon_db_links:start/2 states that the function might also return 
+          'ok' but the inferred return is 
+          {'error', 'not_found'}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:203:2: The specification for reckon_db_links:stop/2 states that the function might also return 
+          {'error', _} but the inferred return is 
+          'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:215:2: Type specification reckon_db_links:info
+          (atom(), binary()) -> {'ok', map()} | {'error', 'not_found'} is a supertype of the success typing: reckon_db_links:info
+          (atom(), binary()) ->
+             {'error', 'not_found'} |
+             {'ok',
+              #{'created_at' := integer(),
+                'last_event' := 'undefined' | binary(),
+                'link_stream' := binary(),
+                'link_stream_version' := integer(),
+                'name' := binary(),
+                'processed' := non_neg_integer(),
+                'source' :=
+                    #{'type' := 'all' | 'stream' | 'stream_pattern',
+                      'pattern' => binary(),
+                      'stream_id' => binary()},
+                'status' := 'error' | 'running' | 'stopped'}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:269:2: Type specification reckon_db_links:update_status
+          (atom(), binary(), 'running' | 'stopped' | 'error') -> 'ok' is a supertype of the success typing: reckon_db_links:update_status
+          (atom(), binary(), 'running' | 'stopped') -> 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:274:13: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:340:2: Type specification reckon_db_links:wildcard_to_regex
+          (binary()) -> binary() is a supertype of the success typing: reckon_db_links:wildcard_to_regex
+          (binary()) -> <<_:16, _:_*8>>
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:405:2: Type specification reckon_db_links:event_to_map
+          (event()) -> map() is a supertype of the success typing: reckon_db_links:event_to_map
+          (#event{event_id :: binary(),
+                 event_type :: binary(),
+                 stream_id :: binary(),
+                 version :: non_neg_integer(),
+                 data :: binary() | map(),
+                 metadata :: map(),
+                 tags :: 'undefined' | [binary()],
+                 timestamp :: integer(),
+                 epoch_us :: integer(),
+                 data_content_type :: binary(),
+                 metadata_content_type :: binary(),
+                 prev_event_hash :: 'undefined' | binary(),
+                 mac :: 'undefined' | {non_neg_integer(), binary()},
+                 signature :: 'undefined' | binary()}) ->
+             #{'data' := binary() | map(),
+               'event_id' := binary(),
+               'event_type' := binary(),
+               'metadata' :=
+                   #{'source_stream' := binary(),
+                     'source_version' := non_neg_integer(),
+                     _ => _}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:423:13: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:432:2: Invalid type specification for function reckon_db_links:start_link_subscription/2.
+ The success typing is reckon_db_links:start_link_subscription
+          (_, _) -> none()
+ But the spec is reckon_db_links:start_link_subscription
+          (atom(), #link{}) -> 'ok'
+ The return types do not overlap
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:433:1: Function start_link_subscription/2 has no local return
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:441:17: The call reckon_db_subscriptions:subscribe
+         (StoreId :: atom(),
+          'stream',
+          StreamId :: binary(),
+          SubscriptionName :: <<_:8, _:_*1>>,
+          #{'handler' := fun((_) -> 'ok')}) breaks the contract 
+          (atom(),
+          subscription_type(),
+          binary() | map(),
+          binary(),
+          subscribe_opts()) ->
+             {'ok', binary()} | {'error', term()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:448:17: The call reckon_db_subscriptions:subscribe
+         (StoreId :: atom(),
+          'event_pattern',
+          Pattern :: binary(),
+          SubscriptionName :: <<_:8, _:_*1>>,
+          #{'handler' := fun((_) -> 'ok')}) breaks the contract 
+          (atom(),
+          subscription_type(),
+          binary() | map(),
+          binary(),
+          subscribe_opts()) ->
+             {'ok', binary()} | {'error', term()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:454:26: The call reckon_db_subscriptions:subscribe
+         (StoreId :: atom(),
+          'all',
+          <<42>>,
+          SubscriptionName :: <<_:8, _:_*1>>,
+          #{'handler' := fun((_) -> 'ok')}) will never return since the success typing is 
+         (atom(),
+          'by_event_pattern' | 'by_event_payload' | 'by_event_type' |
+          'by_stream' | 'by_tags' | 'event_pattern' | 'event_payload' |
+          'event_type' | 'stream' | 'tags',
+          binary() | map(),
+          binary(),
+          map()) -> 
+          {'error', _} | {'ok', binary()} and the contract is 
+          (atom(),
+          subscription_type(),
+          binary() | map(),
+          binary(),
+          subscribe_opts()) ->
+             {'ok', binary()} | {'error', term()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:466:5: Expression produces a value of type 
+          'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:470:2: Type specification reckon_db_links:emit_telemetry
+          (atom(), binary(), atom()) -> 'ok' is a supertype of the success typing: reckon_db_links:emit_telemetry
+          (atom(), binary(), 'created' | 'deleted' | 'stopped') -> 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_memory.erl:294:15: Unknown function memsup:get_system_memory_data/0
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_memory.erl:348:22: Expression produces a value of type 
+          'false' | non_neg_integer(), but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_naming.erl:213:2: Type specification reckon_db_naming:make_name
+          (string(), atom()) -> atom() is a supertype of the success typing: reckon_db_naming:make_name
+          ([1..255, ...], atom()) -> atom()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:48:2: Type specification reckon_db_node_monitor:get_members
+          (atom()) -> {'ok', [term()]} | {'error', term()} is a supertype of the success typing: reckon_db_node_monitor:get_members
+          (atom()) -> {'error', _} | {'ok', [{atom(), atom()}, ...]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:134:5: Expression produces a value of type 
+          'ok' | reference(), but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:149:5: Expression produces a value of type 
+          'ok' | reference(), but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:160:5: Expression produces a value of type 
+          'error' | 'ok' | {'error', _}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:268:2: Type specification reckon_db_node_monitor:schedule_leader_check
+          (non_neg_integer()) -> reference() is a supertype of the success typing: reckon_db_node_monitor:schedule_leader_check
+          (1000 | 5000) -> reference()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:273:2: Type specification reckon_db_node_monitor:schedule_membership_check
+          (non_neg_integer()) -> reference() is a supertype of the success typing: reckon_db_node_monitor:schedule_membership_check
+          (10000) -> reference()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:198:5: Expression produces a value of type 
+          'false' | 'ok' | non_neg_integer(), but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:204:5: Expression produces a value of type 
+          'ok' | {'error', {'partial_success', _, _}}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:227:1: The pattern 
+          {'store_config', _, _, _, _, _, _, _, _, _} can never match since previous clauses completely covered the type 
+          #store_config{store_id :: atom(),
+                        data_dir :: string(),
+                        mode :: 'cluster' | 'single',
+                        timeout :: pos_integer(),
+                        writer_pool_size :: pos_integer(),
+                        reader_pool_size :: pos_integer(),
+                        gateway_pool_size :: pos_integer(),
+                        options :: map(),
+                        integrity ::
+                            'disabled' |
+                            #{'enabled' := 'true',
+                              'key_source' := {_, _}}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:231:2: Type specification reckon_db_persistence_worker:persist_pending_stores
+          (sets:set(atom())) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_persistence_worker:persist_pending_stores
+          (sets:set(_)) -> 'ok' | {'error', {'partial_success', _, _}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:252:2: The specification for reckon_db_persistence_worker:persist_store/1 states that the function might also return 
+          {'error', _} but the inferred return is 
+          'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:258:9: The pattern 
+          Error = {error, Reason} can never match the type 
+          'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:273:2: The specification for reckon_db_persistence_worker:flush_async/1 states that the function might also return 
+          {'error', _} but the inferred return is 
+          'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_revocation.erl:121:5: Expression produces a value of type 
+          atom() | ets:tid(), but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_revocation.erl:128:5: Expression produces a value of type 
+          atom() | ets:tid(), but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:79:2: Type specification reckon_db_scavenge:scavenge
+          (atom(), binary(), scavenge_opts()) ->
+             {'ok', scavenge_result()} | {'error', term()} is a supertype of the success typing: reckon_db_scavenge:scavenge
+          (atom(),
+          binary(),
+          #{'before' => integer(),
+            'before_version' => integer(),
+            'dry_run' => boolean(),
+            'keep_versions' => pos_integer(),
+            'require_snapshot' => boolean()}) ->
+             {'error',
+              {'no_snapshot', binary()} | {'stream_not_found', binary()}} |
+             {'ok',
+              #{'archived' := boolean(),
+                'deleted_count' := non_neg_integer(),
+                'deleted_versions' := {0, non_neg_integer()},
+                'stream_id' := binary(),
+                'archive_key' => binary()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:131:52: The call reckon_db_scavenge:do_scavenge
+         (StoreId :: atom(),
+          StreamId :: binary(),
+          ScavengeOpts ::
+              #{'archived_key' := binary(),
+                'before' => integer(),
+                'before_version' => integer(),
+                'dry_run' => boolean(),
+                'keep_versions' => pos_integer(),
+                'require_snapshot' => boolean()}) breaks the contract 
+          (atom(), binary(), scavenge_opts()) ->
+             {'ok', scavenge_result()} | {'error', term()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:263:2: Type specification reckon_db_scavenge:delete_event_versions
+          (atom(), binary(), non_neg_integer(), non_neg_integer()) ->
+             'ok' is a supertype of the success typing: reckon_db_scavenge:delete_event_versions
+          (atom(), binary(), 0, non_neg_integer()) -> 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:299:2: Type specification reckon_db_scavenge:emit_telemetry
+          (atom(), binary(), term(), integer()) -> 'ok' is a supertype of the success typing: reckon_db_scavenge:emit_telemetry
+          (atom(),
+          binary(),
+          {'error',
+           {'no_snapshot', binary()} | {'stream_not_found', binary()}} |
+          {'ok',
+           #{'archived' := boolean(),
+             'deleted_count' := non_neg_integer(),
+             'deleted_versions' := {_, _},
+             'stream_id' := binary(),
+             'archive_key' => binary()}},
+          integer()) ->
+             'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_schema.erl:113:2: The specification for reckon_db_schema:unregister/2 states that the function might also return 
+          'ok' but the inferred return is 
+          {'error', _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_schema.erl:118:62: The call reckon_db_schema:emit_telemetry
+         (StoreId ::
+              atom() |
+              binary() |
+              [atom() |
+               binary() |
+               char() |
+               {'if_all' | 'if_any' | 'if_child_list_length' |
+                'if_child_list_version' | 'if_has_data' |
+                'if_has_payload' | 'if_has_sproc' | 'if_node_exists' |
+                'if_not' | 'if_payload_version',
+                _} |
+               #if_name_matches{regex ::
+                                    'any' |
+                                    binary() |
+                                    maybe_improper_list(binary() |
+                                                        maybe_improper_list(any(),
+                                                                            binary() |
+                                                                            []) |
+                                                        char(),
+                                                        binary() | []),
+                                compiled ::
+                                    'undefined' |
+                                    {'error',
+                                     {string(), non_neg_integer()}} |
+                                    {'ok', {'re_pattern', _, _, _, _}}} |
+               #if_path_matches{regex ::
+                                    'any' |
+                                    binary() |
+                                    maybe_improper_list(binary() |
+                                                        maybe_improper_list(any(),
+                                                                            binary() |
+                                                                            []) |
+                                                        char(),
+                                                        binary() | []),
+                                compiled ::
+                                    'undefined' |
+                                    {'error',
+                                     {string(), non_neg_integer()}} |
+                                    {'ok', {'re_pattern', _, _, _, _}}} |
+               #if_data_matches{conditions :: [any()],
+                                compiled ::
+                                    'undefined' |
+                                    ets:compiled_match_spec()}],
+          EventType :: any(),
+          'unregistered',
+          0) breaks the contract 
+          (atom(), binary(), atom(), version()) -> 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:101:2: Type specification reckon_db_snapshots:load
+          (atom(), binary()) ->
+             {'ok', snapshot()} |
+             {'error', 'not_found'} |
+             {'error', term()} is a supertype of the success typing: reckon_db_snapshots:load
+          (atom(), binary()) ->
+             {'error',
+              'not_found' |
+              {'integrity_violation',
+               #{'context' := map(),
+                 'kind' :=
+                     'chain_mismatch' | 'mac_mismatch' |
+                     'missing_integrity' | 'snapshot_anchor_mismatch' |
+                     'snapshot_mac_mismatch',
+                 'layer' := 'snapshot' | 'storage',
+                 'stream_id' := binary(),
+                 'version' := non_neg_integer()}} |
+              {'snapshot_anchor_unavailable',
+               #{'reason' := 'event_is_legacy' | 'event_not_found',
+                 'stream_id' := binary(),
+                 'version' := non_neg_integer()}}} |
+             {'ok',
+              #snapshot{stream_id :: binary(),
+                        version :: non_neg_integer(),
+                        data :: binary() | map(),
+                        metadata :: map(),
+                        timestamp :: integer(),
+                        anchor_hash :: 'undefined' | binary(),
+                        mac ::
+                            'undefined' | {non_neg_integer(), binary()}}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:134:2: Type specification reckon_db_snapshots:load_at
+          (atom(), binary(), non_neg_integer()) ->
+             {'ok', snapshot()} |
+             {'error', 'not_found'} |
+             {'error', term()} is a supertype of the success typing: reckon_db_snapshots:load_at
+          (atom(), binary(), non_neg_integer()) ->
+             {'error',
+              'not_found' |
+              {'integrity_violation',
+               #{'context' := map(),
+                 'kind' :=
+                     'chain_mismatch' | 'mac_mismatch' |
+                     'missing_integrity' | 'snapshot_anchor_mismatch' |
+                     'snapshot_mac_mismatch',
+                 'layer' := 'snapshot' | 'storage',
+                 'stream_id' := binary(),
+                 'version' := non_neg_integer()}} |
+              {'snapshot_anchor_unavailable',
+               #{'reason' := 'event_is_legacy' | 'event_not_found',
+                 'stream_id' := binary(),
+                 'version' := non_neg_integer()}}} |
+             {'ok',
+              #snapshot{stream_id :: binary(),
+                        version :: non_neg_integer(),
+                        data :: binary() | map(),
+                        metadata :: map(),
+                        timestamp :: integer(),
+                        anchor_hash :: 'undefined' | binary(),
+                        mac ::
+                            'undefined' | {non_neg_integer(), binary()}}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:174:2: Type specification reckon_db_snapshots:estimate_size
+          (term()) -> non_neg_integer() is a supertype of the success typing: reckon_db_snapshots:estimate_size
+          (binary() | map()) -> non_neg_integer()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:180:1: The variable Data can never match since previous clauses completely covered the type 
+          binary() | map()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:220:2: Type specification reckon_db_snapshots:apply_snapshot_integrity
+          (atom(), binary(), non_neg_integer(), snapshot()) ->
+             {'ok', snapshot()} | {'error', term()} is a supertype of the success typing: reckon_db_snapshots:apply_snapshot_integrity
+          (atom(),
+          binary(),
+          non_neg_integer(),
+          #snapshot{stream_id :: binary(),
+                    version :: non_neg_integer(),
+                    data :: binary() | map(),
+                    metadata :: map(),
+                    timestamp :: integer()}) ->
+             {'error',
+              {'snapshot_anchor_unavailable',
+               #{'reason' := 'event_is_legacy' | 'event_not_found',
+                 'stream_id' := binary(),
+                 'version' := non_neg_integer()}}} |
+             {'ok',
+              #snapshot{stream_id :: binary(),
+                        version :: non_neg_integer(),
+                        data :: binary() | map(),
+                        metadata :: map(),
+                        timestamp :: integer(),
+                        anchor_hash :: 'undefined' | binary(),
+                        mac :: 'undefined' | {1, binary()}}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots_store.erl:111:9: The pattern 
+          {'ok', _} can never match the type 
+          {'error', _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store.erl:71:9: The pattern 
+          {'ok', _, _} can never match the type 
+          {'error', _} | {'timeout', {atom(), atom()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store.erl:276:2: Type specification reckon_db_store:await_store_ready
+          (atom(), non_neg_integer()) -> 'ok' | {'error', 'timeout'} is a supertype of the success typing: reckon_db_store:await_store_ready
+          (atom(), 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10) ->
+             'ok' | {'error', 'timeout'}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:120:9: The pattern 
+          'waiting' can never match the type 
+          'failed' | 'no_nodes'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:123:9: The variable _ can never match since previous clauses completely covered the type 
+          'coordinator' | 'failed' | 'no_nodes' | 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:155:9: The pattern 
+          'waiting' can never match the type 
+          'failed' | 'no_nodes'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:158:9: The variable _ can never match since previous clauses completely covered the type 
+          'coordinator' | 'failed' | 'no_nodes' | 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:182:2: The specification for reckon_db_store_coordinator:do_join_cluster/1 states that the function might also return 
+          'waiting' but the inferred return is 
+          'coordinator' | 'failed' | 'no_nodes' | 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:198:2: The specification for reckon_db_store_coordinator:handle_cluster_nodes/3 states that the function might also return 
+          'waiting' but the inferred return is 
+          'coordinator' | 'failed' | 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:221:2: The specification for reckon_db_store_coordinator:handle_no_existing_clusters/2 states that the function might also return 
+          'waiting' but the inferred return is 
+          'coordinator' | 'failed' | 'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:25:2: The specification for reckon_db_store_inspector:store_stats/1 states that the function might also return 
+          {'error', _} but the inferred return is 
+          {'ok',
+           #{'has_events' := boolean(),
+             'snapshot_count' := number(),
+             'store_id' := atom(),
+             'stream_count' := non_neg_integer(),
+             'subscription_count' := non_neg_integer(),
+             'total_events' := number()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:42:2: The specification for reckon_db_store_inspector:list_all_snapshots/1 states that the function might also return 
+          {'error', _} but the inferred return is 
+          {'ok', [map()]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:50:2: The specification for reckon_db_store_inspector:list_subscriptions/1 states that the function might also return 
+          {'error', _} but the inferred return is 
+          {'ok', [any()]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:57:2: The specification for reckon_db_store_inspector:subscription_lag/2 states that the function might also return 
+          {'ok', map()} but the inferred return is 
+          {'error', 'not_found'}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:60:9: The pattern 
+          {'ok', Sub} can never match the type 
+          {'error', 'not_found'} |
+          {'ok',
+           binary(),
+           #subscription{id :: binary(),
+                         type ::
+                             'by_event_pattern' | 'by_event_payload' |
+                             'by_event_type' | 'by_stream' | 'by_tags' |
+                             'event_pattern' | 'event_payload' |
+                             'event_type' | 'stream' | 'tags',
+                         selector :: binary() | map(),
+                         subscription_name :: binary(),
+                         subscriber_pid :: 'undefined' | pid(),
+                         created_at :: integer(),
+                         pool_size :: pos_integer(),
+                         checkpoint :: 'undefined' | non_neg_integer(),
+                         options :: map()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:75:2: The specification for reckon_db_store_inspector:event_type_summary/1 states that the function might also return 
+          {'error', _} but the inferred return is 
+          {'ok', [map()]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:78:30: The created fun has no local return
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:83:2: Invalid type specification for function reckon_db_store_inspector:stream_info/2.
+ The success typing is reckon_db_store_inspector:stream_info
+          (_, _) -> none()
+ But the spec is reckon_db_store_inspector:stream_info
+          (atom(), binary()) -> {'ok', map()} | {'error', term()}
+ The return types do not overlap
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:84:1: Function stream_info/2 has no local return
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:86:9: The pattern 
+          {'ok', Version} can never match the type 
+          integer()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:95:9: The pattern 
+          Err = {error, _} can never match the type 
+          integer()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:112:19: Guard test is_list
+         (Subs :: {'error', _}) can never succeed
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:121:9: The pattern 
+          {'ok', Version} can never match the type 
+          integer()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:140:1: The pattern 
+         <StreamId,
+          Map = #{version := V}> can never match the type 
+         <binary(),
+          #snapshot{stream_id :: binary(),
+                    version :: non_neg_integer(),
+                    data :: binary() | map(),
+                    metadata :: map(),
+                    timestamp :: integer(),
+                    anchor_hash :: 'undefined' | binary(),
+                    mac :: 'undefined' | {_, _}}>
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:142:1: The pattern 
+         <StreamId,
+          _> can never match since previous clauses completely covered the type 
+         <binary(),
+          #snapshot{stream_id :: binary(),
+                    version :: non_neg_integer(),
+                    data :: binary() | map(),
+                    metadata :: map(),
+                    timestamp :: integer(),
+                    anchor_hash :: 'undefined' | binary(),
+                    mac :: 'undefined' | {_, _}}>
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:145:1: Function snapshot_coverage/2 will never be called
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:152:1: Function latest_snap_version/1 will never be called
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:163:9: The variable _ can never match since previous clauses completely covered the type 
+          #{'subscriber_pid' => binary(), _ => _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:181:1: Function extract_checkpoint/1 will never be called
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:193:1: Function count_types_in_stream/3 has no local return
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:194:56: The call reckon_db_streams:read_all
+         (StoreId :: atom(),
+          StreamId :: any(),
+          'forward',
+          10000) will never return since the success typing is 
+         (atom(),
+          binary(),
+          pos_integer(),
+          'backward' | 'forward') -> 
+          {'error', {'stream_not_found', binary()}} |
+          {'ok',
+           [#event{event_id :: binary(),
+                   event_type :: binary(),
+                   stream_id :: binary(),
+                   version :: non_neg_integer(),
+                   data :: binary() | map(),
+                   metadata :: map(),
+                   tags :: 'undefined' | [any()],
+                   timestamp :: integer(),
+                   epoch_us :: integer(),
+                   data_content_type :: binary(),
+                   metadata_content_type :: binary(),
+                   prev_event_hash :: 'undefined' | binary(),
+                   mac :: 'undefined' | {_, _},
+                   signature :: 'undefined' | binary()}]} and the contract is 
+          (atom(), binary(), pos_integer(), direction()) ->
+             {'ok', [event()]} | {'error', term()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:214:1: Function get_event_timestamp/3 will never be called
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:220:1: Function extract_timestamp/1 will never be called
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:69:2: Type specification reckon_db_streams:append
+          (atom(), binary(), integer(), [new_event()]) ->
+             {'ok', non_neg_integer()} | {'error', term()} is a supertype of the success typing: reckon_db_streams:append
+          (atom(),
+          binary(),
+          integer(),
+          [#{'data' := binary() | map(),
+             'event_type' := binary(),
+             'event_id' => binary(),
+             'metadata' => map(),
+             'tags' => [binary()]}]) ->
+             {'error', {'wrong_expected_version', _, integer()}} |
+             {'ok', non_neg_integer()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:215:9: The pattern 
+          {'ok', _} can never match the type 
+          {'error', _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:239:64: Record construction 
+          #event{event_id :: '_',
+                 stream_id :: '_',
+                 version :: '_',
+                 data :: '_',
+                 metadata :: '_',
+                 tags :: '_',
+                 timestamp :: '_',
+                 epoch_us :: '_',
+                 data_content_type :: '_',
+                 metadata_content_type :: '_',
+                 prev_event_hash :: '_',
+                 mac :: '_',
+                 signature :: '_'} violates the declared type of field event_id ::
+          binary() and stream_id ::
+          binary() and version ::
+          non_neg_integer() and data ::
+          binary() | map() and metadata ::
+          map() and tags ::
+          'undefined' | [binary()] and timestamp ::
+          integer() and epoch_us ::
+          integer() and data_content_type ::
+          binary() and metadata_content_type ::
+          binary() and prev_event_hash ::
+          'undefined' | binary() and mac ::
+          'undefined' | {non_neg_integer(), binary()} and signature ::
+          'undefined' | binary()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:247:9: The pattern 
+          [SingleCondition] can never match the type 
+          []
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:252:9: The variable _ can never match since previous clauses completely covered the type 
+          []
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:283:9: The pattern 
+          {'ok', _} can never match the type 
+          {'error', _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:349:9: The pattern 
+          {'ok', _} can never match the type 
+          {'error', _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:442:9: The pattern 
+          {'ok', _} can never match the type 
+          {'error', _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:672:25: The pattern 
+          Violation = {integrity_violation, _} can never match the type 
+          {'ok',
+           [#event{event_id :: binary(),
+                   event_type :: binary(),
+                   stream_id :: binary(),
+                   version :: non_neg_integer(),
+                   data :: binary() | map(),
+                   metadata :: map(),
+                   tags :: 'undefined' | [binary()],
+                   timestamp :: integer(),
+                   epoch_us :: integer(),
+                   data_content_type :: binary(),
+                   metadata_content_type :: binary(),
+                   prev_event_hash :: 'undefined' | binary(),
+                   mac :: 'undefined' | {non_neg_integer(), binary()},
+                   signature :: 'undefined' | binary()}]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:679:17: The variable Other can never match since previous clauses completely covered the type 
+          {'ok',
+           [#event{event_id :: binary(),
+                   event_type :: binary(),
+                   stream_id :: binary(),
+                   version :: non_neg_integer(),
+                   data :: binary() | map(),
+                   metadata :: map(),
+                   tags :: 'undefined' | [binary()],
+                   timestamp :: integer(),
+                   epoch_us :: integer(),
+                   data_content_type :: binary(),
+                   metadata_content_type :: binary(),
+                   prev_event_hash :: 'undefined' | binary(),
+                   mac :: 'undefined' | {non_neg_integer(), binary()},
+                   signature :: 'undefined' | binary()}]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:693:2: The specification for reckon_db_streams:maybe_verify_events/6 states that the function might also return 
+          {'error', _} but the inferred return is 
+          {'ok',
+           [{'event',
+             binary(),
+             binary(),
+             binary(),
+             non_neg_integer(),
+             binary() | map(),
+             map(),
+             'undefined' | [any()],
+             integer(),
+             integer(),
+             binary(),
+             binary(),
+             'undefined' | binary(),
+             'undefined' | {_, _},
+             'undefined' | binary()}]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:717:2: The specification for reckon_db_streams:verify_in_direction/6 states that the function might also return 
+          {'error', _} but the inferred return is 
+          {'ok',
+           [{'event',
+             binary(),
+             binary(),
+             binary(),
+             non_neg_integer(),
+             binary() | map(),
+             map(),
+             'undefined' | [any()],
+             integer(),
+             integer(),
+             binary(),
+             binary(),
+             'undefined' | binary(),
+             'undefined' | {_, _},
+             'undefined' | binary()}]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:738:9: The pattern 
+          Violation = {integrity_violation, _} can never match the type 
+          {'ok',
+           [#event{event_id :: binary(),
+                   event_type :: binary(),
+                   stream_id :: binary(),
+                   version :: non_neg_integer(),
+                   data :: binary() | map(),
+                   metadata :: map(),
+                   tags :: 'undefined' | [binary()],
+                   timestamp :: integer(),
+                   epoch_us :: integer(),
+                   data_content_type :: binary(),
+                   metadata_content_type :: binary(),
+                   prev_event_hash :: 'undefined' | binary(),
+                   mac :: 'undefined' | {non_neg_integer(), binary()},
+                   signature :: 'undefined' | binary()}]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:744:2: The specification for reckon_db_streams:verify_events_forward/5 states that the function might also return 
+          {'error', _} but the inferred return is 
+          {'integrity_violation',
+           #{'context' := map(),
+             'kind' :=
+                 'chain_mismatch' | 'mac_mismatch' |
+                 'missing_integrity' | 'snapshot_anchor_mismatch' |
+                 'snapshot_mac_mismatch',
+             'layer' := 'snapshot' | 'storage',
+             'stream_id' := binary(),
+             'version' := non_neg_integer()}} |
+          {'ok', [{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _}]}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscription_health.erl:190:1: The variable _ can never match since previous clauses completely covered the type 
+          'undefined' | pid()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscription_health.erl:254:13: Expression produces a value of type 
+          'ok' |
+          {'error',
+           'not_found' | 'restarting' | 'running' | 'simple_one_for_one'}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscription_health.erl:365:1: The variable _ can never match since previous clauses completely covered the type 
+          map()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:183:21: The pattern 
+          'ok' can never match the type 
+          {'error', _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:353:2: Type specification reckon_db_subscriptions:create_filter
+          (subscription_type(), binary() | map()) -> term() is a supertype of the success typing: reckon_db_subscriptions:create_filter
+          ('by_event_pattern' | 'by_event_payload' | 'by_stream' |
+          'event_pattern' | 'event_payload' | 'stream',
+          binary() | map()) ->
+             {'error', 'invalid_stream'} |
+             {'evf_tree',
+              [atom() |
+               binary() |
+               46 | 47 | 94 |
+               {'if_all' | 'if_any' | 'if_child_list_length' |
+                'if_child_list_version' | 'if_has_data' |
+                'if_has_payload' | 'if_has_sproc' | 'if_node_exists' |
+                'if_not' | 'if_payload_version',
+                _} |
+               {'if_name_matches',
+                'any' |
+                binary() |
+                maybe_improper_list(any(), binary() | []),
+                'undefined' | {_, _}} |
+               {'if_path_matches',
+                'any' |
+                binary() |
+                maybe_improper_list(any(), binary() | []),
+                'undefined' | {_, _}} |
+               {'if_data_matches', _,
+                [any()],
+                'undefined' | ets:compiled_match_spec()}],
+              #{'on_actions' => ['create' | 'delete' | 'update'],
+                'priority' => integer()}}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:371:31: The call reckon_db_filters:by_tags
+         (Tags :: binary() | map()) will never return since the success typing is 
+         (maybe_improper_list()) -> 
+          {'evf_tree',
+           [atom() |
+            binary() |
+            46 | 47 | 94 |
+            {'if_all' | 'if_any' | 'if_child_list_length' |
+             'if_child_list_version' | 'if_has_data' |
+             'if_has_payload' | 'if_has_sproc' | 'if_node_exists' |
+             'if_not' | 'if_payload_version',
+             _} |
+            {'if_name_matches',
+             'any' |
+             binary() |
+             maybe_improper_list(any(), binary() | []),
+             'undefined' | {_, _}} |
+            {'if_path_matches',
+             'any' |
+             binary() |
+             maybe_improper_list(any(), binary() | []),
+             'undefined' | {_, _}} |
+            {'if_data_matches', _,
+             [any()],
+             'undefined' | ets:compiled_match_spec()}],
+           #{'on_actions' => ['create' | 'delete' | 'update'],
+             'priority' => integer()}} and the contract is 
+          ([binary()]) -> khepri_evf:tree_event_filter()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:387:2: Type specification reckon_db_subscriptions:setup_event_notification
+          (atom(), binary(), term(), subscription()) -> 'ok' is a supertype of the success typing: reckon_db_subscriptions:setup_event_notification
+          (atom(),
+          binary(),
+          {'evf_tree',
+           [atom() |
+            binary() |
+            46 | 47 | 94 |
+            {_, _} |
+            {_, _, _} |
+            {_, _, _, _}],
+           #{'on_actions' => [any()], 'priority' => integer()}},
+          #subscription{id :: binary(),
+                        type ::
+                            'by_event_pattern' | 'by_event_payload' |
+                            'by_event_type' | 'by_stream' | 'by_tags' |
+                            'event_pattern' | 'event_payload' |
+                            'event_type' | 'stream' | 'tags',
+                        selector :: binary() | map(),
+                        subscription_name :: binary(),
+                        subscriber_pid :: 'undefined' | pid(),
+                        created_at :: integer(),
+                        pool_size :: pos_integer(),
+                        checkpoint :: 'undefined' | non_neg_integer(),
+                        options :: map()}) ->
+             'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:392:9: The pattern 
+          'ok' can never match the type 
+          {'error', _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:431:2: The specification for reckon_db_subscriptions:register_trigger/3 states that the function might also return 
+          'ok' but the inferred return is 
+          {'error', _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:450:1: Function activate_trigger/4 has no local return
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:458:72: The call khepri:register_trigger
+         (StoreId :: atom(),
+          TriggerId :: atom(),
+          Filter ::
+              {'evf_tree',
+               [atom() |
+                binary() |
+                46 | 47 | 94 |
+                {_, _} |
+                {_, _, _} |
+                {_, _, _, _}],
+               #{'on_actions' => [any()], 'priority' => integer()}},
+          ProcPath :: ['on_new_event' | 'procs' | binary(), ...],
+          PropOpts ::
+              #{'expect_specific_node' := 'false',
+                'include_root_props' := 'true',
+                'props_to_return' :=
+                    ['child_list_length' | 'child_list_version' |
+                     'child_names' | 'payload' | 'payload_version',
+                     ...]}) will never return since it differs in the 5th argument from the success typing arguments: 
+         (atom(),
+          atom(),
+          [atom() |
+           binary() |
+           char() |
+           {'if_all' | 'if_any' | 'if_child_list_length' |
+            'if_child_list_version' | 'if_has_data' | 'if_has_payload' |
+            'if_has_sproc' | 'if_node_exists' | 'if_not' |
+            'if_payload_version',
+            _} |
+           {'if_name_matches',
+            'any' |
+            binary() |
+            maybe_improper_list(binary() |
+                                maybe_improper_list(any(),
+                                                    binary() | []) |
+                                char(),
+                                binary() | []),
+            'undefined' | {'error', {_, _}} | {'ok', {_, _, _, _, _}}} |
+           {'if_path_matches',
+            'any' |
+            binary() |
+            maybe_improper_list(binary() |
+                                maybe_improper_list(any(),
+                                                    binary() | []) |
+                                char(),
+                                binary() | []),
+            'undefined' | {'error', {_, _}} | {'ok', {_, _, _, _, _}}} |
+           {'if_data_matches', _,
+            [any()],
+            'undefined' | ets:compiled_match_spec()}] |
+          {'evf_tree',
+           [atom() |
+            binary() |
+            46 | 47 | 94 |
+            {'if_all' | 'if_any' | 'if_child_list_length' |
+             'if_child_list_version' | 'if_has_data' |
+             'if_has_payload' | 'if_has_sproc' | 'if_node_exists' |
+             'if_not' | 'if_payload_version',
+             _} |
+            {'if_name_matches',
+             'any' |
+             binary() |
+             maybe_improper_list(any(), binary() | []),
+             'undefined' | {_, _}} |
+            {'if_path_matches',
+             'any' |
+             binary() |
+             maybe_improper_list(any(), binary() | []),
+             'undefined' | {_, _}} |
+            {'if_data_matches', _,
+             [any()],
+             'undefined' | ets:compiled_match_spec()}],
+           #{'on_actions' => ['create' | 'delete' | 'update'],
+             'priority' => integer()}},
+          binary() | [atom() | binary() | char()],
+          #{'async' =>
+                'false' | 'low' | 'normal' | 'true' |
+                reference() |
+                integer() |
+                {reference() | integer(), 'low' | 'normal'},
+            'protect_against_dups' => boolean(),
+            'reply_from' =>
+                'leader' | 'local' | {'member', {atom(), atom()}},
+            'timeout' => 'infinity' | non_neg_integer()})
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:477:13: Expression produces a value of type 
+          'ok' | {'error', 'no_emitters'}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:573:2: Type specification reckon_db_subscriptions:do_catchup
+          (atom(),
+          pid(),
+          non_neg_integer(),
+          atom(),
+          binary() | map() | [binary()]) ->
+             'ok' is a supertype of the success typing: reckon_db_subscriptions:do_catchup
+          (atom(),
+          pid(),
+          non_neg_integer(),
+          'by_event_pattern' | 'by_event_payload' | 'by_event_type' |
+          'by_stream' | 'by_tags' | 'event_pattern' | 'event_payload' |
+          'event_type' | 'stream' | 'tags',
+          binary() | map()) ->
+             'ok'
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:598:21: Expression produces a value of type 
+          'ok' | {'subscription_error', {'integrity_violation', map()}}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:660:13: Expression produces a value of type 
+          'ok' |
+          {'events',
+           [#event{event_id :: binary(),
+                   event_type :: binary(),
+                   stream_id :: binary(),
+                   version :: non_neg_integer(),
+                   data :: binary() | map(),
+                   metadata :: map(),
+                   tags :: 'undefined' | [any()],
+                   timestamp :: integer(),
+                   epoch_us :: integer(),
+                   data_content_type :: binary(),
+                   metadata_content_type :: binary(),
+                   prev_event_hash :: 'undefined' | binary(),
+                   mac :: 'undefined' | {_, _},
+                   signature :: 'undefined' | binary()},
+            ...]}, but this value is unmatched
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions_store.erl:58:9: The pattern 
+          'undefined' can never match the type 
+          binary()
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions_store.erl:123:9: The pattern 
+          {'ok', _} can never match the type 
+          {'error', _}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_sup.erl:46:2: Type specification reckon_db_sup:stop_store
+          (atom()) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_sup:stop_store
+          (atom()) ->
+             'ok' |
+             {'error',
+              'not_found' | 'restarting' | 'running' |
+              'simple_one_for_one'}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_temporal.erl:113:2: Type specification reckon_db_temporal:version_at
+          (atom(), binary(), timestamp()) ->
+             {'ok', integer()} | {'error', term()} is a supertype of the success typing: reckon_db_temporal:version_at
+          (atom(), binary(), integer()) ->
+             {'error', {'stream_not_found', binary()}} |
+             {'ok', integer()}
+
+/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_temporal.erl:199:2: Type specification reckon_db_temporal:emit_telemetry
+          (atom(), atom(), binary(), term(), term(), integer()) -> 'ok' is a supertype of the success typing: reckon_db_temporal:emit_telemetry
+          ('read_range' | 'read_until',
+          atom(),
+          binary(),
+          integer() | {integer(), integer()},
+          {'error', {'stream_not_found', binary()}} |
+          {'ok', [{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _}]},
+          integer()) ->
+             'ok'
+

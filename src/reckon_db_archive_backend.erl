@@ -10,10 +10,15 @@
 
 -module(reckon_db_archive_backend).
 
--include("reckon_db.hrl").
-
 %% API
 -export([make_key/4, parse_key/1]).
+
+%% Type alias for #event{} from reckon_db.hrl — kept local so
+%% archive backend implementations don't need to pull in the full
+%% record definition just to satisfy the callback signatures. Mirrors
+%% the pattern in reckon_db_log_backend.
+-type event() :: term().
+-export_type([event/0]).
 
 %%====================================================================
 %% Callbacks
