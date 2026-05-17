@@ -132,26 +132,25 @@ unsubscribe(Pid) when is_pid(Pid) ->
 init([]) ->
     process_flag(trap_exit, true),
 
-    %% Join the registry pg group for cluster-wide discovery
+    %% Join + monitor the registry pg group. pg:monitor/2 returns the
+    %% current members AND subscribes us to future join/leave events,
+    %% giving idiomatic cluster-membership tracking without polling.
     ok = pg:join(?PG_SCOPE, ?REGISTRY_GROUP, self()),
+    {PgRef, ExistingPeers} = pg:monitor(?PG_SCOPE, ?REGISTRY_GROUP),
 
-    logger:info("[store_registry] Started on ~p", [node()]),
+    %% Bootstrap sync: ask every existing peer for its store list.
+    %% Async — peers reply with `peer_state_reply' casts which our
+    %% handler merges into local state.
+    request_state_from(self(), ExistingPeers),
 
-    %% Initial state: empty stores list + no subscribers.
-    %% subscribers is a map of WatcherPid => MonitorRef so we can
-    %% drop dead watchers automatically.
+    logger:info("[store_registry] Started on ~p (~b existing peers)",
+                [node(), length(ExistingPeers) - 1]),
+
     State = #{
-        stores => [],
-        subscribers => #{}
+        stores      => [],
+        subscribers => #{},
+        pg_ref      => PgRef
     },
-
-    %% Kick off bilateral sync with existing peer registries.
-    %% Existing announce_store/2 broadcasts new local stores TO peers,
-    %% but a freshly-joined registry never asks peers for what they
-    %% already announced before this node booted. Without this, each
-    %% node ends up knowing only about its own store. Schedule the
-    %% sync after init returns so peer calls don't block startup.
-    self() ! sync_peers_state,
 
     {ok, State}.
 
@@ -280,23 +279,18 @@ handle_cast({peer_state_reply, PeerEntries}, #{stores := Stores} = State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-%% On startup, ask every other registry for its store list and
-%% merge their entries into ours. Bilateral: existing peers will
-%% also receive our broadcast announcements when reckon_db_store
-%% calls announce_store/2, so both sides eventually converge.
-%%
-%% Async fan-out — each peer replies with a `peer_state' cast.
-%% No try/catch, no timeouts: a dead peer's `!' silently drops
-%% and our merge proceeds without it.
-handle_info(sync_peers_state, State) ->
-    [gen_server:cast(P, {peer_state_request, self()}) || P <- peer_registries()],
+%% A new peer registry came up. Ask it for state — handles the
+%% case where a node joins after we've already booted.
+handle_info({Ref, join, _Group, NewPeers},
+            #{pg_ref := Ref} = State) ->
+    request_state_from(self(), NewPeers),
     {noreply, State};
 
-%% Handle pg membership changes (node down)
-handle_info({pg, ?PG_SCOPE, ?REGISTRY_GROUP, {leave, _Group, Pids}},
-            #{stores := Stores} = State) ->
-    %% Find which nodes left and remove their stores
-    LeftNodes = [node(Pid) || Pid <- Pids],
+%% Peer registries left the group (their nodes went down). Drop
+%% all their stores and notify subscribers.
+handle_info({Ref, leave, _Group, GonePeers},
+            #{stores := Stores, pg_ref := Ref} = State) ->
+    LeftNodes = [node(P) || P <- GonePeers],
     {Retiring, Surviving} = lists:partition(
         fun(#store_entry{node = N}) -> lists:member(N, LeftNodes) end,
         Stores),
@@ -403,10 +397,11 @@ find_entry(StoreId, Node, Stores) ->
         false          -> not_found
     end.
 
-%% @private List of peer registry pids (everyone in the pg group
-%% except self).
-peer_registries() ->
-    [P || P <- pg:get_members(?PG_SCOPE, ?REGISTRY_GROUP), P =/= self()].
+%% @private Cast a state request to every peer in the given list
+%% (filtering out self so we don't loop).
+request_state_from(Self, Peers) ->
+    [gen_server:cast(P, {peer_state_request, Self}) || P <- Peers, P =/= Self],
+    ok.
 
 %% @private Merge a list of peer-supplied entries into our store
 %% list. Returns `{Merged, NewEntries}' so the caller can fire
