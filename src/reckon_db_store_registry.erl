@@ -44,7 +44,9 @@
     unannounce_store/1,
     list_stores/0,
     get_store_info/1,
-    list_stores_on_node/1
+    list_stores_on_node/1,
+    subscribe/1,
+    unsubscribe/1
 ]).
 
 %% gen_server callbacks
@@ -106,6 +108,23 @@ get_store_info(StoreId) ->
 list_stores_on_node(Node) ->
     gen_server:call(?SERVER, {list_stores_on_node, Node}).
 
+%% @doc Subscribe a process to live store-registry events. The
+%% subscriber receives messages of the form
+%%   `{store_event, announced | retired, EntryMap}'
+%% as stores come and go anywhere in the cluster. Used by the gRPC
+%% `WatchStores' RPC and any in-BEAM watcher that needs live cluster
+%% topology.
+%%
+%% Subscribers are automatically removed if they crash (we monitor
+%% them). Safe to call multiple times — no-op if already subscribed.
+-spec subscribe(pid()) -> ok.
+subscribe(Pid) when is_pid(Pid) ->
+    gen_server:call(?SERVER, {subscribe, Pid}).
+
+-spec unsubscribe(pid()) -> ok.
+unsubscribe(Pid) when is_pid(Pid) ->
+    gen_server:call(?SERVER, {unsubscribe, Pid}).
+
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
@@ -118,45 +137,48 @@ init([]) ->
 
     logger:info("[store_registry] Started on ~p", [node()]),
 
-    %% Initial state: empty stores list
+    %% Initial state: empty stores list + no subscribers.
+    %% subscribers is a map of WatcherPid => MonitorRef so we can
+    %% drop dead watchers automatically.
     State = #{
-        stores => []
+        stores => [],
+        subscribers => #{}
     },
+
+    %% Kick off bilateral sync with existing peer registries.
+    %% Existing announce_store/2 broadcasts new local stores TO peers,
+    %% but a freshly-joined registry never asks peers for what they
+    %% already announced before this node booted. Without this, each
+    %% node ends up knowing only about its own store. Schedule the
+    %% sync after init returns so peer calls don't block startup.
+    self() ! sync_peers_state,
 
     {ok, State}.
 
 %% Handle store announcement
-handle_call({announce_store, StoreId, Config}, _From, #{stores := Stores} = State) ->
-    Entry = #store_entry{
-        store_id = StoreId,
-        node = node(),
-        config = Config,
-        registered_at = erlang:system_time(millisecond)
-    },
-
-    %% Add to local state (avoiding duplicates)
-    NewStores = add_store_entry(Stores, Entry),
-    NewState = State#{stores => NewStores},
-
-    %% Broadcast to other registries
+handle_call({announce_store, StoreId, Config}, _From,
+            #{stores := Stores} = State) ->
+    Entry = #store_entry{store_id = StoreId,
+                         node = node(),
+                         config = Config,
+                         registered_at = erlang:system_time(millisecond)},
+    notify_subscribers(announced, Entry, State),
     broadcast_announcement(StoreId, Config, node()),
-
     logger:info("[store_registry] Announced store ~p on ~p", [StoreId, node()]),
+    {reply, ok, State#{stores => add_store_entry(Stores, Entry)}};
 
-    {reply, ok, NewState};
-
-%% Handle store unannouncement
-handle_call({unannounce_store, StoreId}, _From, #{stores := Stores} = State) ->
-    %% Remove from local state
-    NewStores = remove_store_entry(Stores, StoreId, node()),
-    NewState = State#{stores => NewStores},
-
-    %% Broadcast removal to other registries
-    broadcast_unannouncement(StoreId, node()),
-
-    logger:info("[store_registry] Unannounced store ~p on ~p", [StoreId, node()]),
-
-    {reply, ok, NewState};
+handle_call({unannounce_store, StoreId}, _From,
+            #{stores := Stores} = State) ->
+    case find_entry(StoreId, node(), Stores) of
+        not_found ->
+            {reply, ok, State};
+        Entry ->
+            notify_subscribers(retired, Entry, State),
+            broadcast_unannouncement(StoreId, node()),
+            logger:info("[store_registry] Unannounced store ~p on ~p",
+                        [StoreId, node()]),
+            {reply, ok, State#{stores => remove_store_entry(Stores, StoreId, node())}}
+    end;
 
 %% Handle list stores request
 handle_call(list_stores, _From, #{stores := Stores} = State) ->
@@ -177,54 +199,123 @@ handle_call({list_stores_on_node, Node}, _From, #{stores := Stores} = State) ->
     NodeStores = [store_entry_to_map(E) || E <- Stores, E#store_entry.node =:= Node],
     {reply, {ok, NodeStores}, State};
 
+%% Watcher subscribe/unsubscribe for the WatchStores RPC.
+handle_call({subscribe, Pid}, _From,
+            #{subscribers := Subs} = State) ->
+    NewSubs = case maps:is_key(Pid, Subs) of
+        true  -> Subs;
+        false ->
+            MRef = erlang:monitor(process, Pid),
+            Subs#{Pid => MRef}
+    end,
+    {reply, ok, State#{subscribers => NewSubs}};
+
+handle_call({unsubscribe, Pid}, _From,
+            #{subscribers := Subs} = State) ->
+    NewSubs = case maps:take(Pid, Subs) of
+        {MRef, Rest} ->
+            erlang:demonitor(MRef, [flush]),
+            Rest;
+        error ->
+            Subs
+    end,
+    {reply, ok, State#{subscribers => NewSubs}};
+
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
 
-%% Handle broadcast announcement from another registry
-handle_cast({remote_announce, StoreId, Config, FromNode}, #{stores := Stores} = State) ->
-    %% Only add if from a different node
-    case FromNode =:= node() of
-        true ->
-            {noreply, State};
-        false ->
-            Entry = #store_entry{
-                store_id = StoreId,
-                node = FromNode,
-                config = Config,
-                registered_at = erlang:system_time(millisecond)
-            },
-            NewStores = add_store_entry(Stores, Entry),
-            logger:debug("[store_registry] Received announcement for ~p from ~p",
-                        [StoreId, FromNode]),
-            {noreply, State#{stores => NewStores}}
-    end;
+%% Handle broadcast announcement from a peer registry. Self-broadcast
+%% is dropped — a remote_announce from our own node would create a
+%% duplicate-entry phantom.
+handle_cast({remote_announce, _StoreId, _Config, FromNode}, State)
+        when FromNode =:= node() ->
+    {noreply, State};
+handle_cast({remote_announce, StoreId, Config, FromNode},
+            #{stores := Stores} = State) ->
+    Entry = #store_entry{store_id = StoreId,
+                         node = FromNode,
+                         config = Config,
+                         registered_at = erlang:system_time(millisecond)},
+    case find_entry(StoreId, FromNode, Stores) of
+        not_found -> notify_subscribers(announced, Entry, State);
+        _Already  -> ok
+    end,
+    logger:debug("[store_registry] Received announcement for ~p from ~p",
+                [StoreId, FromNode]),
+    {noreply, State#{stores => add_store_entry(Stores, Entry)}};
 
 %% Handle broadcast unannouncement from another registry
 handle_cast({remote_unannounce, StoreId, FromNode}, #{stores := Stores} = State) ->
+    RemovedEntry = find_entry(StoreId, FromNode, Stores),
     NewStores = remove_store_entry(Stores, StoreId, FromNode),
+    case RemovedEntry of
+        not_found -> ok;
+        _         -> notify_subscribers(retired, RemovedEntry, State)
+    end,
     logger:debug("[store_registry] Received unannouncement for ~p from ~p",
                 [StoreId, FromNode]),
     {noreply, State#{stores => NewStores}};
 
+%% Peer asking for our current store list — reply with a cast back.
+%% Async fan-out: keep registries decoupled, no blocking gen_server
+%% calls between them.
+handle_cast({peer_state_request, From}, #{stores := Stores} = State) ->
+    gen_server:cast(From, {peer_state_reply, Stores}),
+    {noreply, State};
+
+%% Peer's response to our sync_peers_state — merge its entries into
+%% ours. Notifications fire for newly-discovered entries so any live
+%% WatchStores subscribers see the catch-up.
+handle_cast({peer_state_reply, PeerEntries}, #{stores := Stores} = State) ->
+    {Merged, NewEntries} = merge_entries(Stores, PeerEntries),
+    lists:foreach(fun(E) -> notify_subscribers(announced, E, State) end,
+                  NewEntries),
+    case NewEntries of
+        [] -> ok;
+        _  -> logger:info("[store_registry] Discovered ~b new store entries "
+                          "from peer registry", [length(NewEntries)])
+    end,
+    {noreply, State#{stores => Merged}};
+
 handle_cast(_Msg, State) ->
     {noreply, State}.
+
+%% On startup, ask every other registry for its store list and
+%% merge their entries into ours. Bilateral: existing peers will
+%% also receive our broadcast announcements when reckon_db_store
+%% calls announce_store/2, so both sides eventually converge.
+%%
+%% Async fan-out — each peer replies with a `peer_state' cast.
+%% No try/catch, no timeouts: a dead peer's `!' silently drops
+%% and our merge proceeds without it.
+handle_info(sync_peers_state, State) ->
+    [gen_server:cast(P, {peer_state_request, self()}) || P <- peer_registries()],
+    {noreply, State};
 
 %% Handle pg membership changes (node down)
 handle_info({pg, ?PG_SCOPE, ?REGISTRY_GROUP, {leave, _Group, Pids}},
             #{stores := Stores} = State) ->
     %% Find which nodes left and remove their stores
     LeftNodes = [node(Pid) || Pid <- Pids],
-    NewStores = lists:filter(
-        fun(#store_entry{node = N}) ->
-            not lists:member(N, LeftNodes)
-        end,
-        Stores
-    ),
-    case length(Stores) - length(NewStores) of
-        0 -> ok;
-        N -> logger:info("[store_registry] Removed ~p stores from departed nodes", [N])
+    {Retiring, Surviving} = lists:partition(
+        fun(#store_entry{node = N}) -> lists:member(N, LeftNodes) end,
+        Stores),
+    lists:foreach(fun(E) -> notify_subscribers(retired, E, State) end, Retiring),
+    case Retiring of
+        [] -> ok;
+        _  -> logger:info("[store_registry] Removed ~b stores from departed nodes",
+                          [length(Retiring)])
     end,
-    {noreply, State#{stores => NewStores}};
+    {noreply, State#{stores => Surviving}};
+
+%% Subscriber went down — drop it without unsubscribe call.
+handle_info({'DOWN', MRef, process, Pid, _Reason},
+            #{subscribers := Subs} = State) ->
+    NewSubs = case maps:get(Pid, Subs, undefined) of
+        MRef -> maps:remove(Pid, Subs);
+        _    -> Subs
+    end,
+    {noreply, State#{subscribers => NewSubs}};
 
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -301,3 +392,42 @@ broadcast_unannouncement(StoreId, FromNode) ->
         OtherRegistries
     ),
     ok.
+
+%% @private Find an entry by the (store_id, node) composite key.
+find_entry(StoreId, Node, Stores) ->
+    case lists:search(
+            fun(#store_entry{store_id = S, node = N}) ->
+                S =:= StoreId andalso N =:= Node
+            end, Stores) of
+        {value, Entry} -> Entry;
+        false          -> not_found
+    end.
+
+%% @private List of peer registry pids (everyone in the pg group
+%% except self).
+peer_registries() ->
+    [P || P <- pg:get_members(?PG_SCOPE, ?REGISTRY_GROUP), P =/= self()].
+
+%% @private Merge a list of peer-supplied entries into our store
+%% list. Returns `{Merged, NewEntries}' so the caller can fire
+%% announce notifications for the newly-discovered ones.
+merge_entries(Stores, PeerEntries) ->
+    lists:foldl(
+        fun(#store_entry{store_id = S, node = N} = E, {Acc, NewAcc}) ->
+            case find_entry(S, N, Acc) of
+                not_found -> {add_store_entry(Acc, E), [E | NewAcc]};
+                _Already  -> {Acc, NewAcc}
+            end
+        end,
+        {Stores, []},
+        PeerEntries).
+
+%% @private Push a store event to every live subscriber. Send is
+%% safe to dead pids — `Pid ! Msg' is silently dropped by the
+%% runtime — so no catch needed. Dead subscribers are pruned by
+%% the `DOWN' handler.
+-spec notify_subscribers(announced | retired, store_entry(), map()) -> ok.
+notify_subscribers(EventType, Entry, #{subscribers := Subs}) ->
+    EntryMap = store_entry_to_map(Entry),
+    Msg = {store_event, EventType, EntryMap},
+    maps:foreach(fun(Pid, _Ref) -> Pid ! Msg end, Subs).
