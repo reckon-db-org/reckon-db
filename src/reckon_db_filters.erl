@@ -19,10 +19,12 @@
     matches/3
 ]).
 
-%% @doc Create a filter for all events in a specific stream
+%% @doc Create a filter for all events in a specific stream.
 %%
 %% Special case: the binary &lt;&lt;"$all"&gt;&gt; matches events in all streams.
--spec by_stream(binary()) -> khepri_evf:tree_event_filter() | {error, invalid_stream}.
+%% Any other binary is used verbatim as the stream-id path segment;
+%% streams are stored at [streams, StreamId, PaddedVersion].
+-spec by_stream(binary()) -> khepri_evf:tree_event_filter().
 by_stream(<<"$all">>) ->
     khepri_evf:tree(
         [streams,
@@ -34,24 +36,15 @@ by_stream(<<"$all">>) ->
         #{on_actions => [create]}
     );
 by_stream(Stream) when is_binary(Stream) ->
-    List = binary_to_list(Stream),
-    case string:chr(List, $$) of
-        0 ->
-            {error, invalid_stream};
-        _DollarPos ->
-            %% Use the FULL stream ID as the path component.
-            %% Streams are stored at [streams, StreamId, PaddedVersion]
-            %% where StreamId is the complete ID including category prefix.
-            khepri_evf:tree(
-                [streams,
-                 Stream,
-                 #if_all{conditions = [
-                     #if_path_matches{regex = any},
-                     #if_has_data{has_data = true}
-                 ]}],
-                #{on_actions => [create]}
-            )
-    end.
+    khepri_evf:tree(
+        [streams,
+         Stream,
+         #if_all{conditions = [
+             #if_path_matches{regex = any},
+             #if_has_data{has_data = true}
+         ]}],
+        #{on_actions => [create]}
+    ).
 
 %% @doc Create a filter for events of a specific type
 %%

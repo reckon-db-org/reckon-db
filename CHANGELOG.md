@@ -5,6 +5,35 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] - 2026-05-17
+
+### Fixed — Gateway-facing subscription, lag, and snapshot bugs
+
+Surfaced by the new reckon-go SDK exercising paths no Erlang
+consumer had previously hit.
+
+- **`reckon_db_filters:by_stream/1`** no longer requires a `$`
+  separator in the stream id. The check rejected plain ids with
+  `{error, invalid_stream}`; the gateway worker logged a warning
+  and silently dropped the subscription, leaving the client
+  waiting forever for deliveries. The path component is used
+  verbatim; there was never a semantic reason for the restriction.
+
+- **`reckon_db_store_inspector:subscription_lag/2`** matched
+  `{ok, Sub}` against `find_by_name/2`, but `find_by_name`
+  returns `{ok, Key, Sub}` per its spec. Every successful lookup
+  crashed the gateway worker with `case_clause`, surfacing as
+  gRPC `Internal`. Now matches the documented 3-tuple. Companion
+  test mock `reckon_db_store_inspector_tests:lag_calculation/0`
+  updated — it was returning the same wrong shape and was hiding
+  the production bug.
+
+- **`reckon_db_gateway_worker.read_snapshot` with `Version = 0`**
+  now falls back to `reckon_db_snapshots:load/2` ("latest"). The
+  gRPC `SnapshotService.ReadSnapshot` proto has no read-latest
+  RPC; this lets clients ask for the most recent snapshot in a
+  single round-trip instead of `ListSnapshots` + `ReadSnapshot`.
+
 ## [2.3.1] - 2026-05-17
 
 ### Fixed — Embedded NIFs actually ship in the hex tarball

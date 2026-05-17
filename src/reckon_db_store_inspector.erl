@@ -56,8 +56,11 @@ list_subscriptions(StoreId) ->
 %% @doc Calculate lag for a specific subscription.
 -spec subscription_lag(atom(), binary()) -> {ok, map()} | {error, term()}.
 subscription_lag(StoreId, SubscriptionName) ->
+    %% find_by_name returns {ok, Key, Sub} — the previous {ok, Sub}
+    %% match crashed the worker with case_clause on every successful
+    %% lookup, surfacing as gRPC Internal.
     case reckon_db_subscriptions_store:find_by_name(StoreId, SubscriptionName) of
-        {ok, Sub} ->
+        {ok, _Key, Sub} ->
             Checkpoint = extract_checkpoint(Sub),
             TotalEvents = sum_events(StoreId, list_streams_safe(StoreId)),
             Lag = max(0, TotalEvents - Checkpoint - 1),

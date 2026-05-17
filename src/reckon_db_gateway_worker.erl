@@ -149,7 +149,15 @@ handle_call({append_events, _StoreId, StreamId, ExpectedVersion, Events}, _From,
 %% Snapshot Operations (handle_call)
 %%====================================================================
 
-%% Read snapshot
+%% Read snapshot. Version =:= 0 means "latest" — there is no version-0
+%% snapshot in the store (snapshot versions reflect an event index,
+%% which is the first written event's version, never 0 for an aggregate
+%% that has emitted events). Use load/2 in that case so callers can
+%% ask for the most recent snapshot without a List+At round-trip.
+handle_call({read_snapshot, _StoreId, _SourceUuid, StreamUuid, 0}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_snapshots:load(StoreId, StreamUuid),
+    {reply, Result, State};
 handle_call({read_snapshot, _StoreId, _SourceUuid, StreamUuid, Version}, _From,
             #state{store_id = StoreId} = State) ->
     Result = reckon_db_snapshots:load_at(StoreId, StreamUuid, Version),

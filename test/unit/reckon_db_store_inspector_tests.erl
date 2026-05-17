@@ -171,8 +171,10 @@ subscriptions_with_map() ->
 
 lag_calculation() ->
     Sub = make_sub(<<"prj_test">>),
+    %% find_by_name returns {ok, Key, Sub} per its spec — the
+    %% previous {ok, Sub} mock matched a now-fixed buggy caller.
     meck:expect(reckon_db_subscriptions_store, find_by_name,
-        fun(?STORE, <<"prj_test">>) -> {ok, Sub} end),
+        fun(?STORE, <<"prj_test">>) -> {ok, <<"key-prj_test">>, Sub} end),
     mock_streams([<<"s1">>, <<"s2">>]),
     mock_version(<<"s1">>, 9),
     mock_version(<<"s2">>, 4),
