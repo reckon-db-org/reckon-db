@@ -204,11 +204,25 @@ handle_cluster_nodes(StoreId, [TargetNode | _], _ConnectedNodes) ->
     %% Found existing cluster, join it
     join_existing_cluster(StoreId, TargetNode).
 
-%% @private Handle case when no existing clusters are found
--spec handle_no_existing_clusters(atom(), [node()]) -> coordinator | waiting.
+%% @private Handle case when no existing multi-node cluster is yet
+%% formed (cold-start case).
+%%
+%% Deterministic election: AllNodes are sorted by name, the lowest
+%% becomes the coordinator. The coordinator stays as its own
+%% standalone Khepri cluster (quorum of 1); the others actively join
+%% IT. Once any non-coordinator joins, the coordinator's cluster
+%% has 2 members and subsequent has_active_cluster checks against
+%% the coordinator return true, so retries from any remaining
+%% non-coordinators join cleanly.
+%%
+%% Without this, every node stayed as a standalone cluster
+%% indefinitely — election picked a coordinator but no one ever
+%% acted on the election to actually grow the cluster.
+-spec handle_no_existing_clusters(atom(), [node()]) -> ok | coordinator | waiting | failed.
 handle_no_existing_clusters(StoreId, ConnectedNodes) ->
-    case should_be_coordinator(ConnectedNodes) of
-        true ->
+    AllNodes = lists:sort([node() | ConnectedNodes]),
+    case AllNodes of
+        [Coordinator | _] when Coordinator =:= node() ->
             logger:info("Elected as cluster coordinator (store: ~p)", [StoreId]),
             telemetry:execute(
                 ?CLUSTER_LEADER_ELECTED,
@@ -216,9 +230,11 @@ handle_no_existing_clusters(StoreId, ConnectedNodes) ->
                 #{store_id => StoreId, leader => node(), member_count => 1}
             ),
             coordinator;
-        false ->
-            logger:info("Waiting for cluster coordinator (store: ~p)", [StoreId]),
-            waiting
+        [Coordinator | _] ->
+            logger:info(
+                "Joining cold-start cluster via coordinator ~p (store: ~p)",
+                [Coordinator, StoreId]),
+            join_existing_cluster(StoreId, Coordinator)
     end.
 
 %% @private Join an existing cluster
@@ -336,13 +352,6 @@ has_active_cluster(Node, StoreId) ->
         _ ->
             false
     end.
-
-%% @private Determine if this node should be the coordinator
-%% Uses deterministic election: lowest node name becomes coordinator
--spec should_be_coordinator([node()]) -> boolean().
-should_be_coordinator(ConnectedNodes) ->
-    AllNodes = lists:sort([node() | ConnectedNodes]),
-    node() =:= hd(AllNodes).
 
 %% @private Check if should handle nodeup events
 -spec should_handle_nodeup_internal(atom()) -> boolean().
