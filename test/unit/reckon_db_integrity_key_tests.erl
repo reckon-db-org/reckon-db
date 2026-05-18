@@ -201,6 +201,7 @@ base64_encode(Bin) ->
 
 make_sealed_file(Content) ->
     Path = tmp_path("sealed_key_" ++ random_suffix()),
+    ok = filelib:ensure_dir(Path),
     ok = file:write_file(Path, Content),
     ok = file:change_mode(Path, 8#600),
     Path.

@@ -5,14 +5,14 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.39.1">
-    <meta name="project" content="reckon_db v2.2.0">
+    <meta name="project" content="reckon_db v2.3.6">
 
 
-    <title>reckon_db_filters — reckon_db v2.2.0</title>
+    <title>reckon_db_filters — reckon_db v2.3.6</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
-    <script defer src="dist/sidebar_items-42510483.js"></script>
+    <script defer src="dist/sidebar_items-F4E60452.js"></script>
     <script defer src="docs_config.js"></script>
     <script defer src="dist/html-HBZYRXZS.js"></script>
 
@@ -37,7 +37,7 @@
 reckon_db
         </a>
         <div class="sidebar-projectVersion" translate="no">
-          v2.2.0
+          v2.3.6
         </div>
       </div>
     </div>
@@ -94,7 +94,7 @@ reckon_db
   <div class="heading-with-actions top-heading">
     <h1>
       <span translate="no">reckon_db_filters</span> 
-      <small class="app-vsn" translate="no">(reckon_db v2.2.0)</small>
+      <small class="app-vsn" translate="no">(reckon_db v2.3.6)</small>
 
     </h1>
 
@@ -182,7 +182,7 @@ reckon_db
 
       </div>
 
-        <div class="summary-synopsis"><p>Create a filter for all events in a specific stream</p></div>
+        <div class="summary-synopsis"><p>Build a Khepri tree-event filter for subscriptions of type <code>stream</code> (a.k.a. <code>by_stream</code>).</p></div>
 
     </div>
 
@@ -326,7 +326,7 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> by_event_pattern(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()) -> khepri_evf:tree().</pre>
+          <pre translate="no"><span class="attribute">-spec</span> by_event_pattern(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()) -> <a href="https://hexdocs.pm/khepri/khepri_evf.html#t:tree_event_filter/0">khepri_evf:tree_event_filter</a>().</pre>
 
       </div>
 
@@ -354,7 +354,7 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> by_event_payload(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()) -> khepri_evf:tree().</pre>
+          <pre translate="no"><span class="attribute">-spec</span> by_event_payload(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()) -> <a href="https://hexdocs.pm/khepri/khepri_evf.html#t:tree_event_filter/0">khepri_evf:tree_event_filter</a>().</pre>
 
       </div>
 
@@ -382,7 +382,7 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> by_event_type(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> khepri_evf:tree().</pre>
+          <pre translate="no"><span class="attribute">-spec</span> by_event_type(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://hexdocs.pm/khepri/khepri_evf.html#t:tree_event_filter/0">khepri_evf:tree_event_filter</a>().</pre>
 
       </div>
 
@@ -410,11 +410,11 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> by_stream(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> khepri_evf:tree() | {error, invalid_stream}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> by_stream(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://hexdocs.pm/khepri/khepri_evf.html#t:tree_event_filter/0">khepri_evf:tree_event_filter</a>() | {error, empty_selector}.</pre>
 
       </div>
 
-<p>Create a filter for all events in a specific stream</p><p>Special case: the binary &lt;&lt;&quot;$all&quot;&gt;&gt; matches events in all streams.</p>
+<p>Build a Khepri tree-event filter for subscriptions of type <code>stream</code> (a.k.a. <code>by_stream</code>).</p><h3 id="by_stream/1-selector-grammar" class="section-heading"><a href="#by_stream/1-selector-grammar" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Selector_grammar">Selector grammar</a></span></h3><ul><li><code>&amp;lt;&amp;lt;&quot;$all&quot;&amp;gt;&amp;gt;</code> — the only recognised wildcard sentinel. Matches every event in every stream in the store.</li><li>Any other non-empty binary — a literal stream id; the filter matches events on that exact stream only.</li></ul><h3 id="by_stream/1-stream-id-conventions" class="section-heading"><a href="#by_stream/1-stream-id-conventions" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text"><a name="Stream_id_conventions">Stream id conventions</a></span></h3><p>The filter doesn't enforce stream-id shape (it just treats the selector as a path component), but reckon-db has two formats:</p><ul><li>**User streams** — <code>&amp;lt;prefix&amp;gt;-&amp;lt;hex&amp;gt;</code>, where prefix is <code>[A-Za-z]+</code> and hex is <code>[A-Fa-f0-9]+</code> (typically a UUIDv7 with dashes stripped). Example: <code>account-018f6a7b8c9d4abc8901234567890abc</code>.</li><li>**System streams** — <code>$&amp;lt;namespace&amp;gt;:&amp;lt;name&amp;gt;</code>, where the <code>$</code> prefix marks &quot;reckon-db-managed, not user data&quot; and <code>&amp;lt;name&amp;gt;</code> is intentionally human-readable. Example: <code>$link:high-value-orders</code> from <a href="reckon_db_links.html"><code>reckon_db_links</code></a>. Same role as EventStoreDB's <code>$ce-</code> / <code>$et-</code> / <code>$by_*</code> prefixes.</li></ul><p>Both formats subscribe identically — the filter doesn't care. The <code>$</code> namespace is only special at the sentinel level (<code>$all</code>).</p><p>Returns <code>{error, empty_selector}</code> for an empty binary; every other input builds a filter. Append-time validation of the user-stream-id shape lives in <a href="reckon_db_streams.html"><code>reckon_db_streams</code></a> (and is currently advisory; a strict-rejection mode is a follow-up).</p>
   </section>
 </section>
 <section class="detail" id="by_tags/1">
@@ -438,7 +438,7 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> by_tags([<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()]) -> khepri_evf:tree().</pre>
+          <pre translate="no"><span class="attribute">-spec</span> by_tags([<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()]) -> <a href="https://hexdocs.pm/khepri/khepri_evf.html#t:tree_event_filter/0">khepri_evf:tree_event_filter</a>().</pre>
 
       </div>
 
@@ -481,9 +481,9 @@ reckon_db
       <p>
 
           <span class="line">
-            <a href="https://hex.pm/packages/reckon_db/2.2.0" class="footer-hex-package">Hex Package</a>
+            <a href="https://hex.pm/packages/reckon_db/2.3.6" class="footer-hex-package">Hex Package</a>
 
-            <a href="https://preview.hex.pm/preview/reckon_db/2.2.0">Hex Preview</a>
+            <a href="https://preview.hex.pm/preview/reckon_db/2.3.6">Hex Preview</a>
 
           </span>
 

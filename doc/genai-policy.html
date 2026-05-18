@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="ExDoc v0.39.1">
+    <meta name="project" content="reckon_db v2.3.6">
+
+
+    <title>Generative AI Policy — reckon_db v2.3.6</title>
+
+    <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
+
+    <script defer src="dist/sidebar_items-F4E60452.js"></script>
+    <script defer src="docs_config.js"></script>
+    <script defer src="dist/html-HBZYRXZS.js"></script>
+
+  </head>
+  <body>
+    <script>(()=>{var t="ex_doc:settings",e="dark";var o="dark",s="light";var E="sidebar_state",n="closed";var r="sidebar_width";var a="sidebar-open";var i=new URLSearchParams(window.location.search),S=i.get("theme")||JSON.parse(localStorage.getItem(t)||"{}").theme;(S===o||S!==s&&window.matchMedia("(prefers-color-scheme: dark)").matches)&&document.body.classList.add(e);var d=sessionStorage.getItem(E),A=d!==n&&!window.matchMedia(`screen and (max-width: ${768}px)`).matches;document.body.classList.toggle(a,A);var c=sessionStorage.getItem(r);c&&document.body.style.setProperty("--sidebarWidth",`${c}px`);var p=/(Macintosh|iPhone|iPad|iPod)/.test(window.navigator.userAgent);document.documentElement.classList.toggle("apple-os",p);})();
+</script>
+
+<div class="body-wrapper">
+
+<button id="sidebar-menu" class="sidebar-button sidebar-toggle" aria-label="toggle sidebar" aria-controls="sidebar">
+  <i class="ri-menu-line ri-lg" title="Collapse/expand sidebar"></i>
+</button>
+
+<nav id="sidebar" class="sidebar">
+
+  <div class="sidebar-header">
+    <div class="sidebar-projectInfo">
+
+      <div>
+        <a href="readme.html" class="sidebar-projectName" translate="no">
+reckon_db
+        </a>
+        <div class="sidebar-projectVersion" translate="no">
+          v2.3.6
+        </div>
+      </div>
+    </div>
+    <ul id="sidebar-list-nav" class="sidebar-list-nav" role="tablist" data-extras=""></ul>
+  </div>
+</nav>
+
+<output role="status" id="toast"></output>
+
+<main class="content page-extra" id="main" data-type="extras">
+  <div id="content" class="content-inner">
+    <div class="top-search">
+      <div class="search-settings">
+        <form class="search-bar" action="search.html">
+          <label class="search-label">
+            <span class="sr-only">Search documentation of reckon_db</span>
+            <div class="search-input-wrapper">
+              <input name="q" type="text" class="search-input" placeholder="Press / to search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <button type="button" tabindex="-1" class="search-close-button" aria-hidden="true">
+                <i class="ri-close-line ri-lg" title="Cancel search"></i>
+              </button>
+            </div>
+          </label>
+        </form>
+        <div class="autocomplete">
+        </div>
+        <div class="engine-selector" data-multiple="false">
+          <button type="button" class="engine-button" aria-label="Select search engine" aria-haspopup="true" aria-expanded="false">
+            <i class="ri-search-2-line" aria-hidden="true"></i>
+            <span class="engine-name">Default</span>
+            <i class="ri-arrow-down-s-line" aria-hidden="true"></i>
+          </button>
+          <div class="engine-dropdown" hidden role="menu">
+
+              <button type="button"
+                      class="engine-option"
+                      data-engine-url="search.html?q="
+                      role="menuitemradio"
+                      aria-checked="true">
+                <span class="name">Default</span>
+                <span class="help">In-browser search</span>
+              </button>
+
+          </div>
+        </div>
+        <button class="icon-settings display-settings">
+          <i class="ri-settings-3-line"></i>
+          <span class="sr-only">Settings</span>
+        </button>
+      </div>
+    </div>
+
+<div id="top-content">
+  <div class="heading-with-actions top-heading">
+    <h1>Generative AI use policy</h1>
+
+
+      <a href="https://codeberg.org/reckon-db-org/reckon-db" title="View Source" class="icon-action" rel="help">
+        <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        <span class="sr-only">View Source</span>
+      </a>
+
+  </div>
+
+
+<p><em>ReckonDB project policy for contributors. Author: Raf Lefever, BEAM Campus / Macula. Belgium.</em></p><h2 id="scope-and-purpose" class="section-heading"><a href="#scope-and-purpose" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Scope and purpose</span></h2><p>This policy governs the use of generative AI (GenAI) tools by contributors to the ReckonDB project, including the project maintainer, paid contractors funded under any grant, and external contributors submitting pull requests. It complies with NLnet's Policy on the use of Generative Artificial Intelligence for NLnet-funded projects (nlnet.nl/foundation/policies/generativeAI) and is the public artefact that NLnet's policy recommends each project publish.</p><p>The policy applies to all work delivered into the ReckonDB repository: source code, tests, documentation, design specifications, research notes, blog posts, conference materials, and proposals submitted on behalf of the project.</p><h2 id="permitted-uses-of-genai-assistance" class="section-heading"><a href="#permitted-uses-of-genai-assistance" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Permitted uses of GenAI assistance</span></h2><p>GenAI tools may be used for the following categories of work, with provenance disclosed when substantive (see &quot;Disclosure&quot; below):</p><ul><li><strong>Documentation drafting and editing.</strong> README, API reference, migration guides, tutorial content, blog posts, and other prose documentation may be drafted with AI assistance, then reviewed and edited by a human contributor before merge.</li><li><strong>Code review prompts and exploratory programming.</strong> Asking an AI for review feedback on a draft pull request, or for an exploratory implementation sketch that the contributor then rewrites by hand, is permitted.</li><li><strong>Mechanical assistance.</strong> Character counting, file rendering (e.g. PDF generation), formatting, syntax-checking, and similar non-substantive transforms.</li><li><strong>Test scaffolding and boilerplate.</strong> AI-generated test scaffolding may be used as a starting point, provided the contributor verifies that each test exercises the behaviour it claims to exercise.</li><li><strong>Comparison and prior-art surveys.</strong> Drafting comparisons against external systems, with citations verified by a human contributor before publication.</li></ul><h2 id="categories-explicitly-excluded-from-genai-assistance" class="section-heading"><a href="#categories-explicitly-excluded-from-genai-assistance" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Categories explicitly excluded from GenAI assistance</span></h2><p>The following categories of work are <strong>not</strong> to be produced by GenAI tools, regardless of subsequent human editing:</p><ul><li><strong>Cryptographic primitives.</strong> Implementations of encryption, key derivation, signing, and key-wrap primitives are written by hand against published specifications (RFCs, peer-reviewed papers). AI may not propose or transcribe primitive implementations.</li><li><strong>Threat-model design.</strong> The threat model in the protocol specification, the trust-base scoping, and the formal characterisation of guaranteed-versus-not-guaranteed properties are produced by a human contributor with cryptographic-engineering competence.</li><li><strong>Security-critical code paths.</strong> Capability validation, epoch-rotation logic, key-destruction logic, and consensus-bound operations in the data layer are written by hand and reviewed by a human contributor before merge.</li><li><strong>External-review preparation packets.</strong> The packet submitted to external cryptographic reviewers is composed by the contributor, not by an AI assistant, so that the reviewer's questions reach the human author directly.</li><li><strong>Formal protocol specifications under review.</strong> Protocol-specification text submitted to standards bodies or to external review is authored by a human contributor.</li></ul><h2 id="disclosure" class="section-heading"><a href="#disclosure" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Disclosure</span></h2><p>For substantive GenAI assistance, contributors record provenance in the form NLnet's policy specifies: model used, dates and times of prompts, the prompts themselves, and the unedited model output. The provenance log is preserved by the contributor and is available to the project maintainer and to NLnet on request.</p><p>For mechanical or trivial AI use (formatting, syntax checks, boilerplate transforms), provenance logging is not required. Contributors use judgement; when in doubt, log.</p><p>Pull requests with substantive AI-assisted content state this in the pull-request description. Commit messages do not require AI-disclosure footers; the pull-request description is the canonical record.</p><h2 id="review-and-update" class="section-heading"><a href="#review-and-update" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Review and update</span></h2><p>This policy is reviewed annually, at the close of each NLnet milestone, and whenever NLnet's Generative AI policy is updated. The policy is versioned in the repository alongside the source code; substantive changes are announced in the project changelog.</p><h2 id="contact" class="section-heading"><a href="#contact" class="hover-link"><i class="ri-link-m" aria-hidden="true"></i></a><span class="text">Contact</span></h2><p>Questions about this policy may be directed to the project maintainer via the ReckonDB repository issue tracker, or by email at the address listed in the project README.</p>
+
+</div>
+
+<div class="bottom-actions" id="bottom-actions">
+  <div class="bottom-actions-item">
+
+      <a href="store_inspector.html" class="bottom-actions-button" rel="prev">
+        <span class="subheader">
+          ← Previous Page
+        </span>
+        <span class="title">
+Store Inspector
+        </span>
+      </a>
+
+  </div>
+  <div class="bottom-actions-item">
+
+  </div>
+</div>
+    <footer class="footer">
+      <p>
+
+          <span class="line">
+            <a href="https://hex.pm/packages/reckon_db/2.3.6" class="footer-hex-package">Hex Package</a>
+
+            <a href="https://preview.hex.pm/preview/reckon_db/2.3.6">Hex Preview</a>
+
+              (<a href="https://preview.hex.pm/preview/reckon_db/2.3.6/show/docs/genai-policy.md">current file</a>)
+
+          </span>
+
+        <span class="line">
+          <button class="a-main footer-button display-quick-switch" title="Search HexDocs packages">
+            Search HexDocs
+          </button>
+
+            <a href="reckon_db.epub" title="ePub version">
+              Download ePub version
+            </a>
+
+        </span>
+      </p>
+
+      <p class="built-using">
+        Built using
+        <a href="https://github.com/elixir-lang/ex_doc" title="ExDoc" target="_blank" rel="help noopener" translate="no">ExDoc</a> (v0.39.1) for the
+
+          <a href="https://erlang.org" title="Erlang" target="_blank" translate="no">Erlang programming language</a>
+
+      </p>
+
+    </footer>
+  </div>
+</main>
+</div>
+
+  </body>
+</html>

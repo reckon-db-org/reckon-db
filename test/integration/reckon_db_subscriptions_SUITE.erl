@@ -242,32 +242,38 @@ subscribe_with_pool_size(Config) ->
     ok = reckon_db_subscriptions:unsubscribe(StoreId, Key),
     ok.
 
-%% @doc Test that duplicate subscriptions fail
+%% @doc Test that re-subscribing with the same name is idempotent
+%%
+%% Returns the same key both times. This is the documented "reconnect"
+%% path — a client re-subscribing after a disconnect must see its
+%% subscription resumed, not duplicated. reregister_subscriber/4
+%% re-binds the subscriber pid and refreshes the Khepri trigger.
 subscribe_duplicate_fails(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     StreamId = <<"testdupstream-001">>,
     SubName = <<"duplicate_test">>,
 
-    %% First subscription should succeed
-    {ok, Key} = reckon_db_subscriptions:subscribe(
+    %% First subscription creates the record
+    {ok, Key1} = reckon_db_subscriptions:subscribe(
         StoreId,
         stream,
         StreamId,
         SubName
     ),
 
-    %% Second subscription with same name should fail
-    Result = reckon_db_subscriptions:subscribe(
+    %% Second subscription with the same name re-registers and returns
+    %% the same key (idempotent reconnect path)
+    {ok, Key2} = reckon_db_subscriptions:subscribe(
         StoreId,
         stream,
         StreamId,
         SubName
     ),
 
-    ?assertMatch({error, {already_exists, SubName}}, Result),
+    ?assertEqual(Key1, Key2),
 
     %% Cleanup
-    ok = reckon_db_subscriptions:unsubscribe(StoreId, Key),
+    ok = reckon_db_subscriptions:unsubscribe(StoreId, Key1),
     ok.
 
 %% @doc Test unsubscribing by key

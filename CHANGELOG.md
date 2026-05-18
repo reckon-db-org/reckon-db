@@ -5,6 +5,40 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.6] - 2026-05-18
+
+### Changed — gateway worker handles `remove_subscription` + `ack_event` as calls
+
+Mirror of the 2.3.5 `save_subscription` conversion. Both used to be
+fire-and-forget casts that returned no signal to the gateway; now
+`handle_call` returns the underlying store result.
+
+- `remove_subscription` returns `ok` for both genuine removal and the
+  idempotent "not_found" case (removal is the desired terminal state).
+- `ack_event` returns the underlying `reckon_db_subscriptions:ack/4`
+  result; `{error, {subscription_not_found, _}}` surfaces when acking
+  against a removed subscription.
+
+Pairs with reckon-gater 2.1.3, where both gater APIs are now
+`route_call` and the new error tag is whitelisted as non-retriable.
+
+### Fixed — `subscribe_duplicate_fails` test matches actual contract
+
+The test asserted `{error, {already_exists, _}}` from a duplicate
+`subscribe/5`, but the implementation has been idempotent (returns
+`{ok, Key}` via `reregister_subscriber/4`) since the reconnect-path
+work. Test updated to assert idempotency — same key on both calls.
+
+### Fixed — `reckon_db_integrity_key_tests` create their tmp dir
+
+Tests relied on `/tmp/reckon_db_integrity_key_tests/` existing.
+`make_sealed_file/1` now calls `filelib:ensure_dir/1` before writing.
+
+### Changed — `reckon_gater` dep bumped to `~> 2.1.3`
+
+Picks up the new `remove_subscription` / `ack_event` sync contract +
+`{subscription_not_found, _}` retry whitelist.
+
 ## [2.3.5] - 2026-05-18
 
 ### Changed — gateway worker handles `save_subscription` as a call

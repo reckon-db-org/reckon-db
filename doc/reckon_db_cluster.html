@@ -8,7 +8,7 @@
     <meta name="project" content="reckon_db v2.3.6">
 
 
-    <title>reckon_db_streams_writer — reckon_db v2.3.6</title>
+    <title>reckon_db_cluster — reckon_db v2.3.6</title>
 
     <link rel="stylesheet" href="dist/html-erlang-7YNYEB7F.css" />
 
@@ -93,7 +93,7 @@ reckon_db
 <div id="top-content">
   <div class="heading-with-actions top-heading">
     <h1>
-      <span translate="no">reckon_db_streams_writer</span> 
+      <span translate="no">reckon_db_cluster</span> 
       <small class="app-vsn" translate="no">(reckon_db v2.3.6)</small>
 
     </h1>
@@ -107,7 +107,7 @@ reckon_db
 
 
     <section id="moduledoc">
-<p>Streams writer worker for reckon-db</p><p>A gen_server that handles write operations for streams. Writers are temporary processes that terminate after a period of inactivity.</p><p>Features: - Partitioned by stream_id for concurrent writes to different streams - Idle timeout to free up resources - Swarm-like registration via pg groups</p>
+<p>Cluster-level health and consistency facade.</p><p>Stable surface for cluster-wide checks that <code>reckon_db_gateway_worker</code> (and therefore the gateway's <code>HealthService</code> RPCs) consumes. Delegates to the underlying primitives in [[reckon_db_consistency_checker]] and ra/khepri.</p><p>This module deliberately does NOT depend on the <code>reckon_db_consistency_checker</code> gen_server being supervised — the per-call entry points (<code>verify_membership_consensus/1</code>, etc.) are pure functions that gather state from ra/khepri on demand. That makes the facade safe to call in both <code>single</code> and <code>cluster</code> modes, and avoids a dependency on the periodic-checker actually running.</p><p>Historical note: prior to reckon_db 2.2.1, <code>reckon_db_gateway_worker</code> referenced this module's four functions, but the module itself was never extracted from the legacy <code>esdb_cluster</code> rename in 2.0.0. The dangling references caused <code>HealthService.Check</code> and the three <code>VerifyXxx</code> RPCs to hang in the retry loop until the gRPC client timed out. 2.2.1 ships this facade and gets those handlers working.</p>
     </section>
 
 </div>
@@ -126,31 +126,41 @@ reckon_db
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#append/4" data-no-tooltip="" translate="no">append(StoreId, StreamId, ExpectedVersion, Events)</a>
+        <a href="#check_log_consistency/1" data-no-tooltip="" translate="no">check_log_consistency(StoreId)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Append events to a stream via a writer worker</p></div>
+        <div class="summary-synopsis"><p>Verify Raft log consistency across followers.</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#get_writer/2" data-no-tooltip="" translate="no">get_writer(StoreId, StreamId)</a>
+        <a href="#health_check/1" data-no-tooltip="" translate="no">health_check(StoreId)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Get or create a writer for a stream</p></div>
+        <div class="summary-synopsis"><p>Quick health check — does the store have quorum and a leader?</p></div>
 
     </div>
 
     <div class="summary-row">
       <div class="summary-signature">
-        <a href="#start_link/1" data-no-tooltip="" translate="no">start_link(_)</a>
+        <a href="#verify_consistency/1" data-no-tooltip="" translate="no">verify_consistency(StoreId)</a>
 
       </div>
 
-        <div class="summary-synopsis"><p>Start a writer worker</p></div>
+        <div class="summary-synopsis"><p>Full cluster consistency check.</p></div>
+
+    </div>
+
+    <div class="summary-row">
+      <div class="summary-signature">
+        <a href="#verify_membership/1" data-no-tooltip="" translate="no">verify_membership(StoreId)</a>
+
+      </div>
+
+        <div class="summary-synopsis"><p>Verify membership consensus.</p></div>
 
     </div>
 
@@ -168,14 +178,14 @@ reckon_db
     </h1>
 
     <div class="functions-list">
-<section class="detail" id="append/4">
+<section class="detail" id="check_log_consistency/1">
 
   <div class="detail-header">
-    <a href="#append/4" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#check_log_consistency/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">append(StoreId, StreamId, ExpectedVersion, Events)</h1>
+      <h1 class="signature" translate="no">check_log_consistency(StoreId)</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -189,21 +199,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> append(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:integer/0">integer</a>(), [<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()]) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> check_log_consistency(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Append events to a stream via a writer worker</p>
+<p>Verify Raft log consistency across followers.</p><p>Collects per-follower term/index stats and checks for replication divergence. Used by the gateway's <code>HealthService.CheckRaftLogConsistency</code> RPC.</p>
   </section>
 </section>
-<section class="detail" id="get_writer/2">
+<section class="detail" id="health_check/1">
 
   <div class="detail-header">
-    <a href="#get_writer/2" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#health_check/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">get_writer(StoreId, StreamId)</h1>
+      <h1 class="signature" translate="no">health_check(StoreId)</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -217,21 +227,21 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> get_writer(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>()) -> <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>().</pre>
+          <pre translate="no"><span class="attribute">-spec</span> health_check(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Get or create a writer for a stream</p>
+<p>Quick health check — does the store have quorum and a leader?</p><p>Cheap. No RPCs to other nodes. Suitable for liveness probes and the gateway's <code>HealthService.Check</code> RPC.</p><p>Returns <code>{ok, #{status =&gt; healthy | degraded | no_quorum, ...}}</code> on success, <code>{error, Reason}</code> when the store isn't reachable at all (e.g. coordinator not started, store not known to ra).</p>
   </section>
 </section>
-<section class="detail" id="start_link/1">
+<section class="detail" id="verify_consistency/1">
 
   <div class="detail-header">
-    <a href="#start_link/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+    <a href="#verify_consistency/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
       <i class="ri-link-m" aria-hidden="true"></i>
     </a>
     <div class="heading-with-actions">
-      <h1 class="signature" translate="no">start_link(_)</h1>
+      <h1 class="signature" translate="no">verify_consistency(StoreId)</h1>
 
 
         <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
@@ -245,11 +255,39 @@ reckon_db
 
       <div class="specs">
 
-          <pre translate="no"><span class="attribute">-spec</span> start_link({<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:binary/0">binary</a>(), <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:non_neg_integer/0">non_neg_integer</a>()}) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:pid/0">pid</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+          <pre translate="no"><span class="attribute">-spec</span> verify_consistency(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
 
       </div>
 
-<p>Start a writer worker</p>
+<p>Full cluster consistency check.</p><p>Combines membership consensus + leader consensus into a single verdict. Quorum is checked first as a cheap precondition. Used by the gateway's <code>HealthService.VerifyClusterConsistency</code> RPC.</p><p>Returns <code>{ok, #{status =&gt; healthy | degraded | split_brain | no_quorum, membership =&gt; ..., leader =&gt; ...}}</code> or <code>{error, Reason}</code>.</p>
+  </section>
+</section>
+<section class="detail" id="verify_membership/1">
+
+  <div class="detail-header">
+    <a href="#verify_membership/1" class="detail-link" data-no-tooltip="" aria-label="Link to this function">
+      <i class="ri-link-m" aria-hidden="true"></i>
+    </a>
+    <div class="heading-with-actions">
+      <h1 class="signature" translate="no">verify_membership(StoreId)</h1>
+
+
+        <a href="https://codeberg.org/reckon-db-org/reckon-db" class="icon-action" rel="help" aria-label="View Source">
+          <i class="ri-code-s-slash-line" aria-hidden="true"></i>
+        </a>
+
+    </div>
+  </div>
+
+  <section class="docstring">
+
+      <div class="specs">
+
+          <pre translate="no"><span class="attribute">-spec</span> verify_membership(<a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:atom/0">atom</a>()) -> {ok, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:map/0">map</a>()} | {error, <a href="https://www.erlang.org/doc/apps/erts/erlang.html#t:term/0">term</a>()}.</pre>
+
+      </div>
+
+<p>Verify membership consensus.</p><p>Collects each node's view of cluster membership via RPC and confirms they agree. Used by the gateway's <code>HealthService.VerifyMembershipConsensus</code> RPC.</p>
   </section>
 </section>
 

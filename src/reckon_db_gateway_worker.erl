@@ -424,29 +424,34 @@ handle_call({save_subscription, _StoreId, Type, Selector, SubscriptionName, Star
     end,
     {reply, Result, State};
 
+%% Remove subscription. Synchronous as of reckon-db 2.3.6 / reckon-gater
+%% 2.1.3. Idempotent: a not_found result is treated as ok because
+%% removal is the desired terminal state regardless of starting state.
+%% Other store-layer errors (e.g. khepri write failure) propagate.
+handle_call({remove_subscription, _StoreId, Type, _Selector, SubscriptionName}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = case reckon_db_subscriptions:unsubscribe(StoreId, Type, SubscriptionName) of
+        ok -> ok;
+        {error, not_found} -> ok;
+        {error, _} = Err -> Err
+    end,
+    {reply, Result, State};
+
+%% Ack event. Synchronous as of reckon-db 2.3.6 / reckon-gater 2.1.3.
+%% {error, {subscription_not_found, _}} from the store surfaces to the
+%% gRPC client as InvalidArgument (whitelisted in reckon_gater_retry).
+handle_call({ack_event, _StoreId, SubscriptionName, _SubscriberPid, Event}, _From,
+            #state{store_id = StoreId} = State) ->
+    StreamId = maps:get(event_stream_id, Event,
+                        maps:get(stream_id, Event, undefined)),
+    EventNumber = maps:get(event_number, Event,
+                           maps:get(version, Event, 0)),
+    Result = reckon_db_subscriptions:ack(StoreId, SubscriptionName, StreamId, EventNumber),
+    {reply, Result, State};
+
 %% Unknown request
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
-
-%%====================================================================
-%% Subscription Operations (handle_cast)
-%%====================================================================
-
-%% Remove subscription
-%% Note: unsubscribe uses (StoreId, Type, SubscriptionName), Selector is not needed
-handle_cast({remove_subscription, _StoreId, Type, _Selector, SubscriptionName}, State) ->
-    #state{store_id = StoreId} = State,
-    reckon_db_subscriptions:unsubscribe(StoreId, Type, SubscriptionName),
-    {noreply, State};
-
-%% Ack event
-handle_cast({ack_event, _StoreId, SubscriptionName, _SubscriberPid, Event}, State) ->
-    #state{store_id = StoreId} = State,
-    %% Update subscription position
-    StreamId = maps:get(event_stream_id, Event, maps:get(stream_id, Event, undefined)),
-    EventNumber = maps:get(event_number, Event, maps:get(version, Event, 0)),
-    reckon_db_subscriptions:ack(StoreId, SubscriptionName, StreamId, EventNumber),
-    {noreply, State};
 
 %%====================================================================
 %% Snapshot Operations (handle_cast)
