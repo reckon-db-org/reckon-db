@@ -34,7 +34,7 @@
     subscribe_to_event_type/1,
     subscribe_to_event_pattern/1,
     subscribe_with_pool_size/1,
-    subscribe_duplicate_fails/1,
+    subscribe_duplicate_is_idempotent/1,
     unsubscribe_by_key/1,
     unsubscribe_nonexistent/1,
 
@@ -70,7 +70,7 @@ groups() ->
             subscribe_to_event_type,
             subscribe_to_event_pattern,
             subscribe_with_pool_size,
-            subscribe_duplicate_fails,
+            subscribe_duplicate_is_idempotent,
             unsubscribe_by_key,
             unsubscribe_nonexistent
         ]},
@@ -248,7 +248,7 @@ subscribe_with_pool_size(Config) ->
 %% path — a client re-subscribing after a disconnect must see its
 %% subscription resumed, not duplicated. reregister_subscriber/4
 %% re-binds the subscriber pid and refreshes the Khepri trigger.
-subscribe_duplicate_fails(Config) ->
+subscribe_duplicate_is_idempotent(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     StreamId = <<"testdupstream-001">>,
     SubName = <<"duplicate_test">>,

@@ -5,6 +5,23 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.7] - 2026-05-18
+
+### Renamed — `subscribe_duplicate_fails` → `subscribe_duplicate_is_idempotent`
+
+The test name dated from when `subscribe/5` rejected duplicates. The
+implementation has been idempotent since the reconnect-path work
+(returns `{ok, Key}` on a second subscribe with the same name).
+2.3.6 already updated the test body to assert idempotency; this
+release brings the name in line.
+
+### Changed — deps bumped
+
+- `reckon_gater` `~> 2.1.4` — picks up the `no_snapshot` retry
+  whitelist so `ScavengeDryRun` on a stream without a snapshot
+  surfaces `InvalidArgument` instead of timing out the gRPC
+  deadline.
+
 ## [2.3.6] - 2026-05-18
 
 ### Changed — gateway worker handles `remove_subscription` + `ack_event` as calls
