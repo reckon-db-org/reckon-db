@@ -5,6 +5,31 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.5] - 2026-05-18
+
+### Changed — gateway worker handles `save_subscription` as a call
+
+`reckon_db_gateway_worker` used to receive `save_subscription` as
+a fire-and-forget `handle_cast`. If the underlying
+`reckon_db_subscriptions:subscribe/5` returned `{error, _}` (most
+notably `{invalid_filter, _}` from a malformed selector), the
+worker logged a warning and the gRPC client never knew — Subscribe
+"succeeded" while no events ever flowed.
+
+Now `handle_call`, returning the real result. The matching call
+in reckon-gater 2.1.2 propagates the `{ok, Key} | {error, _}` to
+the gateway, which translates the error to gRPC `InvalidArgument`
+(reckon-gateway 0.4.10).
+
+`{already_exists, Key}` from the store layer is mapped to
+`{ok, Key}` — re-registering with the same name is idempotent
+(`reregister_subscriber/4` re-binds the pid and re-arms the
+trigger), so consumers don't see a misleading error for that
+expected reconnect path.
+
+Pin tightened: `reckon_gater ~> 2.1.2` (was `~> 2.1.1`).
+618/618 eunit pass.
+
 ## [2.3.4] - 2026-05-18
 
 ### Fixed — Validator errors no longer time out gRPC clients

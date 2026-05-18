@@ -398,6 +398,32 @@ handle_call({stream_info, _StoreId, StreamId}, _From,
     Result = reckon_db_store_inspector:stream_info(StoreId, StreamId),
     {reply, Result, State};
 
+%% Save subscription. Synchronous as of reckon-db 2.3.5 / reckon-gater
+%% 2.1.2 — used to be a fire-and-forget handle_cast that swallowed
+%% {invalid_filter, _} into a logger warning, leaving gRPC clients
+%% with a phantom success. Now the worker returns the real result
+%% of reckon_db_subscriptions:subscribe/5; the gateway translates
+%% to gRPC InvalidArgument when needed.
+%%
+%% {already_exists, _} from the store layer is still mapped to
+%% {ok, Key} — re-registering with the same name is idempotent
+%% (the subscribe path re-binds the pid and re-arms the trigger;
+%% see reckon_db_subscriptions:reregister_subscriber/4).
+handle_call({save_subscription, _StoreId, Type, Selector, SubscriptionName, StartFrom, Subscriber}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = case reckon_db_subscriptions:subscribe(StoreId, Type, Selector, SubscriptionName, #{
+                start_from => StartFrom,
+                subscriber => Subscriber
+            }) of
+        {ok, _Key} = Ok -> Ok;
+        {error, {already_exists, Key}} -> {ok, Key};
+        {error, Reason} = Err ->
+            logger:warning("[gateway_worker] subscription ~s failed: ~p",
+                           [SubscriptionName, Reason]),
+            Err
+    end,
+    {reply, Result, State};
+
 %% Unknown request
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
@@ -411,20 +437,6 @@ handle_call(_Request, _From, State) ->
 handle_cast({remove_subscription, _StoreId, Type, _Selector, SubscriptionName}, State) ->
     #state{store_id = StoreId} = State,
     reckon_db_subscriptions:unsubscribe(StoreId, Type, SubscriptionName),
-    {noreply, State};
-
-%% Save subscription
-handle_cast({save_subscription, _StoreId, Type, Selector, SubscriptionName, StartFrom, Subscriber}, State) ->
-    #state{store_id = StoreId} = State,
-    case reckon_db_subscriptions:subscribe(StoreId, Type, Selector, SubscriptionName, #{
-        start_from => StartFrom,
-        subscriber => Subscriber
-    }) of
-        {ok, _Key} -> ok;
-        {error, {already_exists, _}} -> ok;
-        {error, Reason} ->
-            logger:warning("[gateway_worker] subscription ~s failed: ~p", [SubscriptionName, Reason])
-    end,
     {noreply, State};
 
 %% Ack event
