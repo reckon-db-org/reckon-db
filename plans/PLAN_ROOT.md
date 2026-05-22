@@ -15,6 +15,14 @@ This directory tracks design plans, research, and roadmap documents for `reckon-
 |----------|--------|-------------|
 | [PLAN_FUTURE_RESEARCH.md](PLAN_FUTURE_RESEARCH.md) | Active research log | Dynamic Consistency Boundaries, event-sourcing paradigm explorations, and other forward-looking research topics. |
 
+## Ecosystem applications
+
+Plans owned by other repos in the ReckonDB ecosystem, referenced here for visibility.
+
+| Document | Repo | Status | Description |
+|----------|------|--------|-------------|
+| [PLAN_STRIP_TO_PRODUCT_SITE.md](https://codeberg.org/reckon-internal/reckon-portal/src/branch/main/plans/PLAN_STRIP_TO_PRODUCT_SITE.md) | `reckon-internal/reckon-portal` | ✅ Shipped (2026-05-22, PRs #4–#7) | Strip reckon-portal to a product-only site: remove auth/membership/dashboard/admin/payments/sponsorship and **drop Postgres entirely**. Now marketing + public docs + the event-sourced blog (ReckonDB only); boots with no DB. Authenticated console belongs in macula-realm. Includes daisyUI token migration and a Support/Sponsor/Enterprise pricing reframe. |
+
 ## Conventions
 
 - Filename pattern: `PLAN_{DESCRIPTIVE_NAME}.md`
