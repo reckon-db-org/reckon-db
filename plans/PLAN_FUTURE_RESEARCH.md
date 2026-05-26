@@ -2,7 +2,7 @@
 
 **Status:** Research
 **Created:** 2026-01-19
-**Last Updated:** 2026-05-26 — DCB Phase 1 + 2 shipped; Phase 3 deferral re-affirmed with explicit revisit criteria; coexistence sketch added.
+**Last Updated:** 2026-05-26 — DCB Phase 1 + 2 shipped; Phase 3 ACTIVATED (proactive capability build). Implementation moves to [PLAN_DCB_IMPLEMENTATION.md](PLAN_DCB_IMPLEMENTATION.md). The deferral-criteria framing below is preserved for historical context.
 
 ## Overview
 
@@ -27,8 +27,8 @@ This document tracks research topics and novel concepts that may be relevant for
 |-------|--------|-----------------|
 | Phase 1: Tagged events + tag indexing + `read_by_tags` | ✅ Shipped | `src/reckon_db_log_backend.erl:96` (`tags :: [binary()]` on `new_event/0`); `src/reckon_db_streams.erl:333` (`read_by_tags/4`); `test/unit/reckon_db_tags_tests.erl` |
 | Phase 2: Tag-aware subscriptions | ✅ Shipped | `src/reckon_db_subscriptions.erl:370` (`create_filter(by_tags, Tags)`); `src/reckon_db_gateway_worker.erl:110` (`read_by_tags` over the wire) |
-| Phase 3: Query-based concurrency | 🛑 Deferred (not rejected) | (none — primitive does not exist) |
-| Phase 4: Decision model helpers | ⏸ Optional, blocked on Phase 3 | (none) |
+| Phase 3: Query-based concurrency | 🚧 Active (2026-05-26) | See [PLAN_DCB_IMPLEMENTATION.md](PLAN_DCB_IMPLEMENTATION.md) |
+| Phase 4: Decision model helpers | ⏸ Folded into Phase 3 | See PLAN_DCB_IMPLEMENTATION.md § P3.6 (`evoq_decision` behaviour) |
 
 **Net effect on ReckonDB capability:** Read-side DCB is fully usable today. Projections, subscriptions, and ad-hoc analytics can slice across streams by tag without scaffolding. The write side remains stream-version optimistic concurrency.
 
@@ -405,7 +405,7 @@ Event = #{
 - [x] Filter dispatch: `matches(by_tags, RequestedTags, #event{tags = EventTags})` (`reckon_db_filters.erl:189`)
 - [x] Gateway exposure: `{read_by_tags, StoreId, Tags, Match, BatchSize}` (`reckon_db_gateway_worker.erl:110`)
 
-**Phase 3: Query-Based Concurrency (DEFERRED, not rejected)**
+**Phase 3: Query-Based Concurrency (ACTIVE — see [PLAN_DCB_IMPLEMENTATION.md](PLAN_DCB_IMPLEMENTATION.md))**
 - [ ] New append callback: `append_if_no_tag_matches/4` (see Coexistence Sketch above)
 - [ ] Khepri custom command: atomic scan-tagged-events-since-cutoff + append-if-empty
 - [ ] Gateway verb in `reckon_gater`

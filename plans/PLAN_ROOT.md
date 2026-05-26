@@ -8,6 +8,7 @@ This directory tracks design plans, research, and roadmap documents for `reckon-
 |----------|--------|--------|-------------|
 | [PLAN_TAMPER_RESISTANCE.md](PLAN_TAMPER_RESISTANCE.md) | Design / Not Started | `reckon-db` 2.1.0 | Add HMAC + hash-chain integrity to events and snapshots; verify on read; new `integrity_violation` error class; migration via `chain_start_version` watermark. Spans `reckon-gater`, `reckon-db`, `evoq`, `reckon-gateway`. |
 | [PLAN_PLUGGABLE_BACKENDS.md](PLAN_PLUGGABLE_BACKENDS.md) | See document | TBD | Alternative storage backends behind the `reckon_store` behaviour. |
+| [PLAN_DCB_IMPLEMENTATION.md](PLAN_DCB_IMPLEMENTATION.md) | Design / Not Started | `reckon-db` 2.4.0, `reckon-gater` 2.3.0, `reckon-evoq` 2.3.0, `evoq` 1.18.0 | Query-based concurrency (DCB) — full stack: storage primitive `append_if_no_tag_matches`, wire verb, adapter passthrough, `evoq_decision` behaviour, reference example. Supersedes PLAN_FUTURE_RESEARCH § DCB Phase 3. |
 
 ## Research
 
