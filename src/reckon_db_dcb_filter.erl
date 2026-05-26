@@ -29,31 +29,20 @@
     seqs_for_tag/1
 ]).
 
--export_type([tag_filter/0, seqs_provider/0, match_result/0]).
+-export_type([seqs_provider/0, match_result/0]).
 
 %%====================================================================
 %% Types
 %%====================================================================
 
--type tag() :: binary().
-
--type tag_filter() ::
-      {any_of, [tag()]}            %% event has ANY of these tags
-    | {all_of, [tag()]}            %% event has ALL of these tags
-    | {and_, [tag_filter()]}       %% logical AND of sub-filters (per-event)
-    | {or_,  [tag_filter()]}.      %% logical OR of sub-filters (per-event)
+%% `tag_filter()` and `seq_cutoff()` are CANONICAL in reckon_gater_types.hrl
+%% (reckon-gater 2.3.0+). Use them via the include; do NOT redefine here.
 
 %% Fetches the seqs indexed under one tag. In production this hits
 %% Khepri via khepri_tx:get_many/1. In tests, supply a mock.
--type seqs_provider() :: fun((tag()) -> [non_neg_integer()]).
+-type seqs_provider() :: fun((binary()) -> [non_neg_integer()]).
 
 -type match_result() :: false | {true, MaxSeq :: non_neg_integer()}.
-
-%% Cutoff is "the highest seq the caller saw". Semantics:
-%%   Cutoff = -1 means "I saw nothing"; any matching event is a conflict.
-%%   Cutoff = N (>= 0) means "I saw events up through seq N"; only seqs > N
-%%     constitute new (conflicting) writes.
--type seq_cutoff() :: integer().
 
 %%====================================================================
 %% Public API
@@ -68,7 +57,8 @@
 %%   and_(Filters)   = intersection(match_seqs(F) | F in Filters)
 %%
 %% Empty tag/filter lists yield the empty set (no event matches "nothing").
--spec match_seqs(tag_filter(), seqs_provider()) -> sets:set(non_neg_integer()).
+-spec match_seqs(reckon_gater_types:tag_filter(), seqs_provider()) ->
+    sets:set(non_neg_integer()).
 match_seqs({any_of, []}, _Provider) ->
     sets:new();
 match_seqs({any_of, Tags}, Provider) when is_list(Tags) ->
@@ -110,13 +100,15 @@ match_seqs({and_, [First | Rest]}, Provider) ->
 %% Cutoff = -1 means "I saw nothing yet" — ANY matching event triggers a
 %% conflict. Cutoff = N (>= 0) means "I saw events through seq N" —
 %% only seqs > N trigger a conflict.
--spec match_any_above_cutoff(tag_filter(), seq_cutoff()) -> match_result().
+-spec match_any_above_cutoff(reckon_gater_types:tag_filter(),
+                             reckon_gater_types:seq_cutoff()) ->
+    match_result().
 match_any_above_cutoff(Filter, Cutoff) ->
     match_any_above_cutoff(Filter, Cutoff, fun seqs_for_tag/1).
 
 %% @doc Pure-testable variant: the caller supplies the seqs provider.
--spec match_any_above_cutoff(tag_filter(),
-                             seq_cutoff(),
+-spec match_any_above_cutoff(reckon_gater_types:tag_filter(),
+                             reckon_gater_types:seq_cutoff(),
                              seqs_provider()) -> match_result().
 match_any_above_cutoff(Filter, Cutoff, Provider)
   when is_integer(Cutoff) ->
@@ -132,7 +124,7 @@ match_any_above_cutoff(Filter, Cutoff, Provider)
 %%
 %% Returns the list of seqs indexed under `Tag`. Empty list if the tag
 %% has no entries (the path doesn't exist).
--spec seqs_for_tag(tag()) -> [non_neg_integer()].
+-spec seqs_for_tag(binary()) -> [non_neg_integer()].
 seqs_for_tag(Tag) when is_binary(Tag) ->
     Pattern = reckon_db_dcb_paths:by_tag_pattern(Tag),
     case khepri_tx:get_many(Pattern) of

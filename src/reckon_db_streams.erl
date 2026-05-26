@@ -90,8 +90,8 @@ append(StoreId, StreamId, ExpectedVersion, Events) ->
 %% append/4,5.
 -spec append_if_no_tag_matches(
     StoreId   :: atom(),
-    TagFilter :: reckon_db_dcb_filter:tag_filter(),
-    SeqCutoff :: non_neg_integer(),
+    TagFilter :: reckon_gater_types:tag_filter(),
+    SeqCutoff :: reckon_gater_types:seq_cutoff(),
     Events    :: [reckon_db_log_backend:new_event()]
 ) ->
       {ok, LastSeq :: non_neg_integer()}

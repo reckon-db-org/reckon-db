@@ -145,6 +145,16 @@ handle_call({append_events, _StoreId, StreamId, ExpectedVersion, Events}, _From,
     Result = reckon_db_streams:append(StoreId, StreamId, ExpectedVersion, Events),
     {reply, Result, State};
 
+%% DCB conditional-append (reckon-gater 2.3.0+, reckon-db 3.1.0+).
+%% TagFilter is `reckon_gater_types:tag_filter()`; SeqCutoff is `integer()`
+%% (-1 means "saw nothing"). See plans/PLAN_DCB_IMPLEMENTATION.md.
+handle_call({append_if_no_tag_matches, _StoreId, TagFilter, SeqCutoff, Events},
+            _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_streams:append_if_no_tag_matches(
+               StoreId, TagFilter, SeqCutoff, Events),
+    {reply, Result, State};
+
 %%====================================================================
 %% Snapshot Operations (handle_call)
 %%====================================================================

@@ -42,8 +42,8 @@
 %%   - `{error, Other}` on backend failure
 -spec append_if_no_tag_matches(
     StoreId   :: atom() | binary(),
-    TagFilter :: reckon_db_dcb_filter:tag_filter(),
-    SeqCutoff :: reckon_db_dcb_filter:seq_cutoff(),
+    TagFilter :: reckon_gater_types:tag_filter(),
+    SeqCutoff :: reckon_gater_types:seq_cutoff(),
     Events    :: [map()]
 ) ->
       {ok, LastSeq :: non_neg_integer()}

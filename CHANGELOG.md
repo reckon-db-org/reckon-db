@@ -50,6 +50,47 @@ reckon_db_streams:append_if_no_tag_matches(
 - `?DCB_SEQ_COUNTER_PATH` = `[metadata, dcb, last_seq]` — global counter
 - `?DCB_SEQ_KEY_WIDTH` = 20 — decimal padding for seq keys
 
+### Added — DCB gateway dispatch (P3.4)
+
+`reckon_db_gateway_worker:handle_call/3` now handles
+`{append_if_no_tag_matches, StoreId, TagFilter, SeqCutoff, Events}`
+requests routed from `reckon_gater_api:append_if_no_tag_matches/4`
+(reckon-gater 2.3.0+). End-to-end transport path:
+
+```
+caller -> reckon_gater_api:append_if_no_tag_matches/4
+       -> reckon_gater_api:route_call/2
+       -> gen_server:call(worker_pid, {append_if_no_tag_matches, ...})
+       -> reckon_db_gateway_worker:handle_call/3
+       -> reckon_db_streams:append_if_no_tag_matches/4
+       -> reckon_db_dcb:append_if_no_tag_matches/4
+       -> khepri:transaction/2 body
+```
+
+The direct in-process path
+(`reckon_db_streams:append_if_no_tag_matches/4` → `reckon_db_dcb`)
+continues to work unchanged for callers inside the BEAM node.
+
+### Changed — `tag_filter()` and `seq_cutoff()` types consolidated
+
+The canonical home for `tag_filter()` and `seq_cutoff()` is now
+`reckon_gater_types.hrl` (reckon-gater 2.3.0+). The local definitions
+in `reckon_db_dcb_filter` are removed. Specs in `reckon_db_dcb`,
+`reckon_db_streams`, and `reckon_db_dcb_filter` reference
+`reckon_gater_types:tag_filter()` / `reckon_gater_types:seq_cutoff()`
+directly. No semantic change; type re-homed for cross-repo sharing.
+
+### Changed — `reckon_gater` dep constraint
+
+`rebar.config` bumped from `{reckon_gater, "~> 2.2.0"}` to
+`{reckon_gater, "~> 2.3.0"}`. Required for the DCB types and the
+`append_if_no_tag_matches/4` wire API.
+
+**Publish ordering**: reckon-gater 2.3.0 must be on hex before
+reckon-db 3.1.0 can be cleanly hex-published. For local development,
+add `_checkouts/reckon_gater` symlinked to the local reckon-gater
+checkout (gitignored, so this is per-developer setup).
+
 ### Notes — DCB v1 limitations
 
 **Integrity** (HMAC chain) is NOT yet implemented for DCB events. On
