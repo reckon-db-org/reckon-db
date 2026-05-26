@@ -42,6 +42,53 @@ Two findings before P3.1 starts:
 
 Full spike record (Khepri capability survey + reckon-db code-path verification) lives in conversation history 2026-05-27. Source-of-truth pointers: `khepri:transaction/2` and `khepri_projection` doc pages on hexdocs.pm; `src/reckon_db_streams.erl:333` for the no-index admission.
 
+### P3.0 verification — Khepri 0.17.2 compat (executed 2026-05-27)
+
+A throwaway Common Test suite (`dcb_transaction_spike_SUITE`, since deleted) ran against the real `rebar.config` Khepri pin. **All four scenarios passed**:
+
+1. **Basic put + get in one transaction** — `khepri_tx:put` then `khepri_tx:get` inside `khepri:transaction/2` works as expected.
+2. **Abort rolls back atomically** — `khepri_tx:abort(Reason)` rolls back partial writes; the path written inside the transaction is NOT visible after abort, while pre-transaction writes remain.
+3. **DCB-shape conditional append** — read `/by_tag/{tag}/*` subtree, filter seqs by cutoff, either `khepri_tx:abort({context_changed, MaxSeq})` or `khepri_tx:put` event + tag-index entries. Both branches behave correctly.
+4. **BIF whitelist** — `sets:{from_list,intersection,to_list}`, `lists:{flatmap,foldl,foreach,max}`, `maps:keys`, `binary_to_integer`, `io_lib:format`, `iolist_to_binary`, list comprehensions, `case` expressions, anonymous functions all permitted inside a transaction body.
+
+**Concrete return shapes (Khepri 0.17.2, NOT Mnesia-style):**
+
+| Function | Success | Failure |
+|----------|---------|---------|
+| `khepri:put/3` | `ok` | `{error, _}` |
+| `khepri:get/2,3` | `{ok, Payload}` | `{error, _}` |
+| `khepri:transaction/2` success | `{ok, BodyReturn}` | — |
+| `khepri:transaction/2` after abort | `{error, AbortReason}` | — |
+| `khepri_tx:put/2,3` | `ok` | exception |
+| `khepri_tx:get/1,2` | `{ok, Payload}` | `{error, _}` |
+| `khepri_tx:get_many/1,2` | `{ok, #{Path => Payload}}` | `{error, _}` |
+| `khepri_tx:abort/1` | does not return (transforms into `{error, Reason}` at the outer transaction) | — |
+
+**Required init sequence** (no shortcut):
+
+```erlang
+application:set_env(ra, data_dir, RaDataDir),
+{ok, _} = ra:start([{data_dir, RaDataDir}]),
+%% Per-store ra_system (matches reckon_db_store production pattern)
+RaSystemName = list_to_atom("ra_" ++ atom_to_list(StoreId)),
+RaSystemConfig = (ra_system:default_config())#{
+    name => RaSystemName,
+    data_dir => StoreDataDir,
+    wal_data_dir => StoreDataDir,
+    names => ra_system:derive_names(RaSystemName)
+},
+case ra_system:start(RaSystemConfig) of
+    {ok, _}                       -> ok;
+    {error, {already_started, _}} -> ok
+end,
+{ok, _} = application:ensure_all_started(khepri),
+{ok, _} = khepri:start(RaSystemName, StoreId, 5000).
+```
+
+P3.2's test setup should reuse this pattern. The existing `reckon_db_test_helpers:ensure_store/1` works for some cases but uses an undocumented `khepri:start(StoreId, Map)` signature; the per-store ra_system pattern is the production-correct way.
+
+P3.0 status: ✅ complete. No blockers identified for P3.1.
+
 ---
 
 ## Architecture overview
