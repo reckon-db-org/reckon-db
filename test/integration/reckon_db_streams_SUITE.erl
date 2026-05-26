@@ -449,11 +449,9 @@ delete_nonexistent_stream(Config) ->
 %%====================================================================
 
 %% @private Generate a unique stream ID conforming to the
-%% reckon-db user-stream format. See reckon_db_stream_id.
+%% reckon-db user-stream format. See reckon_gater_stream_id.
 generate_stream_id() ->
-    Bytes = crypto:strong_rand_bytes(16),
-    Hex = binary:encode_hex(Bytes, lowercase),
-    <<"test-", Hex/binary>>.
+    reckon_gater_stream_id:new(<<"test">>).
 
 %% @private Generate a test event
 generate_event(EventType) ->

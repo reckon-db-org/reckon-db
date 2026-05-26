@@ -5,6 +5,44 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-05-26
+
+### Removed (breaking) — `reckon_db_stream_id` module
+
+The stream-id format validator moves to `reckon_gater_stream_id` (in
+reckon-gater 2.2.0). Stream-id format is a protocol contract; it
+belongs in the gateway layer where both reckon-db (write validation)
+and reckon-evoq (adapter generation) can reach it without dragging
+reckon-db's khepri/Ra payload into pure-routing consumers.
+
+Callers using the old module must migrate:
+
+```diff
+- reckon_db_stream_id:validate(StreamId)
++ reckon_gater_stream_id:validate(StreamId)
+```
+
+The same `validate/1`, `is_valid/1`, and `is_system/1` functions are
+exported from `reckon_gater_stream_id` with identical semantics, plus
+a new `new/1` generator and `prefix_of/1` / `suffix_of/1` parsers.
+
+### Changed (breaking) — user-stream regex tightened
+
+Inherited from reckon-gater 2.2.0. User-stream regex tightens from
+`^[A-Za-z]+-[A-Fa-f0-9]+$` to `^[a-z]{1,32}-[a-f0-9]{32}$`:
+
+- Prefix is now lowercase only, capped at 32 chars.
+- Suffix is now exactly 32 lowercase hex chars (128 bits).
+
+Existing data with non-conforming ids remains readable. `append/4`
+rejects new events on non-conforming streams with
+`{error, {invalid_stream_id, malformed_user_id, StreamId}}`. No
+production deployments to migrate.
+
+### Changed — deps bumped
+
+- `reckon_gater` `~> 2.2.0` — picks up the relocated stream-id module.
+
 ## [2.3.7] - 2026-05-18
 
 ### Renamed — `subscribe_duplicate_fails` → `subscribe_duplicate_is_idempotent`

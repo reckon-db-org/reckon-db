@@ -95,7 +95,7 @@ data_dir_for(StoreId) ->
 %%====================================================================
 
 %% @doc Generate a unique stream ID conforming to reckon-db's user-
-%% stream format (`<prefix>-<hex>'). See reckon_db_stream_id.
+%% stream format (`<prefix>-<hex>'). See reckon_gater_stream_id.
 -spec generate_stream_id() -> binary().
 generate_stream_id() ->
     Hex = generate_hex(),

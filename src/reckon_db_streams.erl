@@ -77,8 +77,10 @@ append(StoreId, StreamId, ExpectedVersion, Events, _Opts) ->
     %% Stream-id format gate. Rejecting at the head of append/4
     %% means no malformed id reaches Khepri, so the store can't
     %% accumulate polluted paths from misbehaving tests / clients.
-    %% See reckon_db_stream_id for the format rules.
-    case reckon_db_stream_id:validate(StreamId) of
+    %% See reckon_gater_stream_id for the format rules (moved out
+    %% of reckon-db in 3.0.0 — protocol contract belongs in the
+    %% gateway layer, shared with reckon-evoq).
+    case reckon_gater_stream_id:validate(StreamId) of
         ok ->
             do_append_with_telemetry(StoreId, StreamId, ExpectedVersion, Events);
         {error, Reason} ->
