@@ -25,6 +25,21 @@
 -define(SUBSCRIPTIONS_PATH, [subscriptions]).
 -define(METADATA_PATH, [metadata]).
 
+%% DCB (Dynamic Consistency Boundary) paths — Phase 3, 2.4.0+.
+%% DCB events live under one pseudo-stream `_dcb`. Each event is also
+%% indexed by every tag it carries, so the conditional-append primitive
+%% can scan a bounded subtree (per-tag) inside a Khepri transaction
+%% instead of the full event log.
+%%
+%% See: plans/PLAN_DCB_IMPLEMENTATION.md
+-define(DCB_STREAM, <<"_dcb">>).
+-define(DCB_STREAM_PATH, [events, ?DCB_STREAM]).
+-define(BY_TAG_PATH, [by_tag]).
+%% Fixed-width zero-padded DECIMAL keys so lexicographic order == numeric
+%% order for subtree iteration. 20 digits covers up to 10^20 events.
+%% Matches the existing pad_version convention in reckon_db_snapshots_store.
+-define(DCB_SEQ_KEY_WIDTH, 20).
+
 %% Per-stream tamper-resistance watermark (2.1.0+).
 %% Path: [metadata, integrity, chain_start, StreamId] -> non_neg_integer()
 %% Records the version at which integrity-bearing writes began for that
