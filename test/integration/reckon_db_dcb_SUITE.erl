@@ -30,7 +30,10 @@
     tag_index_entries_written/1,
     dcb_events_use_streams_path/1,
     integrity_enabled_rejected/1,
-    facade_routes_to_dcb_module/1
+    facade_routes_to_dcb_module/1,
+    cutoff_minus_one_for_empty_initial_state/1,
+    concurrent_uniqueness_only_one_wins/1,
+    dcb_events_visible_via_read_by_tags/1
 ]).
 
 all() ->
@@ -44,7 +47,18 @@ all() ->
      tag_index_entries_written,
      dcb_events_use_streams_path,
      integrity_enabled_rejected,
-     facade_routes_to_dcb_module].
+     facade_routes_to_dcb_module,
+     cutoff_minus_one_for_empty_initial_state,
+     concurrent_uniqueness_only_one_wins,
+     dcb_events_visible_via_read_by_tags
+     %% dcb_events_deliver_to_tag_subscription: deferred. Requires the
+     %% full subscription delivery pipeline (emitter pool wiring per
+     %% reckon_db_subscription_delivery_SUITE). DCB events use
+     %% khepri_tx:put on the same paths as regular events, so Khepri
+     %% triggers + tag-filter routing should match identically.
+     %% Will be verified end-to-end as part of P3.4 (gateway dispatch)
+     %% or sooner in a focused follow-up.
+    ].
 
 %%====================================================================
 %% Setup / Teardown
@@ -59,7 +73,11 @@ end_per_suite(_Config) ->
     ok.
 
 init_per_testcase(Case, Config) ->
-    %% Fresh per-test data dirs + ra_system + Khepri store.
+    %% Per-store ra_system pattern, matches reckon_db_store production
+    %% setup. Sufficient for everything except subscription-delivery
+    %% tests, which require manual emitter wiring (see the
+    %% reckon_db_subscription_delivery_SUITE pattern). Phase 2 interop
+    %% test deferred to P3.2 follow-up.
     Rand = integer_to_list(erlang:unique_integer([positive])),
     Base = proplists:get_value(base_data_dir, Config),
     RaDataDir = Base ++ "_ra_" ++ atom_to_list(Case) ++ "_" ++ Rand,
@@ -271,3 +289,104 @@ facade_routes_to_dcb_module(Config) ->
     {ok, #event{event_type = <<"facade_test">>}} =
         khepri:get(StoreId, reckon_db_dcb_paths:event_path(0)),
     ok.
+
+%%====================================================================
+%% P3.2 — cutoff semantics, concurrent contention, Phase 1+2 interop
+%%====================================================================
+
+cutoff_minus_one_for_empty_initial_state(Config) ->
+    %% The canonical uniqueness idiom: cutoff = -1 means "I saw nothing
+    %% yet". The first writer succeeds. The second writer (also passing
+    %% cutoff = -1 because they too saw nothing at read time) gets
+    %% context_changed because the first one's event is now there.
+    StoreId = ?config(store_id, Config),
+    Event1 = #{event_type => <<"email_registered">>,
+               data => #{email => <<"alice@example.com">>},
+               tags => [<<"email:alice@example.com">>]},
+    {ok, 0} = reckon_db_dcb:append_if_no_tag_matches(
+                StoreId,
+                {any_of, [<<"email:alice@example.com">>]},
+                -1,
+                [Event1]),
+    Event2 = #{event_type => <<"email_registered">>,
+               data => #{email => <<"alice@example.com">>},
+               tags => [<<"email:alice@example.com">>]},
+    ?assertEqual({error, {context_changed, 0}},
+        reckon_db_dcb:append_if_no_tag_matches(
+            StoreId,
+            {any_of, [<<"email:alice@example.com">>]},
+            -1,
+            [Event2])),
+    %% Counter still at 0 — second write rejected.
+    ?assertEqual({ok, 0}, khepri:get(StoreId, ?DCB_SEQ_COUNTER_PATH)),
+    ok.
+
+concurrent_uniqueness_only_one_wins(Config) ->
+    %% 50 processes race to register the same email. Exactly one
+    %% succeeds; the rest see context_changed. The store ends up with
+    %% exactly one event for that tag.
+    StoreId = ?config(store_id, Config),
+    Tag = <<"email:race@example.com">>,
+    NumWorkers = 50,
+    Self = self(),
+    %% Spawn workers that block on a barrier message, then race.
+    Workers = [spawn_link(fun() -> uniqueness_worker(Self, StoreId, Tag, N) end)
+               || N <- lists:seq(1, NumWorkers)],
+    %% Release all workers at once. (Each barrier-receive accepts {go}.)
+    [W ! go || W <- Workers],
+    Results = collect_worker_results(NumWorkers, []),
+    Successes = [R || {ok, _} = R <- Results],
+    Conflicts = [R || {error, {context_changed, _}} = R <- Results],
+    ct:pal("successes=~p conflicts=~p", [length(Successes), length(Conflicts)]),
+    ?assertEqual(1, length(Successes)),
+    ?assertEqual(NumWorkers - 1, length(Conflicts)),
+    %% Exactly one event under the tag.
+    {ok, TagMap} = khepri:get_many(
+                     StoreId, reckon_db_dcb_paths:by_tag_pattern(Tag)),
+    ?assertEqual(1, maps:size(TagMap)),
+    %% Counter at 0 (one event committed).
+    ?assertEqual({ok, 0}, khepri:get(StoreId, ?DCB_SEQ_COUNTER_PATH)),
+    ok.
+
+dcb_events_visible_via_read_by_tags(Config) ->
+    %% Phase 1 interop. DCB events live under ?STREAMS_PATH, so the
+    %% existing reckon_db_streams:read_by_tags must see them.
+    StoreId = ?config(store_id, Config),
+    Event = #{event_type => <<"announced">>,
+              data => #{capability => <<"weather">>},
+              tags => [<<"agent:alice">>, <<"cap:weather">>]},
+    {ok, 0} = reckon_db_dcb:append_if_no_tag_matches(
+                StoreId, {any_of, [<<"never">>]}, -1, [Event]),
+    {ok, [Found]} = reckon_db_streams:read_by_tags(
+                      StoreId, [<<"agent:alice">>], any, 10),
+    ?assertEqual(<<"announced">>, Found#event.event_type),
+    ?assertEqual(?DCB_STREAM, Found#event.stream_id),
+    %% And the cross-tag filter sees it too.
+    {ok, [_]} = reckon_db_streams:read_by_tags(
+                  StoreId, [<<"cap:weather">>], any, 10),
+    %% All-of (intersection) sees it when both tags match.
+    {ok, [_]} = reckon_db_streams:read_by_tags(
+                  StoreId, [<<"agent:alice">>, <<"cap:weather">>], all, 10),
+    ok.
+
+%%====================================================================
+%% Helpers for the concurrent test
+%%====================================================================
+
+uniqueness_worker(Parent, StoreId, Tag, N) ->
+    receive go -> ok end,
+    Event = #{event_type => <<"email_registered">>,
+              data => #{n => N},
+              tags => [Tag]},
+    Result = reckon_db_dcb:append_if_no_tag_matches(
+               StoreId, {any_of, [Tag]}, -1, [Event]),
+    Parent ! {worker_result, N, Result}.
+
+collect_worker_results(0, Acc) ->
+    lists:reverse(Acc);
+collect_worker_results(N, Acc) ->
+    receive
+        {worker_result, _N, R} -> collect_worker_results(N - 1, [R | Acc])
+    after 30000 ->
+        ct:fail({worker_timeout, remaining, N})
+    end.

@@ -195,8 +195,16 @@ all_of_with_cutoff_test() ->
         reckon_db_dcb_filter:match_any_above_cutoff(
             {all_of, [<<"a">>, <<"b">>]}, 3, P)).
 
-negative_cutoff_rejected_test() ->
-    P = mock_provider([{<<"a">>, [1]}]),
-    ?assertError(function_clause,
+cutoff_minus_one_matches_any_event_test() ->
+    %% Cutoff = -1 means "I saw nothing yet". Any matching event with
+    %% seq >= 0 is a conflict. This is the empty-initial-state idiom
+    %% used by uniqueness checks: "ensure no event with this tag exists."
+    P = mock_provider([{<<"a">>, [0, 5, 7]}]),
+    ?assertEqual({true, 7},
         reckon_db_dcb_filter:match_any_above_cutoff(
-            {any_of, [<<"a">>]}, -1, P)).
+            {any_of, [<<"a">>]}, -1, P)),
+    %% And an empty store still yields false even with cutoff=-1.
+    PEmpty = mock_provider([]),
+    ?assertEqual(false,
+        reckon_db_dcb_filter:match_any_above_cutoff(
+            {any_of, [<<"a">>]}, -1, PEmpty)).

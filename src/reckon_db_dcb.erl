@@ -43,7 +43,7 @@
 -spec append_if_no_tag_matches(
     StoreId   :: atom() | binary(),
     TagFilter :: reckon_db_dcb_filter:tag_filter(),
-    SeqCutoff :: non_neg_integer(),
+    SeqCutoff :: reckon_db_dcb_filter:seq_cutoff(),
     Events    :: [map()]
 ) ->
       {ok, LastSeq :: non_neg_integer()}
@@ -53,7 +53,7 @@
 append_if_no_tag_matches(_StoreId, _TagFilter, _SeqCutoff, []) ->
     {error, no_events};
 append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events)
-  when is_list(Events), is_integer(SeqCutoff), SeqCutoff >= 0 ->
+  when is_list(Events), is_integer(SeqCutoff) ->
     %% v1 safety check. Tamper-resistance (HMAC chain) is not yet
     %% implemented for DCB events. To prevent silent tamper exposure
     %% on integrity-enabled stores, fail closed. Real integrity support

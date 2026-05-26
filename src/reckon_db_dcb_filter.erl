@@ -49,6 +49,12 @@
 
 -type match_result() :: false | {true, MaxSeq :: non_neg_integer()}.
 
+%% Cutoff is "the highest seq the caller saw". Semantics:
+%%   Cutoff = -1 means "I saw nothing"; any matching event is a conflict.
+%%   Cutoff = N (>= 0) means "I saw events up through seq N"; only seqs > N
+%%     constitute new (conflicting) writes.
+-type seq_cutoff() :: integer().
+
 %%====================================================================
 %% Public API
 %%====================================================================
@@ -100,16 +106,20 @@ match_seqs({and_, [First | Rest]}, Provider) ->
 
 %% @doc "Does any matching event have seq > Cutoff?" using the production
 %% Khepri-backed seqs provider. Call from inside `khepri:transaction/2`.
--spec match_any_above_cutoff(tag_filter(), non_neg_integer()) -> match_result().
+%%
+%% Cutoff = -1 means "I saw nothing yet" — ANY matching event triggers a
+%% conflict. Cutoff = N (>= 0) means "I saw events through seq N" —
+%% only seqs > N trigger a conflict.
+-spec match_any_above_cutoff(tag_filter(), seq_cutoff()) -> match_result().
 match_any_above_cutoff(Filter, Cutoff) ->
     match_any_above_cutoff(Filter, Cutoff, fun seqs_for_tag/1).
 
 %% @doc Pure-testable variant: the caller supplies the seqs provider.
 -spec match_any_above_cutoff(tag_filter(),
-                             non_neg_integer(),
+                             seq_cutoff(),
                              seqs_provider()) -> match_result().
 match_any_above_cutoff(Filter, Cutoff, Provider)
-  when is_integer(Cutoff), Cutoff >= 0 ->
+  when is_integer(Cutoff) ->
     MatchingSet = match_seqs(Filter, Provider),
     Above = [S || S <- sets:to_list(MatchingSet), S > Cutoff],
     case Above of
