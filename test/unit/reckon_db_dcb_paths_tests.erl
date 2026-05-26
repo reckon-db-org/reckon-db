@@ -74,10 +74,12 @@ seq_key_rejects_negative_test() ->
 
 event_path_shape_test() ->
     Path = reckon_db_dcb_paths:event_path(42),
-    %% Three-element path: events / <<"_dcb">> / seq_key(42)
+    %% Three-element path: streams / <<"_dcb">> / seq_key(42)
+    %% DCB events live under ?STREAMS_PATH so they're visible to all
+    %% existing read APIs (read_all_global, read_by_event_types, ...).
     ?assertEqual(3, length(Path)),
-    [Events, DcbStream, SeqKey] = Path,
-    ?assertEqual(events, Events),
+    [Streams, DcbStream, SeqKey] = Path,
+    ?assertEqual(streams, Streams),
     ?assertEqual(?DCB_STREAM, DcbStream),
     ?assertEqual(reckon_db_dcb_paths:seq_key(42), SeqKey).
 

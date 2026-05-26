@@ -26,15 +26,26 @@
 -define(METADATA_PATH, [metadata]).
 
 %% DCB (Dynamic Consistency Boundary) paths — Phase 3, 2.4.0+.
-%% DCB events live under one pseudo-stream `_dcb`. Each event is also
-%% indexed by every tag it carries, so the conditional-append primitive
+%% DCB events live under one pseudo-stream `_dcb` AT THE SAME PATH
+%% PREFIX as regular streams, so all existing read paths
+%% (`read_all_global`, `read_by_event_types`, tag subscriptions, ...)
+%% see DCB events automatically. The append path is different (the
+%% conditional `append_if_no_tag_matches` primitive), but the storage
+%% shape is identical to a normal stream.
+%%
+%% Each DCB event is ALSO indexed by every tag it carries at
+%% `?BY_TAG_PATH ++ [Tag, SeqKey]`, so the conditional-append primitive
 %% can scan a bounded subtree (per-tag) inside a Khepri transaction
 %% instead of the full event log.
 %%
 %% See: plans/PLAN_DCB_IMPLEMENTATION.md
 -define(DCB_STREAM, <<"_dcb">>).
--define(DCB_STREAM_PATH, [events, ?DCB_STREAM]).
+-define(DCB_STREAM_PATH, ?STREAMS_PATH ++ [?DCB_STREAM]).
 -define(BY_TAG_PATH, [by_tag]).
+%% Monotonic global counter for DCB seqs. One node, atomic via Khepri
+%% transactions. Holds the LAST-ASSIGNED seq (or absent if no DCB
+%% events yet).
+-define(DCB_SEQ_COUNTER_PATH, [metadata, dcb, last_seq]).
 %% Fixed-width zero-padded DECIMAL keys so lexicographic order == numeric
 %% order for subtree iteration. 20 digits covers up to 10^20 events.
 %% Matches the existing pad_version convention in reckon_db_snapshots_store.
