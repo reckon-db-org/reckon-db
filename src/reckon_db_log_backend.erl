@@ -162,6 +162,37 @@
     | {error, {wrong_expected_version, version()}}
     | {error, Reason :: term()}.
 
+%% Conditionally append events under the DCB pseudo-stream
+%% (Dynamic Consistency Boundary — Phase 3, 2.4.0+).
+%%
+%% Returns:
+%%   - `{ok, LastSeq}` on commit
+%%   - `{error, {context_changed, MaxSeq}}` when a matching event with
+%%     seq > `SeqCutoff` exists; nothing was written
+%%   - `{error, no_events}` if `Events` is empty
+%%   - `{error, integrity_not_supported_in_dcb_v1}` if the store has
+%%     integrity enabled (DCB v1 ships without HMAC; refusing keeps
+%%     integrity-enabled stores tamper-detectable)
+%%   - `{error, Reason}` on backend failure
+%%
+%% Optional. Backends that don't implement it should be detected by
+%% `erlang:function_exported/3` at the gateway layer; callers receive
+%% `{error, not_supported}`.
+-callback append_if_no_tag_matches(
+    state(),
+    store_id(),
+    TagFilter :: term(),
+    SeqCutoff :: non_neg_integer(),
+    [new_event()]
+) ->
+    {ok, version()}
+    | {error, {context_changed, non_neg_integer()}}
+    | {error, no_events}
+    | {error, integrity_not_supported_in_dcb_v1}
+    | {error, term()}.
+
+-optional_callbacks([append_if_no_tag_matches/5]).
+
 %% ------------------------------------------------------------------
 %% Read path
 %% ------------------------------------------------------------------

@@ -54,17 +54,28 @@ append_if_no_tag_matches(_StoreId, _TagFilter, _SeqCutoff, []) ->
     {error, no_events};
 append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events)
   when is_list(Events), is_integer(SeqCutoff), SeqCutoff >= 0 ->
-    Now = erlang:system_time(millisecond),
-    EpochUs = erlang:system_time(microsecond),
-    case khepri:transaction(
-           StoreId,
-           fun() -> tx_body(TagFilter, SeqCutoff, Events, Now, EpochUs) end) of
-        {ok, LastSeq} ->
-            {ok, LastSeq};
-        {error, {context_changed, _MaxSeq} = Reason} ->
-            {error, Reason};
-        {error, _} = Error ->
-            Error
+    %% v1 safety check. Tamper-resistance (HMAC chain) is not yet
+    %% implemented for DCB events. To prevent silent tamper exposure
+    %% on integrity-enabled stores, fail closed. Real integrity support
+    %% lands in a v2 follow-up; this check goes away then.
+    case reckon_db_integrity_key:is_enabled(StoreId) of
+        true ->
+            {error, integrity_not_supported_in_dcb_v1};
+        false ->
+            Now = erlang:system_time(millisecond),
+            EpochUs = erlang:system_time(microsecond),
+            case khepri:transaction(
+                   StoreId,
+                   fun() ->
+                       tx_body(TagFilter, SeqCutoff, Events, Now, EpochUs)
+                   end) of
+                {ok, LastSeq} ->
+                    {ok, LastSeq};
+                {error, {context_changed, _MaxSeq} = Reason} ->
+                    {error, Reason};
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 %%====================================================================

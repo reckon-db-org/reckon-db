@@ -3,7 +3,7 @@
 **Status:** Active — Design / Not Started
 **Created:** 2026-05-26
 **Last Updated:** 2026-05-27 — pre-flight spike + Khepri deep-dive landed; storage approach changed from custom-command to `khepri:transaction`; tag index reshaped as path structure; P3.1 sub-divided
-**Target release:** `reckon-db` 2.4.0, `reckon-gater` 2.3.0, `reckon-evoq` 2.3.0, `evoq` 1.18.0
+**Target release:** `reckon-db` 3.1.0, `reckon-gater` 2.3.0+, `reckon-evoq` 2.3.0+, `evoq` 1.18.0+ (versions for downstream libs to be confirmed at their integration PR; reckon-db is at 3.0.0 since 2026-05-26, this is a minor bump)
 **Spans repos:** `reckon-db`, `reckon-gater`, `reckon-evoq`, `evoq`, plus one reference example
 **Supersedes (in scope):** PLAN_FUTURE_RESEARCH.md § DCB Phase 3 (was deferred; now active)
 **Related:** `hecate-corpus/philosophy/CONSISTENCY_BOUNDARIES.md` (user-facing doctrine)

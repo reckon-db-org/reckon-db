@@ -5,6 +5,76 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added — DCB (Dynamic Consistency Boundary), Phase 3 first slice
+
+Query-based conditional-append primitive that complements the existing
+stream-version optimistic concurrency model. Where a Dossier aggregate
+locks on its own stream's version, a DCB Decision locks on the absence
+of new events matching a tag-filter context query. See
+`plans/PLAN_DCB_IMPLEMENTATION.md` for the full design rationale.
+
+**New public API** (`reckon_db_streams`):
+
+```erlang
+%% Conditionally append events under the DCB pseudo-stream.
+%% Returns {error, {context_changed, MaxSeq}} when any event matching
+%% TagFilter has seq > SeqCutoff; nothing is written in that case.
+reckon_db_streams:append_if_no_tag_matches(
+    StoreId, TagFilter, SeqCutoff, Events).
+```
+
+`TagFilter` supports `{any_of, [Tag]}`, `{all_of, [Tag]}`,
+`{and_, [Filter]}`, `{or_, [Filter]}` with per-event semantics.
+
+**New modules**:
+
+- `reckon_db_dcb` — the `khepri:transaction/2`-based primitive
+- `reckon_db_dcb_paths` — Khepri path helpers + zero-padded decimal seq keys
+- `reckon_db_dcb_filter` — pure tag-filter algebra over a mockable seqs provider
+
+**New behaviour callback** on `reckon_db_log_backend`:
+
+- `append_if_no_tag_matches/5` — optional. Backends that don't implement
+  it return `{error, not_supported}` at the gateway layer.
+
+**New macros** in `include/reckon_db.hrl`:
+
+- `?DCB_STREAM` = `<<"_dcb">>` — pseudo-stream id for DCB events
+- `?DCB_STREAM_PATH` = `?STREAMS_PATH ++ [?DCB_STREAM]` — DCB events
+  live under `[streams, "_dcb", SeqKey]` so all existing read paths
+  (`read_all_global`, `read_by_event_types`, `read_by_tags`,
+  subscriptions) see them automatically
+- `?BY_TAG_PATH` = `[by_tag]` — root of the tag index
+- `?DCB_SEQ_COUNTER_PATH` = `[metadata, dcb, last_seq]` — global counter
+- `?DCB_SEQ_KEY_WIDTH` = 20 — decimal padding for seq keys
+
+### Notes — DCB v1 limitations
+
+**Integrity** (HMAC chain) is NOT yet implemented for DCB events. On
+stores with integrity disabled (the default), DCB events have the same
+tamper exposure as aggregate events — no new gap. On stores with
+integrity *enabled*, `append_if_no_tag_matches/4` fail-closes with
+`{error, integrity_not_supported_in_dcb_v1}` to prevent silent tamper
+exposure. Full HMAC-chain support for DCB events is a v2 follow-up.
+
+**Tag index is forward-only**: events written before this release do
+NOT have `/by_tag/{Tag}/{SeqKey}` mirror entries. They remain
+queryable via the existing `read_by_tags/4` (full-scan + filter)
+but are invisible to the DCB consistency check. This is correct for
+DCB consistency (only Decisions need consistency with other Decisions);
+existing aggregate-stream reads are unaffected.
+
+**Snapshots**: no snapshot support for the DCB pseudo-stream.
+Aggregate snapshotting doesn't apply (no per-aggregate consistency
+boundary).
+
+**Wire / Evoq integration**: the `append_if_no_tag_matches` facade
+in `reckon_db_streams` currently calls `reckon_db_dcb` directly. The
+gateway worker dispatch (P3.4) and the `evoq_decision` behaviour in
+evoq (P3.6) ship in subsequent PRs per the plan.
+
 ## [3.0.0] - 2026-05-26
 
 ### Removed (breaking) — `reckon_db_stream_id` module

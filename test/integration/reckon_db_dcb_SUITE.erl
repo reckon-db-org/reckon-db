@@ -28,7 +28,9 @@
     counter_advances_across_appends/1,
     empty_events_rejected/1,
     tag_index_entries_written/1,
-    dcb_events_use_streams_path/1
+    dcb_events_use_streams_path/1,
+    integrity_enabled_rejected/1,
+    facade_routes_to_dcb_module/1
 ]).
 
 all() ->
@@ -40,7 +42,9 @@ all() ->
      counter_advances_across_appends,
      empty_events_rejected,
      tag_index_entries_written,
-     dcb_events_use_streams_path].
+     dcb_events_use_streams_path,
+     integrity_enabled_rejected,
+     facade_routes_to_dcb_module].
 
 %%====================================================================
 %% Setup / Teardown
@@ -231,4 +235,39 @@ dcb_events_use_streams_path(Config) ->
     ?assertMatch([streams, ?DCB_STREAM, _], Path),
     %% Khepri returns it.
     {ok, _} = khepri:get(StoreId, Path),
+    ok.
+
+integrity_enabled_rejected(Config) ->
+    %% v1 fail-closed safety check. DCB v1 ships without HMAC chain;
+    %% on integrity-enabled stores it would create a silent tamper-
+    %% detection gap. Refuse with an explicit error instead.
+    StoreId = ?config(store_id, Config),
+    %% Simulate integrity-on by setting the persistent_term flag directly
+    %% (the integrity_key module's standard mechanism).
+    persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
+    try
+        Event = #{event_type => <<"e">>, data => #{}},
+        ?assertEqual(
+            {error, integrity_not_supported_in_dcb_v1},
+            reckon_db_dcb:append_if_no_tag_matches(
+                StoreId, {any_of, [<<"never">>]}, 0, [Event])),
+        %% Nothing written: counter still absent.
+        ?assertMatch({error, _}, khepri:get(StoreId, ?DCB_SEQ_COUNTER_PATH))
+    after
+        persistent_term:erase({reckon_db, integrity_enabled, StoreId})
+    end.
+
+facade_routes_to_dcb_module(Config) ->
+    %% reckon_db_streams:append_if_no_tag_matches/4 must delegate to
+    %% reckon_db_dcb:append_if_no_tag_matches/4. Same return, same side
+    %% effects.
+    StoreId = ?config(store_id, Config),
+    Event = #{event_type => <<"facade_test">>, data => #{},
+              tags => [<<"facade">>]},
+    Result = reckon_db_streams:append_if_no_tag_matches(
+               StoreId, {any_of, [<<"never">>]}, 0, [Event]),
+    ?assertMatch({ok, 0}, Result),
+    %% Verify the event landed at the expected DCB path.
+    {ok, #event{event_type = <<"facade_test">>}} =
+        khepri:get(StoreId, reckon_db_dcb_paths:event_path(0)),
     ok.

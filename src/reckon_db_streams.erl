@@ -19,6 +19,7 @@
 -export([
     append/4,
     append/5,
+    append_if_no_tag_matches/4,
     read/5,
     read/6,
     read_all/4,
@@ -70,6 +71,36 @@
     {ok, non_neg_integer()} | {error, term()}.
 append(StoreId, StreamId, ExpectedVersion, Events) ->
     append(StoreId, StreamId, ExpectedVersion, Events, #{}).
+
+%% @doc Conditionally append events under the DCB pseudo-stream
+%% (Dynamic Consistency Boundary — Phase 3, 2.4.0+).
+%%
+%% Unlike `append/4,5`, the precondition is NOT a stream-version check;
+%% it's a tag-filter context query. Returns `{error, {context_changed,
+%% MaxSeq}}` when any event matching `TagFilter` has seq > `SeqCutoff`.
+%%
+%% v1 refuses on stores with integrity enabled (DCB v1 lacks HMAC
+%% chain). Returns `{error, integrity_not_supported_in_dcb_v1}` in
+%% that case.
+%%
+%% See: plans/PLAN_DCB_IMPLEMENTATION.md
+%%
+%% NOTE: This facade calls reckon_db_dcb directly. P3.4 will route via
+%% reckon_db_gateway_worker for transport-layer consistency with
+%% append/4,5.
+-spec append_if_no_tag_matches(
+    StoreId   :: atom(),
+    TagFilter :: reckon_db_dcb_filter:tag_filter(),
+    SeqCutoff :: non_neg_integer(),
+    Events    :: [reckon_db_log_backend:new_event()]
+) ->
+      {ok, LastSeq :: non_neg_integer()}
+    | {error, {context_changed, non_neg_integer()}}
+    | {error, no_events}
+    | {error, integrity_not_supported_in_dcb_v1}
+    | {error, term()}.
+append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events) ->
+    reckon_db_dcb:append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events).
 
 -spec append(atom(), binary(), integer(), [new_event()], map()) ->
     {ok, non_neg_integer()} | {error, term()}.
