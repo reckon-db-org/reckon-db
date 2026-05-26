@@ -2,7 +2,7 @@
 
 **Status:** Active — Design / Not Started
 **Created:** 2026-05-26
-**Last Updated:** 2026-05-26
+**Last Updated:** 2026-05-27 — pre-flight spike + Khepri deep-dive landed; storage approach changed from custom-command to `khepri:transaction`; tag index reshaped as path structure; P3.1 sub-divided
 **Target release:** `reckon-db` 2.4.0, `reckon-gater` 2.3.0, `reckon-evoq` 2.3.0, `evoq` 1.18.0
 **Spans repos:** `reckon-db`, `reckon-gater`, `reckon-evoq`, `evoq`, plus one reference example
 **Supersedes (in scope):** PLAN_FUTURE_RESEARCH.md § DCB Phase 3 (was deferred; now active)
@@ -25,6 +25,22 @@ Want to be DCB-ready before need (per scoping decision 2026-05-26). No specific 
 - **Sharding `?DCB_STREAM`.** Single-pseudo-stream model is the v1. Horizontal partitioning by tag-hash is future work if throughput becomes a constraint.
 - **Snapshot support for DCB events.** Aggregate snapshotting doesn't apply (no aggregates). Out of scope.
 - **Production-grade reference example.** The reference example is a learning artefact, not a customer-grade app.
+
+---
+
+## Spike findings (2026-05-27)
+
+Two findings before P3.1 starts:
+
+**1. Phase 1 did NOT ship a real tag index.** `read_by_tags` (`src/reckon_db_streams.erl:333`) fetches *all events from all streams* via `khepri:get_many` and filters client-side. The code comments admit it: *"For large stores, consider maintaining a separate tag index."* Tags-as-event-field shipped; tags-as-index did not. P3.1 has to build the real index as a prerequisite.
+
+**2. Khepri primitives are richer than initially assumed.** `khepri:transaction/2` + `khepri_tx:get_many/2` + `khepri_tx:put/3` + `khepri_tx:abort/1` give us atomic multi-path read + conditional write inside a single Ra consensus operation — exactly the DCB primitive. **We do NOT need a custom Khepri machine command.** Transactions are heavily restricted (pure functions, whitelisted BIFs, no message-sending), but our DCB body fits inside those constraints.
+
+**3. The tag index belongs in the tree, not in a separate data structure.** Khepri's tree paths are lexicographically ordered. Writing each event's tag-bindings as additional tree nodes — `/by_tag/{tag}/{seq} → {}` — gives us a native subtree-scan index. `khepri_tx:get_many([by_tag, Tag, ?KHEPRI_WILDCARD_STAR])` is a bounded scan inside the transaction, no projection-in-transaction question to resolve.
+
+**Implications:** No `reckon_db_dcb_command.erl`. No custom Ra machine extension. Storage model unchanged (`?DCB_STREAM`) but accompanied by `/by_tag/` mirror entries written in the same transaction as the event. P3.1 scope grows to include the tag-index path-write paired with each event-write.
+
+Full spike record (Khepri capability survey + reckon-db code-path verification) lives in conversation history 2026-05-27. Source-of-truth pointers: `khepri:transaction/2` and `khepri_projection` doc pages on hexdocs.pm; `src/reckon_db_streams.erl:333` for the no-index admission.
 
 ---
 
@@ -56,19 +72,22 @@ Want to be DCB-ready before need (per scoping decision 2026-05-26). No specific 
 ┌────────────────────────┴────────────────────────────────────────┐
 │ reckon-db (2.4.0)                                               │
 │   reckon_db_log_backend:append_if_no_tag_matches/5 callback     │
-│   Khepri command:    append_if_no_tag_matches_command            │
-│   Storage:           single ?DCB_STREAM pseudo-stream            │
-│   Bounded scan via existing Phase 1 tag index                   │
+│   Implementation:    khepri:transaction/2 body (no custom cmd)  │
+│   Storage:           ?DCB_STREAM pseudo-stream + path-based      │
+│                      tag index at /by_tag/{tag}/{seq}            │
+│   Bounded scan via subtree iteration on /by_tag/{tag}/**         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Storage model decision: single `?DCB_STREAM` pseudo-stream
+## Storage model decision: `?DCB_STREAM` + path-based tag index
 
-Three alternatives were considered (see `PLAN_FUTURE_RESEARCH.md` § Coexistence Sketch). The decision for v1:
+Two coupled storage decisions for v1:
 
-**All DCB events land in one stream named `?DCB_STREAM` = `<<"_dcb">>`.** Per-event identity is the global `sequence_number`. Stream version on `?DCB_STREAM` is meaningful internally (monotonic write counter) but is not the concurrency unit — the tag-filter check is.
+### 1. DCB events land in `?DCB_STREAM` pseudo-stream
+
+All DCB events land in one stream named `?DCB_STREAM` = `<<"_dcb">>`. Per-event identity is the global `sequence_number`. Stream version on `?DCB_STREAM` is meaningful internally (monotonic write counter) but is not the concurrency unit — the tag-filter check is.
 
 | Pro | Con |
 |-----|-----|
@@ -77,6 +96,37 @@ Three alternatives were considered (see `PLAN_FUTURE_RESEARCH.md` § Coexistence
 | Easy to identify DCB events in operator tools (filter by stream) | Future partitioning means revisiting the constant |
 
 Justification for accepting the throughput cap: DCB targets cross-cutting decisions (uniqueness, allocation, idempotency) which are typically lower-volume than per-aggregate flows. Per-aggregate flows stay on per-stream Ra groups (unchanged). If DCB write volume ever approaches the single-stream ceiling, we partition; that's a v2 problem.
+
+### 2. Tag index as Khepri path structure under `/by_tag/`
+
+Every DCB event with `tags = [T1, T2, ..., Tn]` and `sequence_number = Seq` writes:
+
+```
+/events/_dcb/<zero-padded-seq>      →  full event payload
+/by_tag/T1/<zero-padded-seq>        →  #{}    (empty marker, just for path existence)
+/by_tag/T2/<zero-padded-seq>        →  #{}
+...
+/by_tag/Tn/<zero-padded-seq>        →  #{}
+```
+
+All N+1 path writes happen inside the same `khepri:transaction`, so they're atomic with the event append.
+
+**Zero-padded seq** (e.g., 20 hex digits) gives lexicographic ordering equivalent to numeric ordering — required so that subtree iteration over `/by_tag/{tag}/` returns events in seq order, and so that "seq > N" can be a prefix-comparison filter.
+
+**Bounded scan** for tag-filter check inside the transaction:
+- `{any_of, [T1, T2]}`: N subtree scans, one per tag, union the results
+- `{all_of, [T1, T2]}`: scan the smallest-cardinality tag's subtree, intersect against the others
+- `{and_, ...}` / `{or_, ...}`: recursive composition
+
+**Storage cost**: one tree node per (event × tag). For typical DCB workloads (uniqueness checks with 1-2 tags per event), the index is ~1-2× the event count in tree nodes, which is acceptable. Empty payload (`#{}`) keeps the per-node memory minimal.
+
+**Tag-index is forward-only**: existing aggregate-style events (not appended via DCB primitive) do NOT get `/by_tag/` mirror entries. They remain queryable via the old `read_by_tags` (full scan + filter) but are NOT visible to the DCB consistency check. This is acceptable because DCB consistency is meaningful only across DCB-appended events; Dossier-stream events live in a different consistency universe.
+
+**Note**: This index also makes the existing `read_by_tags` fast for DCB events. The old full-scan path stays as a fallback for cross-stream queries that need to see Dossier events too. Optimizing the general `read_by_tags` to use `/by_tag/` for all events is a follow-on (would need backfill).
+
+### Khepri version requirement
+
+`khepri:transaction/2`, `khepri_tx:get_many/2`, `khepri_tx:put/2`, `khepri_tx:abort/1` are required. Confirmed available in Khepri 0.11+. Verify `rebar.config` pin matches.
 
 ---
 
@@ -105,23 +155,167 @@ Each phase is one PR. Phases are sequential (later depends on earlier).
 
 | # | Layer | Scope | Repo | Estimate |
 |---|-------|-------|------|----------|
-| **P3.1** | Storage | Khepri command + behaviour callback + facade function | `reckon-db` | 2-3 days |
-| **P3.2** | Storage | Unit + integration tests (concurrent contention, large scans, edge cases) | `reckon-db` | 2 days |
+| **P3.0** | Spike | Verify `khepri:transaction/2` semantics with throwaway test; confirm Khepri version pin | `reckon-db` | 0.5 day |
+| **P3.1a** | Storage | Path helpers + `?DCB_STREAM_PATH` / `?BY_TAG_PATH` constants + zero-padded seq formatting | `reckon-db` | 0.5 day |
+| **P3.1b** | Storage | Tag-filter evaluation inside transactions (any_of, all_of, and_, or_) | `reckon-db` | 1 day |
+| **P3.1c** | Storage | `append_if_no_tag_matches/5` as a `khepri:transaction` body — reads `/by_tag/` subtrees, scans for seq > cutoff, atomically writes event + tag-index entries OR aborts | `reckon-db` | 1.5 days |
+| **P3.1d** | Storage | Behaviour callback in `reckon_db_log_backend` + facade in `reckon_db` / `reckon_db_streams` | `reckon-db` | 0.5 day |
+| **P3.1e** | Storage | Decide + document tag-index forward-only policy; add CHANGELOG entry | `reckon-db` | 0.25 day |
+| **P3.2** | Storage | Unit + integration tests (concurrent contention, large scans, edge cases, transaction-replay determinism) | `reckon-db` | 2 days |
 | **P3.3** | Wire | `reckon-gater` types + verb | `reckon-gater` | 1 day |
-| **P3.4** | Wire | `reckon-gater` gateway worker dispatch | `reckon-db` | 1 day |
+| **P3.4** | Wire | `reckon-db` gateway worker dispatch | `reckon-db` | 1 day |
 | **P3.5** | Adapter | `reckon-evoq` passthrough | `reckon-evoq` | 0.5 day |
 | **P3.6** | Framework | `evoq_decision` behaviour + runtime | `evoq` | 3 days |
 | **P3.7** | Framework | `evoq_decision` tests (property-based, concurrent contention) | `evoq` | 2 days |
 | **P3.8** | Example | Reference example: `examples/dcb_counter` | `hecate-corpus` | 1 day |
 | **P3.9** | Docs | Flip `CONSISTENCY_BOUNDARIES.md` "Decision" entry from reserved → active; update CODEX.md cornerstone chapter; update GLOSSARY | `hecate-corpus` | 0.5 day |
 
-**Total estimate:** ~12 working days for one person. ~3 weeks calendar with reviews + integration.
+**Total estimate:** ~14.75 working days for one person. ~3-4 weeks calendar with reviews + integration.
+
+P3.1a–e are all in `reckon-db`. They can be one PR or split — recommended split is `{P3.0, P3.1a, P3.1b}` as PR-1 (foundations), `{P3.1c, P3.1d, P3.1e, P3.2}` as PR-2 (the primitive + tests). Two PRs total for the reckon-db side.
 
 ---
 
 ## P3.1 — reckon-db: storage primitive
 
-### Behaviour callback addition
+Implemented as a `khepri:transaction/2` body (no custom Ra machine command). The transaction reads `/by_tag/{tag}/` subtrees, filters by seq > cutoff, and either appends the event + tag-index entries OR aborts with `{context_changed, MaxSeq}`. All N+1 writes (1 event + N tag-index entries) happen atomically inside the same transaction.
+
+### Path helpers + constants (P3.1a)
+
+`include/reckon_db_internal.hrl`:
+
+```erlang
+-define(DCB_STREAM,        <<"_dcb">>).
+-define(DCB_STREAM_PATH,   [events, ?DCB_STREAM]).
+-define(BY_TAG_PATH,       [by_tag]).
+-define(SEQ_KEY_WIDTH,     20).
+```
+
+Helpers in `src/reckon_db_dcb_paths.erl` (new file):
+
+```erlang
+-spec event_path(non_neg_integer()) -> [term()].
+event_path(Seq) -> ?DCB_STREAM_PATH ++ [seq_key(Seq)].
+
+-spec by_tag_path(binary(), non_neg_integer()) -> [term()].
+by_tag_path(Tag, Seq) -> ?BY_TAG_PATH ++ [Tag, seq_key(Seq)].
+
+-spec by_tag_pattern(binary()) -> [term()].
+by_tag_pattern(Tag) -> ?BY_TAG_PATH ++ [Tag, ?KHEPRI_WILDCARD_STAR].
+
+-spec seq_key(non_neg_integer()) -> binary().
+seq_key(Seq) ->
+    iolist_to_binary(io_lib:format("~*.16.0B", [?SEQ_KEY_WIDTH, Seq])).
+
+-spec seq_from_key(binary()) -> non_neg_integer().
+seq_from_key(Bin) -> binary_to_integer(Bin, 16).
+```
+
+Zero-padded uppercase-hex format gives lexicographic == numeric ordering, so subtree iteration returns events in seq order.
+
+### Tag-filter evaluation inside transactions (P3.1b)
+
+`src/reckon_db_dcb_filter.erl` (new file). Pure functions only — transaction-safe.
+
+```erlang
+-spec match_any_above_cutoff(
+    reckon_gater_types:tag_filter(),
+    non_neg_integer()
+) -> {true, MaxSeq :: non_neg_integer()} | false.
+match_any_above_cutoff({any_of, Tags}, Cutoff) ->
+    Seqs = lists:flatmap(fun seqs_for_tag/1, Tags),
+    Hits = [S || S <- Seqs, S > Cutoff],
+    case Hits of
+        []   -> false;
+        _    -> {true, lists:max(Hits)}
+    end;
+match_any_above_cutoff({all_of, Tags}, Cutoff) ->
+    [HeadTag | RestTags] = Tags,
+    HeadSet = sets:from_list(seqs_for_tag(HeadTag)),
+    Intersection = lists:foldl(
+        fun(T, Acc) -> sets:intersection(Acc, sets:from_list(seqs_for_tag(T))) end,
+        HeadSet, RestTags),
+    Above = [S || S <- sets:to_list(Intersection), S > Cutoff],
+    case Above of
+        []   -> false;
+        _    -> {true, lists:max(Above)}
+    end;
+match_any_above_cutoff({and_, Filters}, Cutoff) ->
+    Results = [match_any_above_cutoff(F, Cutoff) || F <- Filters],
+    case lists:all(fun(R) -> R =/= false end, Results) of
+        true  -> {true, lists:max([M || {true, M} <- Results])};
+        false -> false
+    end;
+match_any_above_cutoff({or_, Filters}, Cutoff) ->
+    Results = [match_any_above_cutoff(F, Cutoff) || F <- Filters],
+    case [M || {true, M} <- Results] of
+        []   -> false;
+        Hits -> {true, lists:max(Hits)}
+    end.
+
+%% Reads the tag-index subtree for one tag. Called from inside a
+%% khepri transaction so the read is consistent with the conditional append.
+-spec seqs_for_tag(binary()) -> [non_neg_integer()].
+seqs_for_tag(Tag) ->
+    Pattern = reckon_db_dcb_paths:by_tag_pattern(Tag),
+    {ok, Map} = khepri_tx:get_many(Pattern),
+    [reckon_db_dcb_paths:seq_from_key(SeqKey)
+     || [_, _, SeqKey] <- maps:keys(Map)].
+```
+
+No message-sending, no ETS, no I/O. `khepri_tx:get_many/1` is whitelisted inside transactions.
+
+### The transaction body (P3.1c)
+
+`src/reckon_db_dcb.erl` (new file):
+
+```erlang
+-spec append_if_no_tag_matches(
+    StoreId   :: binary(),
+    TagFilter :: reckon_gater_types:tag_filter(),
+    SeqCutoff :: non_neg_integer(),
+    Events    :: [new_event()]
+) -> {ok, NewVersion :: non_neg_integer()}
+   | {error, {context_changed, non_neg_integer()}}
+   | {error, term()}.
+append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events) ->
+    khepri:transaction(
+        StoreId,
+        fun() ->
+            case reckon_db_dcb_filter:match_any_above_cutoff(TagFilter, SeqCutoff) of
+                {true, MaxSeq} ->
+                    khepri_tx:abort({context_changed, MaxSeq});
+                false ->
+                    {ok, BaseSeq} = next_dcb_seq(),
+                    lists:foldl(
+                        fun(Event, Seq) ->
+                            ok = write_event_with_tag_index(Event, Seq),
+                            Seq + 1
+                        end,
+                        BaseSeq, Events),
+                    NewVersion = BaseSeq + length(Events) - 1,
+                    {ok, NewVersion}
+            end
+        end).
+
+%% Inside the transaction. Writes the event + one /by_tag/T/Seq entry per tag.
+write_event_with_tag_index(Event, Seq) ->
+    EventPayload = stamp_event(Event, Seq),
+    Tags = maps:get(tags, Event, []),
+    ok = khepri_tx:put(reckon_db_dcb_paths:event_path(Seq), EventPayload),
+    lists:foreach(
+        fun(Tag) ->
+            ok = khepri_tx:put(reckon_db_dcb_paths:by_tag_path(Tag, Seq), #{})
+        end,
+        Tags),
+    ok.
+
+%% Read current head of ?DCB_STREAM_PATH inside the transaction.
+%% Implementation detail deferred to P3.1c; perf-tune later.
+next_dcb_seq() -> ...
+```
+
+### Behaviour callback addition (P3.1d)
 
 `src/reckon_db_log_backend.erl`:
 
@@ -150,34 +344,9 @@ Each phase is one PR. Phases are sequential (later depends on earlier).
 
 Add to `-optional_callbacks/1`. Backends that don't implement it return `{error, not_supported}` via a default.
 
-### Khepri command
+### Facade (P3.1d cont'd)
 
-`src/reckon_db_dcb_command.erl` (new file). Custom Ra/Khepri command:
-
-```erlang
-%% Command shape (binary-tagged record passed to Khepri state machine):
-%%   {append_if_no_tag_matches, StoreId, TagFilter, SeqCutoff, Events}
-%%
-%% State machine apply:
-%%   1. Use the existing tag index to enumerate events matching TagFilter
-%%   2. Filter to events with sequence_number > SeqCutoff
-%%   3. If non-empty:
-%%        max_seq = max of matching sequence numbers
-%%        return {error, {context_changed, max_seq}}
-%%      else:
-%%        for each Event in Events:
-%%          assign new sequence_number = global_seq_counter++
-%%          set stream_id = ?DCB_STREAM
-%%          set stream_version = next ?DCB_STREAM version
-%%          insert into log + tag index
-%%        return {ok, NewStreamVersion}
-```
-
-The scan in step 1 MUST be bounded by the tag index — never a full log scan. Phase 1's tag index supports this (key → event_ids).
-
-### Facade
-
-`src/reckon_db.erl` (or `src/reckon_db_streams.erl`):
+`src/reckon_db_streams.erl` (matches existing convention — `read_by_tags` lives there):
 
 ```erlang
 -spec append_if_no_tag_matches(
@@ -187,22 +356,21 @@ The scan in step 1 MUST be bounded by the tag index — never a full log scan. P
     Events    :: [new_event()]
 ) -> {ok, version()} | {error, term()}.
 append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events) ->
-    %% delegate to backend via gateway worker
     reckon_db_gateway:call(StoreId,
         {append_if_no_tag_matches, StoreId, TagFilter, SeqCutoff, Events}).
 ```
 
-### Constants
+### Policy: tag-index is forward-only (P3.1e)
 
-`include/reckon_db_internal.hrl`:
+Existing aggregate-stream events (appended before P3.1 ships) do NOT receive `/by_tag/` mirror entries. They remain queryable via the old `read_by_tags` (full scan + filter) but are NOT visible to the DCB consistency check.
 
-```erlang
--define(DCB_STREAM, <<"_dcb">>).
-```
+This is correct for DCB because consistency only makes sense over the DCB event set. Cross-mode reads (general analytics over BOTH Dossier events and DCB events) continue to work via the existing full-scan `read_by_tags`.
+
+Documented in `CHANGELOG.md` + `philosophy/CONSISTENCY_BOUNDARIES.md` discrimination rule (P3.9).
 
 ### Errors
 
-New error class: `{context_changed, MaxSeq}`. Document in CHANGELOG and ANTIPATTERNS_EVENT_SOURCING (the cure for unbounded retries on context_changed: bounded retry budget + jitter, or rethrow).
+New error class: `{context_changed, MaxSeq :: non_neg_integer()}`. The `evoq_decision_runtime` (P3.6) catches and retries with backoff + jitter, bounded by `retry_budget/0`. Document in CHANGELOG and as a note in `skills/antipatterns/event_sourcing.md` ("unbounded retry on context_changed is the cardinal sin of DCB users; always use a bounded retry budget").
 
 ---
 
@@ -458,23 +626,25 @@ Hex publish order: reckon-db → reckon-gater → reckon-evoq → evoq → refer
 
 ## Performance considerations
 
-Critical hot path: the tag-filter scan inside the Khepri apply function.
+Critical hot path: the tag-filter scan inside the `khepri:transaction/2` body. The transaction executes on every Ra cluster member identically (deterministic-replay requirement); slow transaction bodies block consensus on the leader and slow apply on followers.
 
 **Concerns:**
-- Scan cost is O(matching_events) where "matching" is bounded by the tag index
-- Under heavy DCB write contention, the leader's apply queue can grow
-- The single `?DCB_STREAM` is a serialization point — all DCB writes synchronize through one Ra consensus group
+- Scan cost is O(matching_events) per tag, bounded by subtree size at `/by_tag/{tag}/`. Whole-tag cardinality matters, not whole-store cardinality.
+- Under heavy DCB write contention, transaction bodies serialize through Ra consensus on `?DCB_STREAM`'s consensus group.
+- The single `?DCB_STREAM` is a serialization point — all DCB writes synchronize through one Ra consensus group.
+- `khepri_tx:get_many/1` materializes the matching subtree as a map; large subtrees → memory pressure inside the transaction.
 
 **Mitigations:**
-- Bound scan by `SeqCutoff` — caller passes a recent sequence number, scan only events after it
-- Document expected SeqCutoff selection (typically: "max seq at read time")
-- Index keying: tag → list of event_ids (or sorted set keyed by sequence_number for efficient cutoff filtering)
-- Benchmark and document the throughput ceiling clearly
+- Bound scan by `SeqCutoff` — caller passes a recent sequence number; the filter function discards seqs ≤ Cutoff before materializing the result. Combined with zero-padded seq keys, this is a lexicographic range filter on the subtree.
+- Document expected SeqCutoff selection (typically: "max seq at read time", captured by `evoq_decision_runtime` before reading context).
+- Avoid hot tags. If one tag (e.g., a tenant-wide rate-limit key) accumulates millions of events, the scan grows linearly. Use compound tags or sharded tags at the application layer.
+- Benchmark and document the throughput ceiling clearly. Recommend `evoq_decision`'s retry budget defaults match measured contention rates.
 
 **Acceptance threshold for v1:**
-- 10k DCB appends/sec sustained on the reference 3-node cluster
+- 10k DCB appends/sec sustained on the reference 3-node cluster (per-tag cardinality ≤ 1k)
 - p99 latency under 100ms with 100 concurrent contenders on the same context
 - No leader crashes under sustained load (24h soak test)
+- Transaction-body memory footprint per call bounded ≤ 10MB at 10k matching tag entries
 
 ---
 
@@ -488,17 +658,21 @@ Rollback: if Phase 3 ships and we find a deal-breaker in production, the storage
 
 ## Open questions
 
-1. **`OR_` filter scan semantics.** A `{or_, [F1, F2]}` filter inside `append_if_no_tag_matches` could be implemented as union of matches. Performance: two index lookups, deduplicate. Defer to P3.1 implementation; benchmark later.
+1. **`OR_` and `AND_` filter scan semantics** — resolved by P3.1b's `match_any_above_cutoff/2` recursive composition. `any_of` unions tag subtrees; `all_of` intersects them; `or_`/`and_` compose recursively. No separate v2 design needed.
 
-2. **Cutoff semantics for empty stores.** `SeqCutoff = 0` on an empty store should be valid (no events match, append succeeds). Test in P3.2.
+2. **`next_dcb_seq/0` implementation.** Inside the transaction, we need the next-to-assign seq. Two options: (a) count children of `?DCB_STREAM_PATH` (O(stream-size), slow); (b) maintain a counter node at `/_dcb_seq` updated atomically with each append (O(1)). Decision: option (b). Document in P3.1c.
 
-3. **Should DCB events appear in `read_all_global`?** Yes — they're real events. They appear in the global log alongside Dossier events. Document this in the example narrative.
+3. **Cutoff semantics for empty stores.** `SeqCutoff = 0` on an empty store should be valid (no events match, append succeeds). Test in P3.2.
 
-4. **Snapshot story for `?DCB_STREAM`.** No snapshotting in v1. Phase 1 + 2 read APIs don't snapshot either. Aggregate snapshotting doesn't apply.
+4. **Should DCB events appear in `read_all_global`?** Yes — they're real events under `?DCB_STREAM_PATH`. They appear in the global log alongside Dossier events. Document in the example narrative.
 
-5. **`evoq_decision` and process managers.** Can a PM dispatch a Decision? Yes — same as dispatching a Command. The PM's `dispatch` call routes through `evoq_decision_runtime:dispatch/2` instead of `evoq_dispatcher`. Document in P3.6.
+5. **Snapshot story for `?DCB_STREAM`.** No snapshotting in v1. Phase 1 + 2 read APIs don't snapshot either. Aggregate snapshotting doesn't apply.
 
-6. **Decision-side replay.** When replaying events for analytics or rebuilding projections, DCB events flow through the same triggers as Dossier events. No special handling needed.
+6. **`evoq_decision` and process managers.** Can a PM dispatch a Decision? Yes — same as dispatching a Command. The PM's `dispatch` call routes through `evoq_decision_runtime:dispatch/2` instead of `evoq_dispatcher`. Document in P3.6.
+
+7. **Decision-side replay.** When replaying events for analytics or rebuilding projections, DCB events flow through the same triggers as Dossier events. No special handling needed.
+
+8. **`khepri_tx` whitelist.** The implementation relies on `khepri_tx:get_many/1`, `khepri_tx:put/2`, `khepri_tx:abort/1`, plus `sets:from_list/1`, `sets:intersection/2`, `sets:to_list/1`, `lists:max/1`, `lists:flatmap/2`, `lists:foldl/3`, `lists:foreach/2`, `maps:keys/1`, `maps:get/2,3`, `binary_to_integer/2`, `io_lib:format/2`, `iolist_to_binary/1`. Verify all are inside Khepri's transaction whitelist during P3.0 spike. If any aren't, push them outside the transaction (preprocess in the facade).
 
 ---
 
@@ -515,13 +689,15 @@ Rollback: if Phase 3 ships and we find a deal-breaker in production, the storage
 
 ## Ready-to-cut checklist
 
-Before starting P3.1, confirm:
+Spike findings already resolve some original items. Updated list:
 
-- [ ] reckon-db tag index supports range scan by `sequence_number > N` (Phase 1 may or may not — verify)
-- [ ] Khepri version supports custom commands of the shape we need (Khepri 0.x machines yes)
+- [x] ~~reckon-db tag index supports range scan by `sequence_number > N`~~ — **CONFIRMED: it does not exist.** Tag index is the FIRST thing P3.1a/b builds (path structure under `/by_tag/`). The plan adapts accordingly.
+- [x] ~~Khepri version supports custom commands~~ — **NOT NEEDED.** Implementation uses `khepri:transaction/2`, not a custom Ra machine command. Required Khepri functions: `transaction/2`, `khepri_tx:get_many/1`, `khepri_tx:put/2`, `khepri_tx:abort/1` — all available in Khepri 0.11+. **Pre-flight P3.0: verify the version pin in `rebar.config` matches.**
+- [ ] **P3.0 spike**: write a throwaway test that runs `khepri:transaction/2` with `khepri_tx:get_many/1` + conditional `khepri_tx:put/2` + `khepri_tx:abort/1`. Confirm semantics: abort rolls back, conditional path executes atomically, BIF whitelist accepts our planned helper modules.
 - [ ] CHANGELOG conventions allow multi-PR feature work (yes, per existing CHANGELOG)
 - [ ] Hex publish credentials current (`mix hex.user whoami` / `rebar3 hex user whoami`)
-- [ ] No outstanding `reckon-db` PRs touching `reckon_db_log_backend.erl` (check `git log -- src/reckon_db_log_backend.erl`)
+- [ ] No outstanding `reckon-db` PRs touching `reckon_db_log_backend.erl` or `reckon_db_streams.erl` (check `git log` since last release)
+- [ ] No `?KHEPRI_WILDCARD_STAR` / `?KHEPRI_WILDCARD_STAR_STAR` import conflicts in existing reckon-db modules
 
 ---
 
