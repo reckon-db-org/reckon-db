@@ -91,14 +91,33 @@ reckon-db 3.1.0 can be cleanly hex-published. For local development,
 add `_checkouts/reckon_gater` symlinked to the local reckon-gater
 checkout (gitignored, so this is per-developer setup).
 
-### Notes — DCB v1 limitations
+### Added — DCB integrity (HMAC chain for DCB events)
 
-**Integrity** (HMAC chain) is NOT yet implemented for DCB events. On
-stores with integrity disabled (the default), DCB events have the same
-tamper exposure as aggregate events — no new gap. On stores with
-integrity *enabled*, `append_if_no_tag_matches/4` fail-closes with
-`{error, integrity_not_supported_in_dcb_v1}` to prevent silent tamper
-exposure. Full HMAC-chain support for DCB events is a v2 follow-up.
+DCB events on integrity-enabled stores now carry `prev_event_hash` +
+`mac` and link into a per-store DCB chain rooted at the genesis hash.
+The fail-closed safety check (`{error, integrity_not_supported_in_dcb_v1}`)
+is replaced with real integrity support. Tampering with stored DCB
+events is detectable via the existing `reckon_gater_integrity:verify_event/3`
+read-path.
+
+**Implementation note:** Khepri's Horus extractor rejects code that
+contains `crypto:*` calls (build_stacktrace instructions in
+surrounding error handling). MAC chains are therefore pre-computed
+OUTSIDE the `khepri:transaction/2` body, with the transaction
+verifying the chain-tip + counter are still what the caller observed.
+Two retry vectors:
+
+  - `{context_changed, _}` — tag-filter conflict (existing)
+  - `{dcb_state_changed, _}` — counter or chain-tip moved between
+    snapshot and tx; retry handled internally with budget
+    `?INTEGRITY_RETRY_BUDGET` (5). Exceeded → `{error, dcb_concurrent_writer_exhausted}`.
+
+**New macro** `?DCB_CHAIN_TIP_PATH = [metadata, dcb, chain_tip]` holds
+the chain-hash of the last DCB event written under integrity. Absent
+path = no integrity-bearing DCB events yet; next write uses
+`reckon_gater_integrity:genesis_prev_hash()`.
+
+### Notes — DCB v1 limitations remaining
 
 **Tag index is forward-only**: events written before this release do
 NOT have `/by_tag/{Tag}/{SeqKey}` mirror entries. They remain

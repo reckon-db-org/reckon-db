@@ -46,6 +46,14 @@
 %% transactions. Holds the LAST-ASSIGNED seq (or absent if no DCB
 %% events yet).
 -define(DCB_SEQ_COUNTER_PATH, [metadata, dcb, last_seq]).
+
+%% Integrity chain tip for the DCB pseudo-stream. Binary (32 bytes,
+%% SHA-256) — the chain-hash of the last DCB event written under an
+%% integrity-enabled store. The next integrity-bearing DCB event uses
+%% this as its prev_event_hash. Updated atomically with the seq
+%% counter inside the conditional-append transaction. Absent path =
+%% no integrity-bearing DCB events yet; use genesis_prev_hash.
+-define(DCB_CHAIN_TIP_PATH, [metadata, dcb, chain_tip]).
 %% Fixed-width zero-padded DECIMAL keys so lexicographic order == numeric
 %% order for subtree iteration. 20 digits covers up to 10^20 events.
 %% Matches the existing pad_version convention in reckon_db_snapshots_store.

@@ -29,7 +29,10 @@
     empty_events_rejected/1,
     tag_index_entries_written/1,
     dcb_events_use_streams_path/1,
-    integrity_enabled_rejected/1,
+    integrity_on_dcb_stamps_event/1,
+    integrity_on_multi_event_batch_chain_links/1,
+    integrity_on_consecutive_writes_extend_chain/1,
+    integrity_on_tampering_detected_on_verify/1,
     facade_routes_to_dcb_module/1,
     cutoff_minus_one_for_empty_initial_state/1,
     concurrent_uniqueness_only_one_wins/1,
@@ -46,7 +49,10 @@ all() ->
      empty_events_rejected,
      tag_index_entries_written,
      dcb_events_use_streams_path,
-     integrity_enabled_rejected,
+     integrity_on_dcb_stamps_event,
+     integrity_on_multi_event_batch_chain_links,
+     integrity_on_consecutive_writes_extend_chain,
+     integrity_on_tampering_detected_on_verify,
      facade_routes_to_dcb_module,
      cutoff_minus_one_for_empty_initial_state,
      concurrent_uniqueness_only_one_wins,
@@ -255,24 +261,108 @@ dcb_events_use_streams_path(Config) ->
     {ok, _} = khepri:get(StoreId, Path),
     ok.
 
-integrity_enabled_rejected(Config) ->
-    %% v1 fail-closed safety check. DCB v1 ships without HMAC chain;
-    %% on integrity-enabled stores it would create a silent tamper-
-    %% detection gap. Refuse with an explicit error instead.
+integrity_on_dcb_stamps_event(Config) ->
+    %% v2 (reckon-db 3.2.0+): DCB writes succeed on integrity-on stores
+    %% AND the stored event carries prev_event_hash + mac.
     StoreId = ?config(store_id, Config),
-    %% Simulate integrity-on by setting the persistent_term flag directly
-    %% (the integrity_key module's standard mechanism).
-    persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
+    enable_integrity(StoreId),
     try
-        Event = #{event_type => <<"e">>, data => #{}},
-        ?assertEqual(
-            {error, integrity_not_supported_in_dcb_v1},
-            reckon_db_dcb:append_if_no_tag_matches(
-                StoreId, {any_of, [<<"never">>]}, 0, [Event])),
-        %% Nothing written: counter still absent.
-        ?assertMatch({error, _}, khepri:get(StoreId, ?DCB_SEQ_COUNTER_PATH))
+        Event = #{event_type => <<"e">>, data => #{x => 1}, tags => [<<"t">>]},
+        {ok, 0} = reckon_db_dcb:append_if_no_tag_matches(
+                    StoreId, {any_of, [<<"never">>]}, -1, [Event]),
+        {ok, Stored} = khepri:get(StoreId, reckon_db_dcb_paths:event_path(0)),
+        %% First event uses genesis as prev_event_hash.
+        Genesis = reckon_gater_integrity:genesis_prev_hash(),
+        ?assertEqual(Genesis, Stored#event.prev_event_hash),
+        %% MAC is populated as {KeyId, Bytes}.
+        ?assertMatch({_KeyId, MacBytes} when is_binary(MacBytes),
+                     Stored#event.mac),
+        %% Chain tip persisted.
+        {ok, Tip} = khepri:get(StoreId, ?DCB_CHAIN_TIP_PATH),
+        ?assert(is_binary(Tip)),
+        ?assertEqual(32, byte_size(Tip))
     after
-        persistent_term:erase({reckon_db, integrity_enabled, StoreId})
+        disable_integrity(StoreId)
+    end.
+
+integrity_on_multi_event_batch_chain_links(Config) ->
+    %% Three events in one batch. Each event's prev_event_hash equals
+    %% the chain-hash of the previous event in the batch.
+    StoreId = ?config(store_id, Config),
+    enable_integrity(StoreId),
+    try
+        E = fun(N) -> #{event_type => <<"e">>, data => #{n => N},
+                        tags => [<<"t">>]} end,
+        {ok, 2} = reckon_db_dcb:append_if_no_tag_matches(
+                    StoreId, {any_of, [<<"never">>]}, -1, [E(1), E(2), E(3)]),
+        {ok, E0} = khepri:get(StoreId, reckon_db_dcb_paths:event_path(0)),
+        {ok, E1} = khepri:get(StoreId, reckon_db_dcb_paths:event_path(1)),
+        {ok, E2} = khepri:get(StoreId, reckon_db_dcb_paths:event_path(2)),
+        %% Event 0: prev_event_hash is genesis.
+        ?assertEqual(reckon_gater_integrity:genesis_prev_hash(),
+                     E0#event.prev_event_hash),
+        %% Event 1: prev_event_hash is chain_hash(E0).
+        Tip0 = reckon_gater_integrity:compute_chain_hash(
+                 E0, E0#event.prev_event_hash),
+        ?assertEqual(Tip0, E1#event.prev_event_hash),
+        %% Event 2: prev_event_hash is chain_hash(E1).
+        Tip1 = reckon_gater_integrity:compute_chain_hash(
+                 E1, E1#event.prev_event_hash),
+        ?assertEqual(Tip1, E2#event.prev_event_hash)
+    after
+        disable_integrity(StoreId)
+    end.
+
+integrity_on_consecutive_writes_extend_chain(Config) ->
+    %% Two separate writes (not one batch). The second write's first
+    %% event chains off the first write's last event.
+    StoreId = ?config(store_id, Config),
+    enable_integrity(StoreId),
+    try
+        E = fun(N) -> #{event_type => <<"e">>, data => #{n => N},
+                        tags => [<<"t">>]} end,
+        {ok, 0} = reckon_db_dcb:append_if_no_tag_matches(
+                    StoreId, {any_of, [<<"never">>]}, -1, [E(1)]),
+        %% Cutoff for the second write: -1 still works since the filter
+        %% looks for a different (never-matching) tag in our case.
+        {ok, 1} = reckon_db_dcb:append_if_no_tag_matches(
+                    StoreId, {any_of, [<<"also_never">>]}, -1, [E(2)]),
+        {ok, E0} = khepri:get(StoreId, reckon_db_dcb_paths:event_path(0)),
+        {ok, E1} = khepri:get(StoreId, reckon_db_dcb_paths:event_path(1)),
+        %% E1's prev_event_hash is chain_hash(E0).
+        Tip0 = reckon_gater_integrity:compute_chain_hash(
+                 E0, E0#event.prev_event_hash),
+        ?assertEqual(Tip0, E1#event.prev_event_hash)
+    after
+        disable_integrity(StoreId)
+    end.
+
+integrity_on_tampering_detected_on_verify(Config) ->
+    %% Write a DCB event with integrity. Tamper with its data via a
+    %% direct Khepri put. verify_event_mac on the tampered record must
+    %% return a violation.
+    StoreId = ?config(store_id, Config),
+    enable_integrity(StoreId),
+    try
+        Original = #{event_type => <<"e">>, data => #{secret => <<"keep">>},
+                     tags => [<<"t">>]},
+        {ok, 0} = reckon_db_dcb:append_if_no_tag_matches(
+                    StoreId, {any_of, [<<"never">>]}, -1, [Original]),
+        {ok, Stored} = khepri:get(StoreId, reckon_db_dcb_paths:event_path(0)),
+        Key = reckon_db_integrity_key:get(StoreId),
+        Genesis = reckon_gater_integrity:genesis_prev_hash(),
+        %% Sanity: the stored event verifies cleanly via the public API.
+        ?assertEqual(ok,
+            reckon_gater_integrity:verify_event(Stored, Genesis, Key)),
+        %% Tamper: overwrite the data field directly via Khepri.
+        Tampered = Stored#event{data = #{secret => <<"leak">>}},
+        ok = khepri:put(StoreId, reckon_db_dcb_paths:event_path(0), Tampered),
+        %% Re-read and verify — MUST detect the tampering.
+        {ok, Reloaded} = khepri:get(StoreId, reckon_db_dcb_paths:event_path(0)),
+        Result = reckon_gater_integrity:verify_event(Reloaded, Genesis, Key),
+        ?assertNotEqual(ok, Result)
+    after
+        disable_integrity(StoreId)
     end.
 
 facade_routes_to_dcb_module(Config) ->
@@ -390,3 +480,21 @@ collect_worker_results(N, Acc) ->
     after 30000 ->
         ct:fail({worker_timeout, remaining, N})
     end.
+
+%%====================================================================
+%% Integrity test helpers (reckon-db 3.2.0+)
+%%====================================================================
+
+%% Enable integrity on a store with a fresh 32-byte test key.
+%% Cleanup with disable_integrity/1 to avoid leaking persistent_term
+%% entries between tests.
+enable_integrity(StoreId) ->
+    Key = crypto:strong_rand_bytes(32),
+    persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
+    persistent_term:put({reckon_db, integrity_key, StoreId}, Key),
+    ok.
+
+disable_integrity(StoreId) ->
+    persistent_term:erase({reckon_db, integrity_enabled, StoreId}),
+    persistent_term:erase({reckon_db, integrity_key, StoreId}),
+    ok.
