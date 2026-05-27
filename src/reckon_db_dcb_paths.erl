@@ -1,17 +1,17 @@
 %%% @doc DCB Khepri path helpers.
 %%%
-%%% DCB events live under `[events, ?DCB_STREAM]` and are mirrored under
-%%% `[by_tag, Tag, SeqKey]` for every tag they carry. The mirror entries
-%%% are the tag index: a subtree iteration on `[by_tag, Tag, *]` returns
-%%% all seq keys for that tag, lexicographically (== numerically) sorted.
+%%% DCB events live under [events, ?DCB_STREAM] and are mirrored under
+%%% [by_tag, Tag, SeqKey] for every tag they carry. The mirror entries
+%%% are the tag index: a subtree iteration on [by_tag, Tag, *] returns
+%%% all seq keys for that tag, lexicographically (numerically) sorted.
 %%%
 %%% Seq keys are fixed-width zero-padded decimal binaries (see
-%%% `?DCB_SEQ_KEY_WIDTH`), so `lists:max/1` on a list of seq keys returns
-%%% the highest, and `Key > Cutoff` is a lex comparison that matches the
+%%% ?DCB_SEQ_KEY_WIDTH), so lists:max/1 on a list of seq keys returns
+%%% the highest, and Key > Cutoff is a lex comparison that matches the
 %%% numeric comparison.
 %%%
-%%% All functions here are PURE — safe to call from inside a
-%%% `khepri:transaction/2` body.
+%%% All functions here are PURE; safe to call from inside a
+%%% khepri:transaction/2 body.
 %%%
 %%% @end
 -module(reckon_db_dcb_paths).
@@ -40,18 +40,18 @@ by_tag_path(Tag, Seq) when is_binary(Tag), is_integer(Seq), Seq >= 0 ->
     ?BY_TAG_PATH ++ [Tag, seq_key(Seq)].
 
 %% @doc Pattern matching every seq under a tag (subtree wildcard).
-%% Use with `khepri_tx:get_many/1` inside a transaction.
+%% Use with khepri_tx:get_many/1 inside a transaction.
 -spec by_tag_pattern(binary()) -> [term()].
 by_tag_pattern(Tag) when is_binary(Tag) ->
     ?BY_TAG_PATH ++ [Tag, ?KHEPRI_WILDCARD_STAR].
 
 %% @doc Convert a non-negative integer to a fixed-width zero-padded
-%% decimal binary (`?DCB_SEQ_KEY_WIDTH` digits).
+%% decimal binary (?DCB_SEQ_KEY_WIDTH digits).
 %%
 %% Invariants:
-%%   - `byte_size(seq_key(N)) == ?DCB_SEQ_KEY_WIDTH` for all valid N
-%%   - `seq_key(A) =&lt; seq_key(B)` iff `A =&lt; B` (lex == numeric)
-%%   - `seq_from_key(seq_key(N)) == N` (roundtrip)
+%%   - byte_size(seq_key(N)) == ?DCB_SEQ_KEY_WIDTH for all valid N
+%%   - seq_key(A) =&lt; seq_key(B) iff A =&lt; B (lex == numeric)
+%%   - seq_from_key(seq_key(N)) == N (roundtrip)
 -spec seq_key(non_neg_integer()) -> binary().
 seq_key(Seq) when is_integer(Seq), Seq >= 0 ->
     Str = integer_to_list(Seq),

@@ -1,20 +1,20 @@
 %%% @doc DCB tag-filter evaluation inside Khepri transactions.
 %%%
-%%% Evaluates a `tag_filter()` against the tag index (`/by_tag/Tag/SeqKey`
+%%% Evaluates a tag_filter() against the tag index (/by_tag/Tag/SeqKey
 %%% subtree) and returns either the set of matching seqs OR an answer to
-%%% "does any matching event have seq > Cutoff?".
+%%% "does any matching event have seq above Cutoff?".
 %%%
 %%% Two layers:
-%%%   - `match_seqs/2` — pure-by-construction set algebra over seqs. The
+%%%   - match_seqs/2: pure-by-construction set algebra over seqs. The
 %%%     only side effect is the seqs-provider function, which the caller
 %%%     supplies. Test with a hardcoded mock provider.
-%%%   - `match_any_above_cutoff/2` — wraps match_seqs with the cutoff
+%%%   - match_any_above_cutoff/2: wraps match_seqs with the cutoff
 %%%     comparison and the production seqs-provider that reads from
-%%%     Khepri via `khepri_tx:get_many/1`. Must be called from inside a
-%%%     `khepri:transaction/2` body.
+%%%     Khepri via khepri_tx:get_many/1. Must be called from inside a
+%%%     khepri:transaction/2 body.
 %%%
-%%% The `tag_filter()` type is defined here for now. P3.3 will move it
-%%% to `reckon-gater/include/reckon_gater_types.hrl` as the canonical
+%%% The tag_filter() type is defined here for now. P3.3 will move it
+%%% to reckon-gater/include/reckon_gater_types.hrl as the canonical
 %%% home; this module will then re-export from there.
 %%% @end
 -module(reckon_db_dcb_filter).
@@ -35,7 +35,7 @@
 %% Types
 %%====================================================================
 
-%% `tag_filter()` and `seq_cutoff()` are CANONICAL in reckon_gater_types.hrl
+%% tag_filter() and seq_cutoff() are CANONICAL in reckon_gater_types.hrl
 %% (reckon-gater 2.3.0+). Use them via the include; do NOT redefine here.
 
 %% Fetches the seqs indexed under one tag. In production this hits
@@ -95,7 +95,7 @@ match_seqs({and_, [First | Rest]}, Provider) ->
         InitSet, Rest).
 
 %% @doc "Does any matching event have seq > Cutoff?" using the production
-%% Khepri-backed seqs provider. Call from inside `khepri:transaction/2`.
+%% Khepri-backed seqs provider. Call from inside khepri:transaction/2.
 %%
 %% Cutoff = -1 means "I saw nothing yet" — ANY matching event triggers a
 %% conflict. Cutoff = N (>= 0) means "I saw events through seq N" —
@@ -120,9 +120,9 @@ match_any_above_cutoff(Filter, Cutoff, Provider)
     end.
 
 %% @doc The production seqs provider. Reads the tag index inside a
-%% transaction. MUST be called from inside `khepri:transaction/2`.
+%% transaction. MUST be called from inside khepri:transaction/2.
 %%
-%% Returns the list of seqs indexed under `Tag`. Empty list if the tag
+%% Returns the list of seqs indexed under Tag. Empty list if the tag
 %% has no entries (the path doesn't exist).
 -spec seqs_for_tag(binary()) -> [non_neg_integer()].
 seqs_for_tag(Tag) when is_binary(Tag) ->

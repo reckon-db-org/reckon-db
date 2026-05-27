@@ -1,38 +1,38 @@
 %%% @doc DCB conditional-append primitive.
 %%%
-%%% Implements `append_if_no_tag_matches/4` as a `khepri:transaction/2`
+%%% Implements append_if_no_tag_matches/4 as a khepri:transaction/2
 %%% body. The transaction:
 %%%
-%%%   1. Verifies the tag-filter context (`{context_changed, _}` on
+%%%   1. Verifies the tag-filter context ({context_changed, _} on
 %%%      conflict).
 %%%   2. For integrity-enabled stores: verifies the seq counter and
 %%%      chain-tip still match what the caller observed when
 %%%      pre-stamping MACs. On mismatch aborts with
-%%%      `{dcb_state_changed, _}` and the outer loop retries with a
+%%%      {dcb_state_changed, _} and the outer loop retries with a
 %%%      fresh snapshot.
-%%%   3. Writes events under `?DCB_STREAM_PATH ++ [SeqKey]` plus one
-%%%      tag-index entry per tag at `?BY_TAG_PATH ++ [Tag, SeqKey]`.
+%%%   3. Writes events under ?DCB_STREAM_PATH ++ [SeqKey] plus one
+%%%      tag-index entry per tag at ?BY_TAG_PATH ++ [Tag, SeqKey].
 %%%   4. Updates the seq counter (and chain-tip if integrity is
 %%%      enabled).
 %%%
-%%% The whole sequence happens inside one Ra log entry — atomic across
+%%% The whole sequence happens inside one Ra log entry; atomic across
 %%% the cluster. Either everything commits, or an abort comes back
 %%% and nothing changed.
 %%%
 %%% == Integrity (reckon-db 3.2.0+) ==
 %%%
-%%% On integrity-enabled stores, DCB events carry `prev_event_hash` +
-%%% `mac` like any other integrity-bearing event. Because Khepri's
-%%% Horus extractor rejects code containing `crypto:*` calls (even on
-%%% unreachable branches — extraction sees the whole function), MAC
+%%% On integrity-enabled stores, DCB events carry prev_event_hash +
+%%% mac like any other integrity-bearing event. Because Khepri's
+%%% Horus extractor rejects code containing crypto:* calls (even on
+%%% unreachable branches; extraction sees the whole function), MAC
 %%% chains are pre-computed OUTSIDE the transaction. Inside the
 %%% transaction we verify the chain-tip + counter are still what we
 %%% saw, then write the pre-stamped records.
 %%%
 %%% Two retry vectors:
-%%%   - `{context_changed, _}` — tag-filter conflict. Callers (e.g.,
+%%%   - {context_changed, _}: tag-filter conflict. Callers (e.g.,
 %%%     evoq_decision_runtime) retry with fresh context.
-%%%   - `{dcb_state_changed, _}` — counter or chain-tip moved between
+%%%   - {dcb_state_changed, _}: counter or chain-tip moved between
 %%%     our pre-stamp read and the transaction. The retry loop in this
 %%%     module handles it transparently, bounded by
 %%%     ?INTEGRITY_RETRY_BUDGET.
@@ -106,11 +106,11 @@ setup_integrity_ctx(StoreId) ->
         true  -> {enabled, reckon_db_integrity_key:get(StoreId)}
     end.
 
-%% `disabled` snapshot:
+%% disabled snapshot:
 %%   For integrity-off stores. The transaction picks seqs from the
 %%   live counter; no pre-stamp verification needed beyond tag-filter.
 %%
-%% `#{integrity := {enabled, Key}, ...}` snapshot:
+%% #{integrity := {enabled, Key}, ...} snapshot:
 %%   For integrity-on stores. Carries the seq-counter value and
 %%   chain-tip value that the transaction will verify haven't moved.
 take_snapshot(_StoreId, disabled) ->
@@ -139,10 +139,10 @@ take_snapshot(StoreId, {enabled, Key}) ->
 %% Outside transaction: pre-stamp event records
 %%====================================================================
 
-%% Returns `{[{Seq, #event{}}], FinalTip}`.
-%%   - For `disabled` snapshots, Seq is `undefined` (the transaction
+%% Returns {[{Seq, #event{}}], FinalTip}.
+%%   - For disabled snapshots, Seq is undefined (the transaction
 %%     picks the seq from the live counter) and FinalTip is
-%%     `undefined` (no chain to track).
+%%     undefined (no chain to track).
 %%   - For integrity-on snapshots, Seq is pre-assigned, the record
 %%     carries prev_event_hash + mac, and FinalTip is the chain-hash
 %%     of the last event.
@@ -290,7 +290,7 @@ next_base_seq_in_tx() ->
 %% Event record builder
 %%====================================================================
 
-%% Builds a #event{} record. Seq may be `undefined` for the
+%% Builds a #event{} record. Seq may be undefined for the
 %% integrity-off path (the transaction stamps version at write time);
 %% otherwise it's the pre-assigned global DCB seq.
 build_event_record(EventMap, Seq, Now, EpochUs) ->

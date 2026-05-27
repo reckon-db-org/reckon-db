@@ -73,14 +73,15 @@ append(StoreId, StreamId, ExpectedVersion, Events) ->
     append(StoreId, StreamId, ExpectedVersion, Events, #{}).
 
 %% @doc Conditionally append events under the DCB pseudo-stream
-%% (Dynamic Consistency Boundary — Phase 3, 2.4.0+).
+%% (Dynamic Consistency Boundary, Phase 3, 2.4.0+).
 %%
-%% Unlike `append/4,5`, the precondition is NOT a stream-version check;
-%% it's a tag-filter context query. Returns `{error, {context_changed,
-%% MaxSeq}}` when any event matching `TagFilter` has seq > `SeqCutoff`.
+%% Unlike append/4,5, the precondition is NOT a stream-version check;
+%% it is a tag-filter context query. Returns
+%% {error, {context_changed, MaxSeq}} when any event matching
+%% TagFilter has seq above SeqCutoff.
 %%
 %% v1 refuses on stores with integrity enabled (DCB v1 lacks HMAC
-%% chain). Returns `{error, integrity_not_supported_in_dcb_v1}` in
+%% chain). Returns {error, integrity_not_supported_in_dcb_v1} in
 %% that case.
 %%
 %% See: plans/PLAN_DCB_IMPLEMENTATION.md
