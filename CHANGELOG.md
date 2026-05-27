@@ -5,7 +5,30 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.1.1] - 2026-05-27
+
+### Notes — Why 3.1.1 and not 3.1.0
+
+3.1.0 was tagged locally but never published to hex: a parallel docs
+fix shipped after the tag was cut, and the `reckon_gater` constraint
+was tightened to `~> 2.3.0` (only 2.3.x). Both issues are folded into
+3.1.1, paired with `reckon_gater 2.3.1`.
+
+### Changed — `reckon_gater` constraint widened
+
+`rebar.config`: `{reckon_gater, "~> 2.3.0"}` → `{reckon_gater, "~> 2.3"}`.
+Allows coordinated minor-version updates across the stack without
+re-tagging consumers. Per workspace convention (`MEMORY.md`): use
+loose `~> X.Y` constraints; exact-patch pins block coordinated library
+updates.
+
+### Fixed — EDoc-incompatible backticks across DCB modules
+
+DCB module + function `@doc` blocks used markdown-style backticks for
+inline code references, which EDoc's parser rejected with
+`` `-quote ended unexpectedly ``. Replaced with plain text;
+`rebar3 ex_doc` now builds clean. Affects `reckon_db_dcb`,
+`reckon_db_dcb_paths`, `reckon_db_dcb_filter`, `reckon_db_streams`.
 
 ### Added — DCB (Dynamic Consistency Boundary), Phase 3 first slice
 
