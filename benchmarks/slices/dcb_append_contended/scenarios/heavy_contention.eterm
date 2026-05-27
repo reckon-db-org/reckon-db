@@ -1,0 +1,15 @@
+%% Heavy contention — 64 writers on one tag. Stresses the retry
+%% behaviour: most attempts should conflict; the harness's reported
+%% throughput tells us how fast conflict-resolution is.
+%%
+%% The HMAC-chain retry vector (`{dcb_state_changed, _}`) is invisible
+%% to this benchmark unless the store has integrity enabled — by
+%% default it isn't.
+#{
+    store_id            => bench_store,
+    event_size_bytes    => 256,
+    parallelism         => 64,
+    duration_seconds    => 60,
+    measure_max_seconds => 300,
+    tags                => [heavy_contention, dcb, contended]
+}.

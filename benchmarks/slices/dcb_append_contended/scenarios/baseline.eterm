@@ -1,0 +1,17 @@
+%% Baseline contention scenario for DCB writes.
+%%
+%% 16 writers, all racing for the same tag. Mimics the classic
+%% uniqueness pattern (multiple processes trying to register the
+%% same email). Expected outcome: ~1/16 of attempts commit; the
+%% rest see `context_changed`. Aggregate throughput should be HIGHER
+%% than a single-writer scenario because conflicts abort early
+%% without writing, but commit rate is bounded by Ra's serialization
+%% on `?DCB_STREAM`.
+#{
+    store_id            => bench_store,
+    event_size_bytes    => 256,
+    parallelism         => 16,
+    duration_seconds    => 60,
+    measure_max_seconds => 300,
+    tags                => [baseline, dcb, contended, contention]
+}.

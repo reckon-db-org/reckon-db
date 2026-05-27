@@ -1,0 +1,16 @@
+%% Parallel writers, all on UNIQUE tags (no contention).
+%%
+%% Tests the hypothesis that DCB writes scale with concurrency up to
+%% the single-Ra-group bottleneck of `?DCB_STREAM`. Expected outcome:
+%% throughput ramps up to roughly the same ceiling as
+%% `append_single_stream:high_throughput` (both are gated by one
+%% Ra consensus group), but with higher per-call latency due to the
+%% tag-index path-write per event.
+#{
+    store_id            => bench_store,
+    event_size_bytes    => 256,
+    parallelism         => 16,
+    duration_seconds    => 60,
+    measure_max_seconds => 300,
+    tags                => [parallel, dcb, uncontended, scaling]
+}.

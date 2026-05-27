@@ -1,0 +1,10 @@
+%% Quick smoke run — 10 seconds, 4 writers contending. For local
+%% sanity-check; not for performance numbers.
+#{
+    store_id            => bench_store,
+    event_size_bytes    => 256,
+    parallelism         => 4,
+    duration_seconds    => 10,
+    measure_max_seconds => 30,
+    tags                => [smoke, dcb, contended]
+}.

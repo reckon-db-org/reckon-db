@@ -1,0 +1,16 @@
+%% Baseline scenario for DCB uncontended writes.
+%%
+%% One writer, 256-byte payload. Establishes the per-call cost of
+%% `append_if_no_tag_matches/4` with zero contention — the floor
+%% below which DCB writes can't go on this hardware.
+%%
+%% Compare against `append_single_stream:baseline` (same workload
+%% shape, no DCB primitive) to quantify DCB's overhead.
+#{
+    store_id            => bench_store,
+    event_size_bytes    => 256,
+    parallelism         => 1,
+    duration_seconds    => 60,
+    measure_max_seconds => 300,
+    tags                => [baseline, dcb, uncontended, single_writer]
+}.

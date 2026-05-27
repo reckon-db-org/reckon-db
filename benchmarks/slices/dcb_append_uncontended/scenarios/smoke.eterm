@@ -1,0 +1,10 @@
+%% Quick smoke run — 10 seconds, one writer. For local sanity-check
+%% during development, NOT for performance numbers.
+#{
+    store_id            => bench_store,
+    event_size_bytes    => 256,
+    parallelism         => 1,
+    duration_seconds    => 10,
+    measure_max_seconds => 30,
+    tags                => [smoke, dcb, uncontended]
+}.
