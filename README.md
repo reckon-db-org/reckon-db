@@ -16,6 +16,7 @@ reckon-db is an Erlang implementation of a distributed event store designed for:
 ## Features
 
 - Event stream operations (append, read, subscribe) with versioning and optimistic concurrency
+- **Dynamic Consistency Boundary (DCB)** — conditional append on a tag-filter context query (see [guides/dcb.md](guides/dcb.md))
 - Persistent subscriptions (stream, event type, pattern, payload matching)
 - Snapshot management for aggregate state
 - Emitter pools for high-throughput event delivery
@@ -99,6 +100,13 @@ reckon_db_streams:list_streams(StoreId) -> {ok, [StreamId]} | {error, term()}.
 
 %% Delete stream (soft delete)
 reckon_db_streams:delete(StoreId, StreamId) -> ok | {error, term()}.
+
+%% Conditional append for Dynamic Consistency Boundary (DCB).
+%% Writes Events iff no event matching TagFilter has seq > SeqCutoff.
+%% Use SeqCutoff = -1 to require "no matching event has ever existed".
+%% Full guide: guides/dcb.md
+reckon_db_streams:append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events) ->
+    {ok, LastSeq} | {error, {context_changed, MaxSeq}} | {error, term()}.
 ```
 
 ### Subscriptions
