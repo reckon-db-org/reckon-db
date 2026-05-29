@@ -542,7 +542,7 @@ check_expected_version(ExpectedVersion, CurrentVersion) ->
 
 %% @private
 -spec append_events_to_stream(atom(), binary(), integer(), [new_event()]) ->
-    {ok, non_neg_integer()}.
+    {ok, non_neg_integer()} | {error, term()}.
 append_events_to_stream(StoreId, StreamId, CurrentVersion, Events) ->
     Now = erlang:system_time(millisecond),
     EpochUs = erlang:system_time(microsecond),
@@ -556,22 +556,42 @@ append_events_to_stream(StoreId, StreamId, CurrentVersion, Events) ->
     IntegrityCtx = setup_integrity(StoreId, StreamId, CurrentVersion),
     InitialTip = resolve_initial_tip(StoreId, StreamId, CurrentVersion + 1, IntegrityCtx),
 
-    {FinalVersion, _FinalTip} = lists:foldl(
-        fun(Event, {AccVersion, AccTip}) ->
-            NewVersion = AccVersion + 1,
-            RecordedEvent0 = create_event_record(
-                Event, StreamId, NewVersion, Now, EpochUs),
-            {RecordedEvent, NextTip} = apply_integrity_if_enabled(
-                RecordedEvent0, AccTip, IntegrityCtx),
-            PaddedVersion = pad_version(NewVersion, ?VERSION_PADDING),
-            Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
-            ok = khepri:put(StoreId, Path, RecordedEvent),
-            {NewVersion, NextTip}
-        end,
-        {CurrentVersion, InitialTip},
-        Events
-    ),
-    {ok, FinalVersion}.
+    %% A failed khepri:put — most importantly {error, noproc} while the
+    %% store's Ra server is mid-(re)start — MUST surface as a retriable
+    %% {error, _} return, NOT a hard `ok =` badmatch. The badmatch
+    %% crashed the gateway worker on every transient store-not-ready;
+    %% under a boot-time append (the simulator fires before Ra is
+    %% write-ready) the worker crash-looped past its supervisor's
+    %% restart intensity in under a second, and the cascade tore down
+    %% the entire store subtree (reached_max_restart_intensity) — a
+    %% sub-second readiness gap became a permanent, restart-looping
+    %% outage. reckon-gater treats {error, _} as retriable and the
+    %% append succeeds once Ra is ready.
+    try
+        {FinalVersion, _FinalTip} = lists:foldl(
+            fun(Event, {AccVersion, AccTip}) ->
+                NewVersion = AccVersion + 1,
+                RecordedEvent0 = create_event_record(
+                    Event, StreamId, NewVersion, Now, EpochUs),
+                {RecordedEvent, NextTip} = apply_integrity_if_enabled(
+                    RecordedEvent0, AccTip, IntegrityCtx),
+                PaddedVersion = pad_version(NewVersion, ?VERSION_PADDING),
+                Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
+                case khepri:put(StoreId, Path, RecordedEvent) of
+                    ok ->
+                        {NewVersion, NextTip};
+                    {error, Reason} ->
+                        throw({?MODULE, append_aborted, Reason})
+                end
+            end,
+            {CurrentVersion, InitialTip},
+            Events
+        ),
+        {ok, FinalVersion}
+    catch
+        throw:{?MODULE, append_aborted, Reason} ->
+            {error, Reason}
+    end.
 
 %% @private Tamper-resistance context for a single append batch.
 %%

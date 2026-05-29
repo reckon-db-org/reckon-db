@@ -5,6 +5,32 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.2] - 2026-05-30
+
+### Fixed — Transient store-not-ready crashed the gateway worker into a permanent outage
+
+`reckon_db_streams:append_events_to_stream/4` matched `ok = khepri:put(...)`
+as a hard assertion. When `khepri:put` returned `{error, noproc}` — most
+commonly while the store's Ra server was mid-(re)start — the badmatch
+escaped through `reckon_db_gateway_worker:handle_call/3` and **crashed the
+gateway worker**. Under a boot-time append (a producer firing before Ra is
+write-ready) the worker crash-looped past its supervisor's restart
+intensity in under a second; the cascade reached
+`reached_max_restart_intensity` and tore down the **entire store subtree**
+("Khepri store stopped"). A sub-second readiness gap thus became a
+**permanent, restart-looping outage** — every subsequent append failed
+`noproc`, and the producer's retry storm formatted giant error reports
+that pegged the CPU.
+
+`append_events_to_stream/4` now returns `{error, Reason}` on a failed
+`khepri:put` instead of badmatching (spec widened to
+`{ok, non_neg_integer()} | {error, term()}`). The gateway worker already
+replies `{error, _}` cleanly, and `reckon_gater` treats it as retriable —
+so an early append now retries and succeeds once Ra is ready, instead of
+killing the store. Diagnosed on the parksim fleet: the leuven store had
+been restart-looping, persisting no new events while the SQLite read model
+sat frozen.
+
 ## [3.1.1] - 2026-05-27
 
 ### Notes — Why 3.1.1 and not 3.1.0
