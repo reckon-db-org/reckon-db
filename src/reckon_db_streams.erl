@@ -24,6 +24,7 @@
     read/6,
     read_all/4,
     read_all_global/3,
+    all_events/1,
     read_by_event_types/3,
     read_by_tags/4,
     get_version/2,
@@ -260,6 +261,33 @@ read_all_global(StoreId, Offset, BatchSize) ->
                 ValidEvents),
             Skipped = safe_nthtail(Offset, SortedEvents),
             {ok, lists:sublist(Skipped, BatchSize)};
+        {ok, _} ->
+            {ok, []};
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @doc Read every event in the store in ONE Khepri traversal, unsorted
+%% and unpaginated.
+%%
+%% Unlike read_all_global/3 this neither sorts nor limits — it is the
+%% raw `get_many` over `[streams, *, has_data]`. Callers that scan or
+%% index every event (causation queries, index backfill) use this to
+%% replace an O(streams) fan-out of per-stream reads with a single
+%% round-trip. For ordered/paginated replay use read_all_global/3.
+-spec all_events(atom()) -> {ok, [event()]} | {error, term()}.
+all_events(StoreId) ->
+    Path = [streams,
+            ?KHEPRI_WILDCARD_STAR,
+            #if_all{conditions = [
+                ?KHEPRI_WILDCARD_STAR,
+                #if_has_data{has_data = true}
+            ]}],
+    case khepri:get_many(StoreId, Path) of
+        {ok, Results} when is_map(Results) ->
+            Events = [convert_result_to_event(PathKey, Value)
+                      || {PathKey, Value} <- maps:to_list(Results)],
+            {ok, [E || E <- Events, E =/= undefined]};
         {ok, _} ->
             {ok, []};
         {error, _} = Error ->

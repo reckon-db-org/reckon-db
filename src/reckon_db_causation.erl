@@ -190,73 +190,43 @@ build_graph_from_correlation_id(StoreId, Id) ->
             Error
     end.
 
-%% @private Scan all streams for events matching metadata field
+%% @private Find every event whose metadata Field equals Value.
+%%
+%% Stage 1: one global traversal (reckon_db_streams:all_events/1) +
+%% in-memory filter, instead of list_streams + a per-stream read each
+%% (which fanned out into O(streams) Khepri round-trips and blew the
+%% dispatch deadline on stores with many streams). Stage 2 replaces
+%% this with a secondary-index lookup, keeping this as the backfill /
+%% un-indexed fallback.
 -spec scan_for_metadata(atom(), atom(), binary()) -> {ok, [event()]} | {error, term()}.
 scan_for_metadata(StoreId, Field, Value) ->
-    %% Get all streams
-    case reckon_db_streams:list_streams(StoreId) of
-        {ok, StreamIds} ->
-            Events = lists:foldl(
-                fun(StreamId, Acc) ->
-                    MatchingEvents = scan_stream_for_metadata(StoreId, StreamId, Field, Value),
-                    Acc ++ MatchingEvents
-                end,
-                [],
-                StreamIds
-            ),
-            %% Sort by epoch_us for consistent ordering
+    case reckon_db_streams:all_events(StoreId) of
+        {ok, Events} ->
+            Matching = [E || E <- Events, metadata_matches(E, Field, Value)],
             Sorted = lists:sort(
                 fun(A, B) -> A#event.epoch_us =< B#event.epoch_us end,
-                Events
+                Matching
             ),
             {ok, Sorted};
-        Error ->
+        {error, _} = Error ->
             Error
-    end.
-
-%% @private Scan a single stream for matching events
--spec scan_stream_for_metadata(atom(), binary(), atom(), binary()) -> [event()].
-scan_stream_for_metadata(StoreId, StreamId, Field, Value) ->
-    case reckon_db_streams:read(StoreId, StreamId, 0, 10000, forward) of
-        {ok, Events} ->
-            [E || E <- Events, metadata_matches(E, Field, Value)];
-        {error, _} ->
-            []
     end.
 
 metadata_matches(Event, Field, Value) ->
     maps:get(Field, Event#event.metadata, undefined) =:= Value.
 
-%% @private Find an event by its ID across all streams
+%% @private Find an event by its ID. One global traversal (see
+%% scan_for_metadata) instead of a per-stream scan.
 -spec find_event_by_id(atom(), binary()) -> {ok, event()} | {error, not_found | term()}.
 find_event_by_id(StoreId, EventId) ->
-    case reckon_db_streams:list_streams(StoreId) of
-        {ok, StreamIds} ->
-            find_event_in_streams(StoreId, StreamIds, EventId);
-        Error ->
-            Error
-    end.
-
-%% @private Search streams for an event
--spec find_event_in_streams(atom(), [binary()], binary()) -> {ok, event()} | {error, not_found}.
-find_event_in_streams(_StoreId, [], _EventId) ->
-    {error, not_found};
-find_event_in_streams(StoreId, [StreamId | Rest], EventId) ->
-    case scan_stream_for_event(StoreId, StreamId, EventId) of
-        {ok, Event} ->
-            {ok, Event};
-        not_found ->
-            find_event_in_streams(StoreId, Rest, EventId)
-    end.
-
-%% @private Scan a stream for an event by ID
--spec scan_stream_for_event(atom(), binary(), binary()) -> {ok, event()} | not_found.
-scan_stream_for_event(StoreId, StreamId, EventId) ->
-    case reckon_db_streams:read(StoreId, StreamId, 0, 10000, forward) of
+    case reckon_db_streams:all_events(StoreId) of
         {ok, Events} ->
-            find_event_in_list(Events, EventId);
-        {error, _} ->
-            not_found
+            case find_event_in_list(Events, EventId) of
+                {ok, _} = Ok -> Ok;
+                not_found -> {error, not_found}
+            end;
+        {error, _} = Error ->
+            Error
     end.
 
 find_event_in_list(Events, EventId) ->
