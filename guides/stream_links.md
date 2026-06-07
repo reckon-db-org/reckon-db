@@ -368,5 +368,4 @@ Processed = maps:get(processed, Info),
 ## See Also
 
 - [Subscriptions](subscriptions.md) - Event subscription patterns
-- [Causation](causation.md) - Event lineage tracking
 - [Storage Internals](storage_internals.md) - Khepri path structure

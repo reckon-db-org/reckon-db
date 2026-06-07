@@ -5,6 +5,32 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-06-07
+
+### Removed — causation/correlation service + graph NIF (BREAKING)
+
+Causation/correlation lineage traversal is not an event-store
+responsibility — it's a read-model / projection concern (the way
+EventStoreDB serves it via system projections, not log scans). Removed:
+
+- `reckon_db_causation` (the `get_effects` / `get_cause` / `get_chain` /
+  `get_correlated` / `build_graph` full-scan queries)
+- `reckon_db_graph_nif` and its entire Rust crate
+  (`native/reckon_db_graph_nif/`, petgraph-based graph builder)
+- the gateway-worker `handle_call` routing for those operations
+- `guides/causation.md`, `assets/causation_graph.svg`, and the
+  causation/graph_nif test modules
+
+`causation_id` and `correlation_id` are unchanged — they remain ordinary
+keys inside an event's `metadata` map (see the metadata examples in
+`guides/event_sourcing.md`). The store stores and returns metadata
+verbatim; it does not interpret it. Consumers that need to traverse
+lineage build a read model/projection.
+
+Requires `reckon_gater ~> 3.0` (which drops the matching API surface).
+Also reverts the 3.1.x causation-scan perf workaround (`all_events/1`),
+moot now the module is gone.
+
 ## [3.1.2] - 2026-05-30
 
 ### Fixed — Transient store-not-ready crashed the gateway worker into a permanent outage

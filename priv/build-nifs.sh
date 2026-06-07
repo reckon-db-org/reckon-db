@@ -66,6 +66,5 @@ build_nif reckon_db_archive_nif
 build_nif reckon_db_hash_nif
 build_nif reckon_db_aggregate_nif
 build_nif reckon_db_filter_nif
-build_nif reckon_db_graph_nif
 
 echo "[reckon-db] All NIFs ready."

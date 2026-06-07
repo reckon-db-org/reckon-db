@@ -269,40 +269,6 @@ handle_call({scavenge_dry_run, _StoreId, StreamId, Opts}, _From,
     {reply, Result, State};
 
 %%====================================================================
-%% Causation Operations (handle_call)
-%%====================================================================
-
-%% Get events caused by an event
-handle_call({get_effects, _StoreId, EventId}, _From,
-            #state{store_id = StoreId} = State) ->
-    Result = reckon_db_causation:get_effects(StoreId, EventId),
-    {reply, Result, State};
-
-%% Get the event that caused another
-handle_call({get_cause, _StoreId, EventId}, _From,
-            #state{store_id = StoreId} = State) ->
-    Result = reckon_db_causation:get_cause(StoreId, EventId),
-    {reply, Result, State};
-
-%% Get causation chain
-handle_call({get_causation_chain, _StoreId, EventId}, _From,
-            #state{store_id = StoreId} = State) ->
-    Result = reckon_db_causation:get_chain(StoreId, EventId),
-    {reply, Result, State};
-
-%% Get correlated events
-handle_call({get_correlated, _StoreId, CorrelationId}, _From,
-            #state{store_id = StoreId} = State) ->
-    Result = reckon_db_causation:get_correlated(StoreId, CorrelationId),
-    {reply, Result, State};
-
-%% Build causation graph
-handle_call({build_causation_graph, _StoreId, Id}, _From,
-            #state{store_id = StoreId} = State) ->
-    Result = reckon_db_causation:build_graph(StoreId, Id),
-    {reply, Result, State};
-
-%%====================================================================
 %% Schema Operations (handle_call)
 %%====================================================================
 
