@@ -1,6 +1,6 @@
 # DESIGN: Stream Namespace — structural aggregate-type discrimination
 
-**Status:** Draft / RFC (no code — decision required before implementation)
+**Status:** ✅ Accepted — Model C (structural type subtree), 2026-06-08. Implementation pending.
 **Date:** 2026-06-08
 **Author:** design discussion (rl + apprentice)
 **Affects:** reckon-db core storage layout (Khepri paths). Breaking — requires a migration.
@@ -262,11 +262,13 @@ decision) — this RFC does not re-open that.
 
 ---
 
-## 11. Decision required
+## 11. Decision (2026-06-08)
 
-- [ ] Adopt Model C (structural type subtree)? (recommend **yes**)
-- [ ] DCB stays per-store by default? (recommend **yes**)
+- [x] **Adopt Model C (structural type subtree)** — accepted.
+- [ ] DCB stays per-store by default? (recommend **yes** — confirm at impl)
 - [ ] Migration default = dual-read backfill for real stores, clean-sweep for
-      simulation stores? (recommend **yes**)
+      simulation stores? (recommend **yes** — confirm at impl)
 
-No code until these are checked.
+Sequencing: implement Model C (primary layout) first, then the secondary index
+([DESIGN_SECONDARY_INDEX.md](DESIGN_SECONDARY_INDEX.md)) on top — the index's
+`EventRef`s point at Model C paths.
