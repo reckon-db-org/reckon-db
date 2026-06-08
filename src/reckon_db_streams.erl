@@ -26,6 +26,7 @@
     read_all_global/3,
     read_by_event_types/3,
     read_by_tags/4,
+    read_by_metadata/3,
     get_version/2,
     exists/2,
     has_events/1,
@@ -320,10 +321,24 @@ get_many_list(StoreId, Pattern) ->
 -spec read_by_event_types(atom(), [binary()], pos_integer()) ->
     {ok, [event()]} | {error, term()}.
 read_by_event_types(StoreId, EventTypes, BatchSize) when is_list(EventTypes) ->
-    %% Push the event-type match into Khepri (DB-side filtering via
-    %% #if_data_matches) so we don't load non-matching events. The leaf
-    %% condition is applied at both depths by query_event_results (regular
-    %% 4-level events + the 2-level DCB log).
+    case reckon_db_index_config:is_indexed(StoreId, event_type) of
+        true ->
+            limit_index_result(
+                reckon_db_index:lookup_event_types(StoreId, EventTypes),
+                BatchSize);
+        false ->
+            warn_unindexed(StoreId, event_type),
+            scan_by_event_types(StoreId, EventTypes, BatchSize)
+    end.
+
+%% @private Whole-store scan fallback for stores that did not declare the
+%% `event_type' index. Pushes the type match into Khepri (DB-side
+%% #if_data_matches) so non-matching events aren't loaded.
+-spec scan_by_event_types(atom(), [binary()], pos_integer()) ->
+    {ok, [event()]} | {error, term()}.
+scan_by_event_types(StoreId, EventTypes, BatchSize) ->
+    %% The leaf condition is applied at both depths by query_event_results
+    %% (regular 4-level events + the 2-level DCB log).
     TypeConditions = [
         #if_data_matches{pattern = #event{event_type = ET, _ = '_'}}
         || ET <- EventTypes
@@ -386,12 +401,22 @@ read_by_event_types(StoreId, EventTypes, BatchSize) when is_list(EventTypes) ->
 -spec read_by_tags(atom(), [binary()], any | all, pos_integer()) ->
     {ok, [event()]} | {error, term()}.
 read_by_tags(StoreId, Tags, Match, BatchSize) when is_list(Tags), is_atom(Match) ->
-    %% Query all events with data (both depths) and filter by tags in
-    %% Erlang. Khepri's pattern matching doesn't easily support list
-    %% membership, so we fetch events with data and filter client-side.
-    %%
-    %% For large stores, this is the cross-cutting scan the secondary-index
-    %% RFC (DESIGN_SECONDARY_INDEX.md) is designed to replace.
+    case reckon_db_index_config:is_indexed(StoreId, tags) of
+        true ->
+            limit_index_result(
+                reckon_db_index:lookup_tags(StoreId, Tags, Match), BatchSize);
+        false ->
+            warn_unindexed(StoreId, tags),
+            scan_by_tags(StoreId, Tags, Match, BatchSize)
+    end.
+
+%% @private Whole-store tag scan fallback for stores that did not declare
+%% the `tags' index. Khepri pattern matching doesn't support list
+%% membership, so events with data are fetched and filtered client-side.
+%% This is exactly the cross-cutting scan the secondary index replaces.
+-spec scan_by_tags(atom(), [binary()], any | all, pos_integer()) ->
+    {ok, [event()]} | {error, term()}.
+scan_by_tags(StoreId, Tags, Match, BatchSize) ->
     case query_event_results(StoreId, has_data_leaf()) of
         {ok, Results} ->
             AllEvents = [convert_result_to_event(PathKey, Value)
@@ -403,6 +428,70 @@ read_by_tags(StoreId, Tags, Match, BatchSize) when is_list(Tags), is_atom(Match)
             {ok, LimitedEvents};
         {error, _} = Error ->
             Error
+    end.
+
+%% @doc Read all events whose metadata key = value.
+%%
+%% This is the sanctioned primitive applications build causation /
+%% correlation / saga read models on (e.g. `read_by_metadata(Store,
+%% <<"causation_id">>, EventId)`). The store returns events matching a
+%% metadata key=value pair — bounded and indexed when `{meta, Key}' is
+%% declared — and does NOT interpret what the key means. Lineage
+%% traversal, graphs, and read models are the application's job.
+%%
+%% Indexed (O(matches)) when the store declared `{meta, Key}'; otherwise
+%% a one-time `logger:warning' is emitted and the query falls back to a
+%% whole-store scan (O(total events)).
+-spec read_by_metadata(atom(), binary(), binary()) ->
+    {ok, [event()]} | {error, term()}.
+read_by_metadata(StoreId, Key, Value) when is_binary(Key), is_binary(Value) ->
+    case reckon_db_index_config:is_indexed(StoreId, {meta, Key}) of
+        true ->
+            reckon_db_index:lookup_meta(StoreId, Key, Value);
+        false ->
+            warn_unindexed(StoreId, {meta, Key}),
+            scan_by_metadata(StoreId, Key, Value)
+    end.
+
+%% @private Whole-store scan fallback for an un-indexed metadata key.
+-spec scan_by_metadata(atom(), binary(), binary()) ->
+    {ok, [event()]} | {error, term()}.
+scan_by_metadata(StoreId, Key, Value) ->
+    case query_event_results(StoreId, has_data_leaf()) of
+        {ok, Results} ->
+            Events = [convert_result_to_event(P, V) || {P, V} <- Results],
+            Matching = [E || #event{metadata = M} = E <- Events,
+                             is_map(M), maps:get(Key, M, undefined) =:= Value],
+            {ok, sort_by_epoch(Matching)};
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private Apply the BatchSize limit to an index lookup result.
+-spec limit_index_result({ok, [event()]} | {error, term()}, pos_integer()) ->
+    {ok, [event()]} | {error, term()}.
+limit_index_result({ok, Events}, BatchSize) ->
+    {ok, lists:sublist(Events, BatchSize)};
+limit_index_result({error, _} = Error, _BatchSize) ->
+    Error.
+
+%% @private Warn ONCE per (store, index-kind) that a cross-cutting query
+%% is hitting an un-indexed scan, so operators can declare the index. No
+%% silent truncation — the query still runs, just O(store). The
+%% persistent_term flag keeps it to a single line per kind.
+-spec warn_unindexed(atom(), index_decl()) -> ok.
+warn_unindexed(StoreId, Kind) ->
+    Flag = {reckon_db, idx_unindexed_warned, StoreId, Kind},
+    case persistent_term:get(Flag, false) of
+        true ->
+            ok;
+        false ->
+            persistent_term:put(Flag, true),
+            logger:warning(
+                "reckon_db: cross-cutting query on un-indexed ~p (store ~p) — "
+                "O(store) scan; declare the index in store_config to make it "
+                "O(matches)", [Kind, StoreId]),
+            ok
     end.
 
 %% @private Filter events by tags according to match mode
@@ -567,41 +656,83 @@ append_events_to_stream(StoreId, StreamId, CurrentVersion, Events) ->
     IntegrityCtx = setup_integrity(StoreId, StreamId, CurrentVersion),
     InitialTip = resolve_initial_tip(StoreId, StreamId, CurrentVersion + 1, IntegrityCtx),
 
-    %% A failed khepri:put — most importantly {error, noproc} while the
+    %% Build the event records AND their secondary-index entries OUTSIDE
+    %% the transaction. Integrity stamping (HMAC + chain) reads the HMAC
+    %% key from persistent_term and runs crypto — neither is available
+    %% inside a Khepri (Ra) transaction fun, which must be deterministic
+    %% and side-effect-free. This mirrors the DCB append: stamp outside,
+    %% write inside.
+    Declared = reckon_db_index_config:declared(StoreId),
+    {Writes, IndexEntries, FinalVersion} = build_event_writes(
+        StreamId, CurrentVersion, Events, Now, EpochUs, IntegrityCtx,
+        InitialTip, Declared),
+
+    %% Write the whole batch — every event record and every index entry —
+    %% in ONE transaction. Either all land or none do, so the index is
+    %% never left partially populated (a dropped index write would make
+    %% queries silently incomplete — worse than slow). One Ra command per
+    %% batch.
+    %%
+    %% NOTE: the optimistic-version check stays OUTSIDE the transaction
+    %% (in do_append, as before) — making it transactional to close the
+    %% per-stream concurrent-same-version TOCTOU is a separate, pre-existing
+    %% concern and is intentionally not changed here.
+    %%
+    %% A failed transaction — most importantly {error, noproc} while the
     %% store's Ra server is mid-(re)start — MUST surface as a retriable
-    %% {error, _} return, NOT a hard `ok =` badmatch. The badmatch
-    %% crashed the gateway worker on every transient store-not-ready;
-    %% under a boot-time append (the simulator fires before Ra is
-    %% write-ready) the worker crash-looped past its supervisor's
-    %% restart intensity in under a second, and the cascade tore down
-    %% the entire store subtree (reached_max_restart_intensity) — a
-    %% sub-second readiness gap became a permanent, restart-looping
-    %% outage. reckon-gater treats {error, _} as retriable and the
-    %% append succeeds once Ra is ready.
-    try
-        {FinalVersion, _FinalTip} = lists:foldl(
-            fun(Event, {AccVersion, AccTip}) ->
-                NewVersion = AccVersion + 1,
-                RecordedEvent0 = create_event_record(
-                    Event, StreamId, NewVersion, Now, EpochUs),
-                {RecordedEvent, NextTip} = apply_integrity_if_enabled(
-                    RecordedEvent0, AccTip, IntegrityCtx),
-                PaddedVersion = pad_version(NewVersion, ?VERSION_PADDING),
-                Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
-                case khepri:put(StoreId, Path, RecordedEvent) of
-                    ok ->
-                        {NewVersion, NextTip};
-                    {error, Reason} ->
-                        throw({?MODULE, append_aborted, Reason})
-                end
-            end,
-            {CurrentVersion, InitialTip},
-            Events
-        ),
-        {ok, FinalVersion}
-    catch
-        throw:{?MODULE, append_aborted, Reason} ->
-            {error, Reason}
+    %% {error, _} return, NOT a hard `ok =` badmatch (the boot-time
+    %% crash-loop lesson the old per-put loop encoded). khepri:transaction
+    %% returns {error, _} for a not-ready store; reckon-gater retries.
+    case write_batch(StoreId, Writes, IndexEntries) of
+        ok ->
+            {ok, FinalVersion};
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private Build the {Path, Record} event writes and the flat list of
+%% {Path, EventRef} index entries for a batch, applying integrity stamping
+%% per event. Returns the writes, index entries, and the final version.
+-spec build_event_writes(
+    binary(), integer(), [new_event()], integer(), integer(),
+    integrity_ctx(), binary() | undefined, [index_decl()]
+) -> {[{khepri_path:native_path(), event()}],
+      [{khepri_path:native_path(), reckon_db_index:event_ref()}],
+      non_neg_integer()}.
+build_event_writes(StreamId, CurrentVersion, Events, Now, EpochUs,
+                   IntegrityCtx, InitialTip, Declared) ->
+    {WritesRev, IndexRev, FinalVersion, _FinalTip} = lists:foldl(
+        fun(Event, {WAcc, IAcc, AccVersion, AccTip}) ->
+            NewVersion = AccVersion + 1,
+            RecordedEvent0 = create_event_record(
+                Event, StreamId, NewVersion, Now, EpochUs),
+            {RecordedEvent, NextTip} = apply_integrity_if_enabled(
+                RecordedEvent0, AccTip, IntegrityCtx),
+            PaddedVersion = pad_version(NewVersion, ?VERSION_PADDING),
+            Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
+            Entries = reckon_db_index:entries(RecordedEvent, Declared),
+            {[{Path, RecordedEvent} | WAcc], Entries ++ IAcc, NewVersion, NextTip}
+        end,
+        {[], [], CurrentVersion, InitialTip},
+        Events),
+    {lists:reverse(WritesRev), IndexRev, FinalVersion}.
+
+%% @private Write all event records + index entries in one transaction.
+-spec write_batch(
+    atom(),
+    [{khepri_path:native_path(), event()}],
+    [{khepri_path:native_path(), reckon_db_index:event_ref()}]
+) -> ok | {error, term()}.
+write_batch(StoreId, Writes, IndexEntries) ->
+    Fun = fun() ->
+        lists:foreach(fun({P, Record}) -> ok = khepri_tx:put(P, Record) end, Writes),
+        lists:foreach(fun({P, Ref}) -> ok = khepri_tx:put(P, Ref) end, IndexEntries),
+        ok
+    end,
+    case khepri:transaction(StoreId, Fun) of
+        {ok, ok}            -> ok;
+        ok                  -> ok;
+        {error, _} = Error  -> Error
     end.
 
 %% @private Tamper-resistance context for a single append batch.

@@ -59,6 +59,29 @@
 %% Matches the existing pad_version convention in reckon_db_snapshots_store.
 -define(DCB_SEQ_KEY_WIDTH, 20).
 
+%% Generic write-maintained secondary index (opt-in per store).
+%% Mirrors the DCB by_tag shape (fixed-width ordered leaf keys, subtree
+%% iteration) but for ALL events, not just _dcb. Three index kinds share
+%% one mechanism under a single `idx' root:
+%%
+%%   [idx, tag,        Tag,       OrderKey] -> EventRef
+%%   [idx, event_type, EventType, OrderKey] -> EventRef
+%%   [idx, meta, Key,  Value,     OrderKey] -> EventRef
+%%
+%% OrderKey = pad(epoch_us) | stream_id | pad(version) — globally ordered,
+%% unique. EventRef = #{stream_id := binary(), version := non_neg_integer()}.
+%%
+%% The `idx' root is DELIBERATELY separate from DCB's ?BY_TAG_PATH ([by_tag]):
+%% DCB's by_tag is seq-keyed, unconditional, and serves the conditional-append
+%% primitive for _dcb events only; this generalized index is OrderKey-keyed and
+%% opt-in. Keeping distinct roots avoids mixing the two leaf schemes in one
+%% subtree. See plans/DESIGN_SECONDARY_INDEX.md (§13.5).
+-define(INDEX_PATH, [idx]).
+%% Fixed-width zero-padded epoch_us component of an index OrderKey, so
+%% lexicographic subtree order == event (time) order. 20 digits matches the
+%% DCB seq-key width and covers epoch_us well beyond any realistic horizon.
+-define(INDEX_ORDER_KEY_WIDTH, 20).
+
 %% Per-stream tamper-resistance watermark (2.1.0+).
 %% Path: [metadata, integrity, chain_start, StreamId] -> non_neg_integer()
 %% Records the version at which integrity-bearing writes began for that
@@ -115,8 +138,19 @@
     %%    key_source := Src}   : enable HMAC + chain on writes;
     %%                           Src = {env_var, binary()} |
     %%                                 {sealed_file, file:filename()}.
-    integrity = disabled :: integrity_config()
+    integrity = disabled :: integrity_config(),
+
+    %% Declared secondary indexes (opt-in, none by default). Each declared
+    %% index is maintained transactionally with every append. Declared at
+    %% store creation; built from genesis (no backfill — recreate to add).
+    %% See plans/DESIGN_SECONDARY_INDEX.md.
+    indexes = [] :: [index_decl()]
 }).
+
+-type index_decl() ::
+    tags |                     %% index every tag in #event.tags
+    event_type |               %% index #event.event_type
+    {meta, Key :: binary()}.   %% index maps:get(Key, metadata) when present
 
 -type integrity_key_source() ::
     {env_var, EnvName :: binary()} |

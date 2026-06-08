@@ -1,6 +1,6 @@
 # DESIGN: Generic write-maintained secondary index
 
-**Status:** Draft / RFC (no code — decision required before implementation)
+**Status:** ✅ Accepted + Implemented (2026-06-08) — all four §14 decisions accepted; see [PLAN_SECONDARY_INDEX_IMPL.md](PLAN_SECONDARY_INDEX_IMPL.md). One deviation: generalized indexes live under a fresh `[idx]` root (not `[by_tag]`/`[by_event_type]`/`[by_meta]`) to keep them cleanly separate from DCB's seq-keyed `[by_tag]` (resolves §13.5).
 **Date:** 2026-06-08
 **Author:** design discussion (rl + apprentice)
 **Affects:** reckon-db core write path + query layer. Additive (opt-in per store) but touches `do_append`.

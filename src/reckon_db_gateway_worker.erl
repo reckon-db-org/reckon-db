@@ -112,6 +112,13 @@ handle_call({read_by_tags, _StoreId, Tags, Match, BatchSize}, _From,
     Result = reckon_db_streams:read_by_tags(StoreId, Tags, Match, BatchSize),
     {reply, Result, State};
 
+%% Read events by a metadata key=value pair (the indexed primitive apps
+%% build causation/correlation read models on)
+handle_call({read_by_metadata, _StoreId, Key, Value}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_streams:read_by_metadata(StoreId, Key, Value),
+    {reply, Result, State};
+
 %% Get subscription by name (for checkpoint retrieval)
 handle_call({get_subscription, _StoreId, SubscriptionName}, _From,
             #state{store_id = StoreId} = State) ->

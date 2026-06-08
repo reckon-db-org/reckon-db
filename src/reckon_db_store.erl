@@ -104,6 +104,10 @@ init(#store_config{store_id = StoreId, data_dir = DataDir, mode = Mode} = Config
             %% events, which is strictly worse than not starting.
             case reckon_db_integrity_key:load(Config) of
                 ok ->
+                    %% Install the store's declared secondary indexes so the
+                    %% append path can read them. Always succeeds (a [] list
+                    %% just means no indexes).
+                    ok = reckon_db_index_config:load(Config),
                     do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime);
                 {error, KeyReason} = KeyError ->
                     logger:error(
@@ -169,6 +173,7 @@ terminate(Reason, #state{store_id = StoreId, started_at = StartedAt}) ->
     %% reincarnation of this store ID does not inherit stale key
     %% material.
     catch reckon_db_integrity_key:clear(StoreId),
+    catch reckon_db_index_config:clear(StoreId),
 
     %% Stop Khepri store
     case khepri:stop(StoreId) of
