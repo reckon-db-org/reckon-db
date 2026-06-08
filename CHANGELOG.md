@@ -5,6 +5,65 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] - 2026-06-08
+
+### Changed — structural aggregate-type stream namespace (Model C) — BREAKING (on-disk layout)
+
+Events are now stored under a **structural aggregate-type subtree**,
+`[streams, Type, Id, Version]`, instead of the flat `[streams, StreamId,
+Version]` layout. The aggregate type (the user-id prefix, or the `$`
+namespace for system streams) is a real Khepri path level, so type-scoped
+operations (`list_streams`, replay, links) navigate a subtree instead of
+scanning the whole store.
+
+**The Erlang API is unchanged** (`reckon_db_streams` function signatures are
+identical; stream ids are still opaque `<prefix>-<hex>` / `$ns:name`). The
+break is the **on-disk Khepri layout**: there is no migration — recreate
+stores fresh under the new layout (reckon-db carries no production data; this
+is the project's deliberate clean-break policy). `reckon_db_stream_path` is
+the single owner of the layout.
+
+Requires `reckon_gater` ~> 3.1 (uses `reckon_gater_stream_id:parts/1`).
+
+### Added — generic write-maintained secondary index (opt-in per store)
+
+Cross-cutting lookups (by tag, by event type, by metadata key=value) become
+O(matches) subtree reads instead of O(total events) scans, for stores that
+declare the index. Reference entries are maintained transactionally with each
+append (atomic — the index is never partially populated).
+
+- `#store_config.indexes :: [index_decl()]` (default `[]`) — declare
+  `tags`, `event_type`, and/or `{meta, Key}`. A store pays nothing unless it
+  declares an index.
+- New `reckon_db_streams:read_by_metadata/3` (+ `reckon_gater_api:read_by_metadata/3`
+  in reckon_gater 3.2.0) — the sanctioned primitive applications build
+  causation/correlation/saga read models on. The store does not interpret the
+  key; lineage traversal is the application's job.
+- `read_by_tags/4` and `read_by_event_types/3` now use the index when
+  declared and fall back to a (warned-once) whole-store scan otherwise.
+- Index layout lives under a dedicated `[idx]` root, separate from DCB's
+  seq-keyed `[by_tag]` (DCB is untouched).
+- No backfill / building-ready marker in this release — declare indexes at
+  store creation; recreate the store to add one (not in production).
+
+### Changed — append is now transactional
+
+The append write path writes a batch's event records (and any declared index
+entries) in a single `khepri:transaction`, so a multi-event batch and its
+index entries land atomically. Integrity (HMAC + chain) stamping continues to
+happen outside the transaction (it needs the key from persistent_term and
+crypto, neither available inside a Ra transaction) — the records are stamped
+first, then written, mirroring the DCB append.
+
+### Fixed
+
+- `by_stream` subscription filter now matches exactly the subscribed stream's
+  `[streams, Type, Id, *]` subtree (Model C made the type structural,
+  resolving the prior over-matching "by_stream path-mismatch" behaviour).
+- `subscribe/5` rejects a duplicate subscription whose subscriber is still
+  alive with `{error, {already_exists, Name}}`; a dead/undefined subscriber
+  pid still reclaims via the reconnect path.
+
 ## [4.0.0] - 2026-06-07
 
 ### Removed — causation/correlation service + graph NIF (BREAKING)
