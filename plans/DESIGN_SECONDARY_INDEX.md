@@ -111,8 +111,8 @@ Indexes are declared **per store** in `store_config` (none on by default):
 - Default `indexes = []` — a store pays nothing unless it declares an index.
   (DCB's own `by_tag` for `_dcb` events stays unconditional — it's required by
   the conditional-append primitive, independent of this opt-in list.)
-- Declaring an index on a store with existing data triggers a **backfill** (§10)
-  before the index is marked usable.
+- Indexes are declared at **store creation**; the index is built from genesis as
+  events are appended (no backfill — §10).
 - Apps declare exactly the indexes their queries need — the QRY discipline.
 
 ---
@@ -201,19 +201,22 @@ of tiny streams); don't index to produce a transformed, subscribable stream.
 
 ---
 
-## 10. Migration / backfill
+## 10. Index population — no backfill in v1
 
-Per-index, idempotent, behind a marker:
+reckon-db is **not in production** (no backward compatibility — see the namespace
+RFC's clean-break rollout). So v1 has **no backfill subsystem and no
+`building/ready` marker**:
 
-1. `[metadata, index, <kind/key>, status] -> building | ready`.
-2. On declaring an index for a store with data, run a **one-shot backfill**: the
-   single efficient global traversal (`get_many([streams, *, *, has_data])` under
-   Model C — *not* per-stream reads), emit index entries, set `ready`.
-3. Queries on a `building` index fall back to scan (with the warning) until `ready`.
-4. Backfill is restartable (idempotent puts; re-run overwrites).
+- Declare a store's indexes **at store creation**. The index is built from
+  genesis, transactionally, as events are appended (§6) — a fresh store's index
+  is always complete.
+- To "add an index" to an existing dev store, **recreate the store** (data is
+  disposable).
 
-For simulation stores (parksim) a clean-sweep into fresh stores with indexes
-pre-declared is cheaper than backfilling — same note as the namespace RFC.
+A live *"declare an index on a populated production store → backfill it"* feature
+is a genuine eventual need — but only once reckon-db runs in production with data
+worth preserving. It is **out of scope** until then; do not build the
+marker / dual-state machinery now.
 
 ---
 

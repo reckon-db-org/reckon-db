@@ -3,7 +3,7 @@
 **Status:** ✅ Accepted — Model C (structural type subtree), 2026-06-08. Implementation pending.
 **Date:** 2026-06-08
 **Author:** design discussion (rl + apprentice)
-**Affects:** reckon-db core storage layout (Khepri paths). Breaking — requires a migration.
+**Affects:** reckon-db core storage layout (Khepri paths). Breaking layout change — **no migration** (reckon-db is not in production; recreate stores fresh).
 
 ---
 
@@ -115,7 +115,8 @@ storm), each type its own subtree.
 - ✅ Clean model mapping: **store ↔ Division/tenant**, **type ↔ subtree**,
   **aggregate ↔ stream**. Recovers the original "1 type = 1 boundary" instinct
   *as a subtree inside a shared store*, which is also what dodges the storm.
-- ❌ Breaking path-layout migration (see §6–§8).
+- ❌ Breaking path-layout change touching most stream code (§7) — but a *clean
+  break*, no migration (§8), since nothing is in production.
 - ❌ The store now derives `category` from the id. NOTE: this is **not** the
   causation-style domain leak — "category" is a first-class event-store concept
   (EventStoreDB `$ce`); the store splits the prefix, it does not learn that
@@ -207,27 +208,22 @@ Everything that constructs or matches `[streams, …]`:
 
 ---
 
-## 8. Migration (dual-read)
+## 8. Rollout — clean break, no migration
 
-Existing stores hold data at the old `[streams, Id, V]` paths; a hard cutover
-would orphan it. Plan:
+reckon-db is **not in production**. Project rule: *nothing in prod ⇒ no backward
+compatibility, delete the old code entirely.* So there is **no migration, no
+dual-read, no layout-version marker, no backfill**:
 
-1. **Layout version marker.** Write `[metadata, layout, version] -> 2` when a
-   store is created/upgraded under the new scheme. Absent ⇒ legacy (v1).
-2. **Dual-read window.** Readers check the marker; v1 stores read the old flat
-   paths, v2 stores read structural paths. New writes always go structural.
-3. **Backfill.** A one-shot, idempotent migration walks the global log once
-   (the efficient single `get_many`, *not* per-stream reads — the same fix we
-   want for the query layer) and re-keys each event to its structural path,
-   then stamps the marker v2. Run on boot behind a config flag, or as an
-   offline `reckon_db migrate` task. Khepri is a Ra log — the re-key is a
-   transactional batch; size the batches.
-4. **Drop dual-read** in a later major once all stores are v2.
-
-For parksim specifically: the simulator regenerates data continuously, so a
-**clean sweep + fresh v2 stores** (we already did the sweep dance this session)
-is cheaper than backfilling — note this as the recommended path for *simulation*
-stores. Real stores get the backfill.
+- Change the path layout in place and **delete** the old flat `[streams, Id, V]`
+  code paths outright — no v1/v2 branching, no fallback reader, no
+  `[metadata, layout, version]` marker.
+- Existing store data is disposable. Recreate stores fresh under the new layout:
+  parksim is a simulator (the clean-sweep we already exercised regenerates it);
+  any other dev/demo store (e.g. the reckon-portal blog) is reseeded from source
+  or simply re-created. None of it is data worth a migration subsystem.
+- One layout, one code path. If reckon-db ever runs in production with data
+  worth preserving, a migration gets designed **then** — it is explicitly out of
+  scope here, not a deferred TODO.
 
 ---
 
@@ -256,8 +252,7 @@ decision) — this RFC does not re-open that.
 1. Per-type vs per-store DCB — confirm the §6 default (per-store) is acceptable.
 2. System-stream namespace shape (`[streams, $ns, name, V]`) — bikeshed the
    reserved-Type encoding for `$`-prefixed ids.
-3. Backfill-on-boot vs offline task vs clean-sweep-for-sims — pick the default.
-4. Does `Type` need its own metadata node (`[streams, Type, '$meta']` for
+3. Does `Type` need its own metadata node (`[streams, Type, '$meta']` for
    per-type config like retention)? Probably yes once per-type retention lands.
 
 ---
@@ -265,9 +260,9 @@ decision) — this RFC does not re-open that.
 ## 11. Decision (2026-06-08)
 
 - [x] **Adopt Model C (structural type subtree)** — accepted.
+- [x] **Clean break, no migration** — not in production; delete the old layout,
+      recreate stores fresh.
 - [ ] DCB stays per-store by default? (recommend **yes** — confirm at impl)
-- [ ] Migration default = dual-read backfill for real stores, clean-sweep for
-      simulation stores? (recommend **yes** — confirm at impl)
 
 Sequencing: implement Model C (primary layout) first, then the secondary index
 ([DESIGN_SECONDARY_INDEX.md](DESIGN_SECONDARY_INDEX.md)) on top — the index's
