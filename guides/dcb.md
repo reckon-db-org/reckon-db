@@ -247,6 +247,6 @@ This is invisible to callers: same API, same return shape.
 ## See also
 
 - [evoq decisions guide](https://codeberg.org/reckon-db-org/evoq/src/branch/main/guides/decisions.md) — the high-level Erlang API
-- [`plans/PLAN_DCB_IMPLEMENTATION.md`](../plans/PLAN_DCB_IMPLEMENTATION.md) — implementation design
+- [`plans/PLAN_DCB_IMPLEMENTATION.md`](https://codeberg.org/reckon-db-org/reckon-db/src/branch/main/plans/PLAN_DCB_IMPLEMENTATION.md) — implementation design
 - [hecate-corpus `CONSISTENCY_BOUNDARIES.md`](https://codeberg.org/hecate-social/hecate-corpus/src/branch/main/philosophy/CONSISTENCY_BOUNDARIES.md) — the doctrine
 - Ericsson Architects' [aggregateless event sourcing](https://ricofritzsche.me/aggregateless-event-sourcing/) — the inspiration
