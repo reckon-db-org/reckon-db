@@ -104,7 +104,7 @@ disabled_store_writes_legacy_events(Config) ->
         #store_config{store_id = StoreId, data_dir = "/tmp",
                       integrity = disabled}),
 
-    StreamId = <<"stream-disabled">>,
+    StreamId = reckon_db_test_helpers:sid(<<"stream-disabled">>),
     {ok, 0} = reckon_db_streams:append(
         StoreId, StreamId, ?NO_STREAM,
         [#{event_type => <<"x_happened">>, data => #{n => 1}}]),
@@ -123,7 +123,7 @@ disabled_store_writes_legacy_events(Config) ->
 enabled_store_writes_integrity_fields(Config) ->
     {StoreId, Key} = setup_integrity_store(Config),
 
-    StreamId = <<"stream-enabled-0">>,
+    StreamId = reckon_db_test_helpers:sid(<<"stream-enabled-0">>),
     {ok, 0} = reckon_db_streams:append(
         StoreId, StreamId, ?NO_STREAM,
         [#{event_type => <<"x_happened">>, data => #{n => 1}}]),
@@ -151,7 +151,7 @@ enabled_store_writes_integrity_fields(Config) ->
 %% chain hash of its predecessor. The verifier walks the whole chain.
 chain_continues_across_appends(Config) ->
     {StoreId, Key} = setup_integrity_store(Config),
-    StreamId = <<"stream-chain-test">>,
+    StreamId = reckon_db_test_helpers:sid(<<"stream-chain-test">>),
 
     %% Append 5 events in two batches (2 then 3) to exercise both
     %% intra-batch chaining and across-batch chaining.
@@ -183,8 +183,8 @@ chain_continues_across_appends(Config) ->
 watermark_is_recorded_on_first_append(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
 
-    StreamA = <<"stream-A">>,
-    StreamB = <<"stream-B">>,
+    StreamA = reckon_db_test_helpers:sid(<<"stream-A">>),
+    StreamB = reckon_db_test_helpers:sid(<<"stream-B">>),
 
     %% Before any append, watermarks are absent.
     ?assertEqual({ok, undefined},
@@ -219,7 +219,7 @@ different_keys_produce_different_macs(Config) ->
     Key1 = crypto:strong_rand_bytes(32),
     Key2 = crypto:strong_rand_bytes(32),
 
-    StreamId = <<"stream-mac-vs">>,
+    StreamId = reckon_db_test_helpers:sid(<<"stream-mac-vs">>),
     EventPayload = #{event_type => <<"e">>, data => #{value => 42}},
 
     %% Append with Key1
@@ -229,7 +229,7 @@ different_keys_produce_different_macs(Config) ->
         reckon_db_streams:read(StoreId, StreamId, 0, 10, forward),
 
     %% Reload with Key2 and append to a different stream so we can compare.
-    Stream2 = <<"stream-mac-vs-2">>,
+    Stream2 = reckon_db_test_helpers:sid(<<"stream-mac-vs-2">>),
     load_key_directly(StoreId, Key2),
     {ok, 0} = reckon_db_streams:append(StoreId, Stream2, ?NO_STREAM, [EventPayload]),
     {ok, [#event{mac = {_, Mac2}}]} =

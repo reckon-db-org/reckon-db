@@ -244,26 +244,66 @@ read_all(StoreId, StreamId, BatchSize, Direction) ->
 -spec read_all_global(atom(), non_neg_integer(), pos_integer()) ->
     {ok, [event()]} | {error, term()}.
 read_all_global(StoreId, Offset, BatchSize) ->
-    Path = [streams,
-            ?KHEPRI_WILDCARD_STAR,
-            #if_all{conditions = [
-                ?KHEPRI_WILDCARD_STAR,
-                #if_has_data{has_data = true}
-            ]}],
-    case khepri:get_many(StoreId, Path) of
-        {ok, Results} when is_map(Results) ->
+    case query_event_results(StoreId, has_data_leaf()) of
+        {ok, Results} ->
             Events = [convert_result_to_event(PathKey, Value)
-                      || {PathKey, Value} <- maps:to_list(Results)],
+                      || {PathKey, Value} <- Results],
             ValidEvents = [E || E <- Events, E =/= undefined],
-            SortedEvents = lists:sort(
-                fun(#event{epoch_us = E1}, #event{epoch_us = E2}) -> E1 =< E2 end,
-                ValidEvents),
+            SortedEvents = sort_by_epoch(ValidEvents),
             Skipped = safe_nthtail(Offset, SortedEvents),
             {ok, lists:sublist(Skipped, BatchSize)};
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private Leaf condition matching any version/seq node that carries
+%% event data: `#if_all{[*, has_data]}'. Shared by the global readers.
+-spec has_data_leaf() -> khepri:condition().
+has_data_leaf() ->
+    #if_all{conditions = [
+        ?KHEPRI_WILDCARD_STAR,
+        #if_has_data{has_data = true}
+    ]}.
+
+%% @private Sort events into global epoch_us order.
+-spec sort_by_epoch([event()]) -> [event()].
+sort_by_epoch(Events) ->
+    lists:sort(
+        fun(#event{epoch_us = E1}, #event{epoch_us = E2}) -> E1 =< E2 end,
+        Events).
+
+%% @private Query every event node across the store. Model C stores
+%% regular events at 4 levels ([streams, Type, Id, Version]) and the DCB
+%% pseudo-stream at 2 ([streams, _dcb, SeqKey]), so a single get_many
+%% cannot span both depths — we run one query per depth and merge.
+%%
+%% The regular query is authoritative for error propagation (the
+%% `[streams]' root always exists); the DCB subtree is best-effort
+%% (absent when no DCB events have been written → empty, not an error).
+-spec query_event_results(atom(), khepri:condition()) ->
+    {ok, [{[atom() | binary()], term()}]} | {error, term()}.
+query_event_results(StoreId, LeafMatch) ->
+    RegularPattern = [streams,
+                      ?KHEPRI_WILDCARD_STAR,
+                      ?KHEPRI_WILDCARD_STAR,
+                      LeafMatch],
+    case khepri:get_many(StoreId, RegularPattern) of
+        {ok, Regular} when is_map(Regular) ->
+            DcbPattern = ?DCB_STREAM_PATH ++ [LeafMatch],
+            {ok, maps:to_list(Regular) ++ get_many_list(StoreId, DcbPattern)};
         {ok, _} ->
             {ok, []};
         {error, _} = Error ->
             Error
+    end.
+
+%% @private Best-effort get_many returning a plain list ([] on any miss).
+-spec get_many_list(atom(), khepri_path:native_pattern()) ->
+    [{[atom() | binary()], term()}].
+get_many_list(StoreId, Pattern) ->
+    case khepri:get_many(StoreId, Pattern) of
+        {ok, Results} when is_map(Results) -> maps:to_list(Results);
+        _ -> []
     end.
 
 %% @doc Read all events of specific types from all streams using Khepri native filtering.
@@ -280,56 +320,39 @@ read_all_global(StoreId, Offset, BatchSize) ->
 -spec read_by_event_types(atom(), [binary()], pos_integer()) ->
     {ok, [event()]} | {error, term()}.
 read_by_event_types(StoreId, EventTypes, BatchSize) when is_list(EventTypes) ->
-    %% Build Khepri path pattern with native data matching
-    %% Path structure: [streams, StreamId, PaddedVersion]
-    %% We use #if_any to match any of the specified event types
+    %% Push the event-type match into Khepri (DB-side filtering via
+    %% #if_data_matches) so we don't load non-matching events. The leaf
+    %% condition is applied at both depths by query_event_results (regular
+    %% 4-level events + the 2-level DCB log).
     TypeConditions = [
         #if_data_matches{pattern = #event{event_type = ET, _ = '_'}}
         || ET <- EventTypes
     ],
-
-    %% Combine conditions: match any event type AND has data
-    DataCondition = case TypeConditions of
+    LeafMatch = case TypeConditions of
         [] ->
-            #if_has_data{has_data = true};
+            has_data_leaf();
         [SingleCondition] ->
             #if_all{conditions = [
+                ?KHEPRI_WILDCARD_STAR,
                 #if_has_data{has_data = true},
                 SingleCondition
             ]};
         _ ->
             #if_all{conditions = [
+                ?KHEPRI_WILDCARD_STAR,
                 #if_has_data{has_data = true},
                 #if_any{conditions = TypeConditions}
             ]}
     end,
 
-    %% Build path pattern matching all events across all streams
-    Path = [streams,
-            ?KHEPRI_WILDCARD_STAR,  %% Any stream ID
-            #if_all{conditions = [
-                ?KHEPRI_WILDCARD_STAR,  %% Any version
-                DataCondition
-            ]}],
-
-    case khepri:get_many(StoreId, Path) of
-        {ok, Results} when is_map(Results) ->
-            %% Convert results to events and sort by epoch_us
+    case query_event_results(StoreId, LeafMatch) of
+        {ok, Results} ->
             Events = [convert_result_to_event(PathKey, Value)
-                      || {PathKey, Value} <- maps:to_list(Results)],
+                      || {PathKey, Value} <- Results],
             ValidEvents = [E || E <- Events, E =/= undefined],
-
-            %% Sort by epoch_us for global ordering
-            SortedEvents = lists:sort(
-                fun(#event{epoch_us = E1}, #event{epoch_us = E2}) -> E1 =< E2 end,
-                ValidEvents
-            ),
-
-            %% Apply batch size limit
+            SortedEvents = sort_by_epoch(ValidEvents),
             LimitedEvents = lists:sublist(SortedEvents, BatchSize),
             {ok, LimitedEvents};
-        {ok, _} ->
-            {ok, []};
         {error, _} = Error ->
             Error
     end.
@@ -363,39 +386,21 @@ read_by_event_types(StoreId, EventTypes, BatchSize) when is_list(EventTypes) ->
 -spec read_by_tags(atom(), [binary()], any | all, pos_integer()) ->
     {ok, [event()]} | {error, term()}.
 read_by_tags(StoreId, Tags, Match, BatchSize) when is_list(Tags), is_atom(Match) ->
-    %% Query all events from all streams and filter by tags in Erlang.
-    %% Khepri's pattern matching doesn't easily support list membership checks,
-    %% so we fetch events with data and filter client-side.
+    %% Query all events with data (both depths) and filter by tags in
+    %% Erlang. Khepri's pattern matching doesn't easily support list
+    %% membership, so we fetch events with data and filter client-side.
     %%
-    %% For large stores, consider maintaining a separate tag index.
-    Path = [streams,
-            ?KHEPRI_WILDCARD_STAR,  %% Any stream ID
-            #if_all{conditions = [
-                ?KHEPRI_WILDCARD_STAR,  %% Any version
-                #if_has_data{has_data = true}
-            ]}],
-
-    case khepri:get_many(StoreId, Path) of
-        {ok, Results} when is_map(Results) ->
-            %% Convert results to events
+    %% For large stores, this is the cross-cutting scan the secondary-index
+    %% RFC (DESIGN_SECONDARY_INDEX.md) is designed to replace.
+    case query_event_results(StoreId, has_data_leaf()) of
+        {ok, Results} ->
             AllEvents = [convert_result_to_event(PathKey, Value)
-                         || {PathKey, Value} <- maps:to_list(Results)],
+                         || {PathKey, Value} <- Results],
             ValidEvents = [E || E <- AllEvents, E =/= undefined],
-
-            %% Filter by tag match mode (only events with tags list)
             FilteredEvents = filter_events_by_tags(ValidEvents, Tags, Match),
-
-            %% Sort by epoch_us for global ordering
-            SortedEvents = lists:sort(
-                fun(#event{epoch_us = E1}, #event{epoch_us = E2}) -> E1 =< E2 end,
-                FilteredEvents
-            ),
-
-            %% Apply batch size limit
+            SortedEvents = sort_by_epoch(FilteredEvents),
             LimitedEvents = lists:sublist(SortedEvents, BatchSize),
             {ok, LimitedEvents};
-        {ok, _} ->
-            {ok, []};
         {error, _} = Error ->
             Error
     end.
@@ -430,13 +435,17 @@ filter_events_by_tags(Events, Tags, all) ->
         Events
     ).
 
-%% @private Convert a Khepri result to an event, adding stream_id from path
+%% @private Convert a Khepri result to an event, deriving stream_id from
+%% the path. Handles both the 4-level regular layout
+%% ([streams, Type, Id, Version]) and the 2-level DCB log
+%% ([streams, _dcb, SeqKey]); `stream_id_from_path/1' reconstructs the
+%% opaque id for both.
 -spec convert_result_to_event([atom() | binary()], term()) -> event() | undefined.
-convert_result_to_event([streams, StreamId | _], Event) when is_record(Event, event) ->
-    Event#event{stream_id = StreamId};
-convert_result_to_event([streams, StreamId | _], EventMap) when is_map(EventMap) ->
+convert_result_to_event([streams | _] = Path, Event) when is_record(Event, event) ->
+    Event#event{stream_id = reckon_db_stream_path:stream_id_from_path(Path)};
+convert_result_to_event([streams | _] = Path, EventMap) when is_map(EventMap) ->
     Event = map_to_event(EventMap),
-    Event#event{stream_id = StreamId};
+    Event#event{stream_id = reckon_db_stream_path:stream_id_from_path(Path)};
 convert_result_to_event(_, _) ->
     undefined.
 
@@ -447,8 +456,7 @@ convert_result_to_event(_, _) ->
 %%   N >= 0 - representing the version of the latest event
 -spec get_version(atom(), binary()) -> integer().
 get_version(StoreId, StreamId) ->
-    Path = ?STREAMS_PATH ++ [StreamId],
-    case khepri:count(StoreId, Path ++ [?KHEPRI_WILDCARD_STAR]) of
+    case khepri:count(StoreId, reckon_db_stream_path:versions_pattern(StreamId)) of
         {ok, 0} -> ?NO_STREAM;
         {ok, Count} -> Count - 1;
         {error, _} -> ?NO_STREAM
@@ -457,7 +465,7 @@ get_version(StoreId, StreamId) ->
 %% @doc Check if a stream exists
 -spec exists(atom(), binary()) -> boolean().
 exists(StoreId, StreamId) ->
-    Path = ?STREAMS_PATH ++ [StreamId],
+    Path = reckon_db_stream_path:stream_path(StreamId),
     case khepri:exists(StoreId, Path) of
         true -> true;
         false -> false;
@@ -478,13 +486,17 @@ has_events(StoreId) ->
 %% @doc List all streams in the store
 -spec list_streams(atom()) -> {ok, [binary()]} | {error, term()}.
 list_streams(StoreId) ->
-    %% Use get_many with wildcard to find all stream IDs
-    Path = ?STREAMS_PATH ++ [?KHEPRI_WILDCARD_STAR],
+    %% Aggregate-id nodes live at depth 3: [streams, Type, Id]. One such
+    %% node per stream (its children are the version leaves). Reconstruct
+    %% the opaque id and drop the reserved DCB pseudo-stream — it is not a
+    %% user stream.
+    Path = ?STREAMS_PATH ++ [?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR],
     case khepri:get_many(StoreId, Path) of
         {ok, Results} when is_map(Results) ->
-            %% Extract stream IDs from paths: {[streams, StreamId, ...], _}
             StreamIds = lists:usort([
-                extract_stream_id(P) || P <- maps:keys(Results)
+                reckon_db_stream_path:stream_id_from_path(P)
+                || P <- maps:keys(Results),
+                   not is_dcb_path(P)
             ]),
             {ok, StreamIds};
         {ok, _} ->
@@ -493,17 +505,16 @@ list_streams(StoreId) ->
             Error
     end.
 
-%% @private Extract stream ID from path [streams, StreamId, ...]
--spec extract_stream_id([atom() | binary()]) -> binary().
-extract_stream_id([streams, StreamId | _]) ->
-    StreamId;
-extract_stream_id(_) ->
-    <<>>.
+%% @private True for the DCB pseudo-stream's 2-level nodes
+%% ([streams, _dcb, SeqKey]) — excluded from user-facing stream listings.
+-spec is_dcb_path([atom() | binary()]) -> boolean().
+is_dcb_path([streams, ?DCB_STREAM | _]) -> true;
+is_dcb_path(_) -> false.
 
 %% @doc Delete a stream and all its events
 -spec delete(atom(), binary()) -> ok | {error, term()}.
 delete(StoreId, StreamId) ->
-    Path = ?STREAMS_PATH ++ [StreamId],
+    Path = reckon_db_stream_path:stream_path(StreamId),
     case khepri:delete(StoreId, Path) of
         ok -> ok;
         {error, _} = Error -> Error
@@ -576,7 +587,7 @@ append_events_to_stream(StoreId, StreamId, CurrentVersion, Events) ->
                 {RecordedEvent, NextTip} = apply_integrity_if_enabled(
                     RecordedEvent0, AccTip, IntegrityCtx),
                 PaddedVersion = pad_version(NewVersion, ?VERSION_PADDING),
-                Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
+                Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
                 case khepri:put(StoreId, Path, RecordedEvent) of
                     ok ->
                         {NewVersion, NextTip};
@@ -637,7 +648,7 @@ resolve_initial_tip(StoreId, StreamId, NextVersion,
         when NextVersion > ChainStart ->
     PrevVersion = NextVersion - 1,
     PaddedVersion = pad_version(PrevVersion, ?VERSION_PADDING),
-    Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
+    Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
     case khepri:get(StoreId, Path) of
         {ok, #event{prev_event_hash = PrevPrevHash} = PrevEvent}
                 when is_binary(PrevPrevHash) ->
@@ -902,7 +913,7 @@ resolve_read_initial_tip(StoreId, StreamId, StartVersion, _ChainStart)
         when StartVersion > 0 ->
     PrevVersion = StartVersion - 1,
     PaddedVersion = pad_version(PrevVersion, ?VERSION_PADDING),
-    Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
+    Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
     case khepri:get(StoreId, Path) of
         {ok, #event{prev_event_hash = PrevPrevHash} = PrevEvent}
                 when is_binary(PrevPrevHash) ->
@@ -920,7 +931,7 @@ read_events(StoreId, StreamId, StartVersion, Count, Direction) ->
     Events = lists:filtermap(
         fun(Version) ->
             PaddedVersion = pad_version(Version, ?VERSION_PADDING),
-            Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
+            Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
             case khepri:get(StoreId, Path) of
                 {ok, Event} when is_record(Event, event) ->
                     {true, Event};

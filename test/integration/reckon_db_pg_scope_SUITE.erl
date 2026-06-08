@@ -183,9 +183,14 @@ emitter_can_join_pg_group_after_scope_restart(_Config) ->
     %% Wait for leader activation
     ok = wait_for_leader(StoreId, 10000),
 
-    %% Subscribe — emitter pool joins pg group under the restarted scope
+    %% Subscribe — emitter pool joins pg group under the restarted scope.
+    %% The subscription targets one specific stream; the delivery check
+    %% below MUST append to that same stream (a `stream' subscription only
+    %% receives events on its selector — Model C's structural by_stream
+    %% filter matches the exact [streams, Type, Id, *] subtree).
+    PgStream = reckon_db_test_helpers:sid(<<"testpgrestart-001">>),
     {ok, SubKey} = reckon_db_subscriptions:subscribe(
-        StoreId, stream, <<"testpgrestart-001">>, <<"pg_restart_test">>,
+        StoreId, stream, PgStream, <<"pg_restart_test">>,
         #{subscriber => self()}
     ),
     timer:sleep(300),
@@ -199,7 +204,7 @@ emitter_can_join_pg_group_after_scope_restart(_Config) ->
         event_type => <<"test_event_v1">>,
         data => #{<<"key">> => <<"value">>}
     },
-    {ok, _} = reckon_db_streams:append(StoreId, <<"testpgrestart-002">>, -2, [Event]),
+    {ok, _} = reckon_db_streams:append(StoreId, PgStream, -2, [Event]),
 
     receive
         {events, [ReceivedEvent]} ->

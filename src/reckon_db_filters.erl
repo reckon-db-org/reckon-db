@@ -60,8 +60,11 @@
 -spec by_stream(binary()) ->
     khepri_evf:tree_event_filter() | {error, empty_selector}.
 by_stream(<<"$all">>) ->
+    %% Model C layout: [streams, Type, Id, Version]. The $all selector
+    %% matches every regular event leaf across all aggregate types.
     khepri_evf:tree(
         [streams,
+         #if_path_matches{regex = any},
          #if_path_matches{regex = any},
          #if_all{conditions = [
              #if_path_matches{regex = any},
@@ -72,9 +75,13 @@ by_stream(<<"$all">>) ->
 by_stream(<<>>) ->
     {error, empty_selector};
 by_stream(Stream) when is_binary(Stream) ->
+    %% A literal stream id is split into its structural {Type, Id} path
+    %% segments so the trigger watches exactly [streams, Type, Id, *].
+    [streams, Type, Id] = reckon_db_stream_path:stream_path(Stream),
     khepri_evf:tree(
         [streams,
-         Stream,
+         Type,
+         Id,
          #if_all{conditions = [
              #if_path_matches{regex = any},
              #if_has_data{has_data = true}
@@ -89,6 +96,7 @@ by_stream(Stream) when is_binary(Stream) ->
 by_event_type(EventType) when is_binary(EventType) ->
     khepri_evf:tree(
         [streams,
+         #if_path_matches{regex = any},
          #if_path_matches{regex = any},
          #if_all{conditions = [
              #if_path_matches{regex = any},
@@ -106,6 +114,7 @@ by_event_pattern(EventPattern) when is_map(EventPattern) ->
     khepri_evf:tree(
         [streams,
          #if_path_matches{regex = any},
+         #if_path_matches{regex = any},
          #if_all{conditions = [
              #if_path_matches{regex = any},
              #if_has_data{has_data = true},
@@ -121,6 +130,7 @@ by_event_pattern(EventPattern) when is_map(EventPattern) ->
 by_event_payload(PayloadPattern) when is_map(PayloadPattern) ->
     khepri_evf:tree(
         [streams,
+         #if_path_matches{regex = any},
          #if_path_matches{regex = any},
          #if_all{conditions = [
              #if_path_matches{regex = any},
@@ -142,6 +152,7 @@ by_tags(Tags) when is_list(Tags) ->
     %% The consumer must filter for specific tag membership
     khepri_evf:tree(
         [streams,
+         #if_path_matches{regex = any},
          #if_path_matches{regex = any},
          #if_all{conditions = [
              #if_path_matches{regex = any},

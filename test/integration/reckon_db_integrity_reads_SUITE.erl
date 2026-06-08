@@ -167,7 +167,7 @@ end_per_testcase(_TestCase, Config) ->
 %% Intact chain of N events reads cleanly with no errors.
 intact_chain_reads_clean(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"clean-chain">>,
+    StreamId = reckon_db_test_helpers:sid(<<"clean-chain">>),
     write_n_events(StoreId, StreamId, 10),
 
     {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 100, forward),
@@ -180,7 +180,7 @@ intact_chain_reads_clean(Config) ->
 %% succeed and that event's prev_event_hash should equal genesis.
 read_single_event_at_chain_start(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"single">>,
+    StreamId = reckon_db_test_helpers:sid(<<"single">>),
     write_n_events(StoreId, StreamId, 1),
 
     {ok, [Event]} = reckon_db_streams:read(StoreId, StreamId, 0, 1, forward),
@@ -193,7 +193,7 @@ read_single_event_at_chain_start(Config) ->
 %% codepath that reads the predecessor from storage.
 read_from_middle_of_chain(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"middle">>,
+    StreamId = reckon_db_test_helpers:sid(<<"middle">>),
     write_n_events(StoreId, StreamId, 5),
 
     {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 2, 3, forward),
@@ -207,27 +207,27 @@ read_from_middle_of_chain(Config) ->
 %%====================================================================
 
 tampered_data_is_caught(Config) ->
-    expect_mac_mismatch(Config, <<"t-data">>,
+    expect_mac_mismatch(Config, reckon_db_test_helpers:sid(<<"t-data">>),
         fun(E) -> E#event{data = #{tampered => true}} end).
 
 tampered_metadata_is_caught(Config) ->
-    expect_mac_mismatch(Config, <<"t-meta">>,
+    expect_mac_mismatch(Config, reckon_db_test_helpers:sid(<<"t-meta">>),
         fun(E) -> E#event{metadata = #{forged => true}} end).
 
 tampered_event_type_is_caught(Config) ->
-    expect_mac_mismatch(Config, <<"t-type">>,
+    expect_mac_mismatch(Config, reckon_db_test_helpers:sid(<<"t-type">>),
         fun(E) -> E#event{event_type = <<"forged_type">>} end).
 
 tampered_tags_is_caught(Config) ->
-    expect_mac_mismatch(Config, <<"t-tags">>,
+    expect_mac_mismatch(Config, reckon_db_test_helpers:sid(<<"t-tags">>),
         fun(E) -> E#event{tags = [<<"forged">>]} end).
 
 tampered_timestamp_is_caught(Config) ->
-    expect_mac_mismatch(Config, <<"t-ts">>,
+    expect_mac_mismatch(Config, reckon_db_test_helpers:sid(<<"t-ts">>),
         fun(E) -> E#event{timestamp = 99999999999} end).
 
 tampered_mac_is_caught(Config) ->
-    expect_mac_mismatch(Config, <<"t-mac">>,
+    expect_mac_mismatch(Config, reckon_db_test_helpers:sid(<<"t-mac">>),
         fun(#event{mac = {KeyId, _}} = E) ->
             E#event{mac = {KeyId, <<0:256>>}}
         end).
@@ -238,7 +238,7 @@ tampered_mac_is_caught(Config) ->
 %% runs first, so we expect chain_mismatch as the failure kind.
 tampered_prev_event_hash_is_caught(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"t-prev">>,
+    StreamId = reckon_db_test_helpers:sid(<<"t-prev">>),
     write_n_events(StoreId, StreamId, 3),
 
     %% Tamper event at version 1: change its prev_event_hash to junk.
@@ -260,7 +260,7 @@ tampered_prev_event_hash_is_caught(Config) ->
 %% caught.
 cleared_integrity_fields_treated_as_legacy(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"t-cleared">>,
+    StreamId = reckon_db_test_helpers:sid(<<"t-cleared">>),
     write_n_events(StoreId, StreamId, 3),
 
     tamper_event(StoreId, StreamId, 1,
@@ -289,12 +289,12 @@ cleared_integrity_fields_treated_as_legacy(Config) ->
 %% on event 2 fails.
 deleted_middle_event_breaks_chain(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"t-deleted">>,
+    StreamId = reckon_db_test_helpers:sid(<<"t-deleted">>),
     write_n_events(StoreId, StreamId, 5),
 
     %% Delete event at version 1 directly via khepri.
     PaddedV1 = pad_version(1, ?VERSION_PADDING),
-    Path = [streams, StreamId, PaddedV1],
+    Path = reckon_db_stream_path:event_path(StreamId, PaddedV1),
     ok = khepri:delete(StoreId, Path),
 
     Result = reckon_db_streams:read(StoreId, StreamId, 0, 10, forward),
@@ -309,7 +309,7 @@ deleted_middle_event_breaks_chain(Config) ->
 %% different key). The MAC check catches it.
 inserted_forged_event_breaks_chain(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"t-inserted">>,
+    StreamId = reckon_db_test_helpers:sid(<<"t-inserted">>),
     write_n_events(StoreId, StreamId, 5),
 
     %% Build a fake event using a DIFFERENT key — the MAC won't match.
@@ -321,7 +321,7 @@ inserted_forged_event_breaks_chain(Config) ->
         RealE1#event{data = #{forged => true}}, AttackerKey),
 
     PaddedV1 = pad_version(1, ?VERSION_PADDING),
-    Path = [streams, StreamId, PaddedV1],
+    Path = reckon_db_stream_path:event_path(StreamId, PaddedV1),
     ok = khepri:put(StoreId, Path, BadE1),
 
     Result = reckon_db_streams:read(StoreId, StreamId, 0, 10, forward),
@@ -343,7 +343,7 @@ inserted_forged_event_breaks_chain(Config) ->
 %% chain breaks.
 swapped_two_adjacent_events_caught(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"t-swapped">>,
+    StreamId = reckon_db_test_helpers:sid(<<"t-swapped">>),
     write_n_events(StoreId, StreamId, 5),
 
     {ok, [_E0, E1, E2 | _]} = reckon_db_streams:read(
@@ -352,8 +352,8 @@ swapped_two_adjacent_events_caught(Config) ->
     PaddedV1 = pad_version(1, ?VERSION_PADDING),
     PaddedV2 = pad_version(2, ?VERSION_PADDING),
     %% Put E2 at version 1's slot and vice versa.
-    ok = khepri:put(StoreId, [streams, StreamId, PaddedV1], E2),
-    ok = khepri:put(StoreId, [streams, StreamId, PaddedV2], E1),
+    ok = khepri:put(StoreId, reckon_db_stream_path:event_path(StreamId, PaddedV1), E2),
+    ok = khepri:put(StoreId, reckon_db_stream_path:event_path(StreamId, PaddedV2), E1),
 
     Result = reckon_db_streams:read(StoreId, StreamId, 0, 10, forward),
     %% Either chain_mismatch (the structural check) or mac_mismatch
@@ -374,7 +374,7 @@ swapped_two_adjacent_events_caught(Config) ->
 %% through unchanged in skip_legacy mode.
 skip_legacy_passes_legacy_events_through(Config) ->
     {StoreId, _Key} = setup_integrity_store_with_legacy_prefix(Config, 3),
-    StreamId = <<"mixed-skip-legacy">>,
+    StreamId = reckon_db_test_helpers:sid(<<"mixed-skip-legacy">>),
     write_legacy_events(StoreId, StreamId, 3),
     %% Now enable integrity (set watermark to 3) and write 2 more.
     {ok, _} = reckon_db_chain_watermark:set_if_absent(StoreId, StreamId, 3),
@@ -398,7 +398,7 @@ skip_legacy_passes_legacy_events_through(Config) ->
 %% legacy region must error out.
 strict_rejects_legacy_events(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"strict-test">>,
+    StreamId = reckon_db_test_helpers:sid(<<"strict-test">>),
     %% First: integrity disabled, write some legacy events.
     write_legacy_events(StoreId, StreamId, 3),
     %% Now enable integrity on the store. No watermark gets set
@@ -419,7 +419,7 @@ strict_rejects_legacy_events(Config) ->
 %% as advertised.
 skip_all_returns_tampered_events(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"skip-all">>,
+    StreamId = reckon_db_test_helpers:sid(<<"skip-all">>),
     write_n_events(StoreId, StreamId, 3),
     tamper_event(StoreId, StreamId, 1,
         fun(E) -> E#event{data = #{forged => true}} end),
@@ -439,7 +439,7 @@ skip_all_returns_tampered_events(Config) ->
 %% integrity was enabled mid-life) reads cleanly under skip_legacy.
 legacy_and_integrity_events_in_same_stream(Config) ->
     {StoreId, _Key} = setup_integrity_store_with_legacy_prefix(Config, 2),
-    StreamId = <<"mixed">>,
+    StreamId = reckon_db_test_helpers:sid(<<"mixed">>),
     write_legacy_events(StoreId, StreamId, 2),
     {ok, _} = reckon_db_chain_watermark:set_if_absent(StoreId, StreamId, 2),
     write_n_events_starting_at(StoreId, StreamId, 2, 3),
@@ -458,7 +458,7 @@ legacy_and_integrity_events_in_same_stream(Config) ->
 %% an integrity_violation, just like a forward read would.
 backward_read_catches_tampering(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"backward-tamper">>,
+    StreamId = reckon_db_test_helpers:sid(<<"backward-tamper">>),
     write_n_events(StoreId, StreamId, 3),
     tamper_event(StoreId, StreamId, 1,
         fun(E) -> E#event{data = #{forged => true}} end),
@@ -474,7 +474,7 @@ backward_read_catches_tampering(Config) ->
 %% without reshaping the result-ordering contract.
 backward_read_returns_events_in_descending_order(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"backward-clean">>,
+    StreamId = reckon_db_test_helpers:sid(<<"backward-clean">>),
     write_n_events(StoreId, StreamId, 5),
 
     {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 4, 3, backward),
@@ -491,7 +491,7 @@ backward_read_returns_events_in_descending_order(Config) ->
 integrity_disabled_store_bypasses_verification(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     %% Do NOT load any integrity key — store is in default disabled state.
-    StreamId = <<"disabled">>,
+    StreamId = reckon_db_test_helpers:sid(<<"disabled">>),
 
     {ok, 2} = reckon_db_streams:append(
         StoreId, StreamId, ?NO_STREAM,
@@ -562,7 +562,7 @@ write_n_events_starting_at(StoreId, StreamId, StartVersion, N) ->
 
 tamper_event(StoreId, StreamId, Version, Fun) ->
     PaddedVersion = pad_version(Version, ?VERSION_PADDING),
-    Path = [streams, StreamId, PaddedVersion],
+    Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
     {ok, Event} = khepri:get(StoreId, Path),
     ok = khepri:put(StoreId, Path, Fun(Event)),
     ok.

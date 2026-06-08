@@ -153,7 +153,7 @@ leader_activates_in_single_mode(Config) ->
 %%      THEN an emitter pool process is started by the LeaderTracker
 subscribe_starts_emitter_pool_after_leader(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testpoolstart-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testpoolstart-001">>),
     SubName = <<"pool_start_test">>,
 
     ok = wait_for_leader(StoreId, 10000),
@@ -179,7 +179,7 @@ subscribe_starts_emitter_pool_after_leader(Config) ->
 %%      THEN emitter workers have joined the group
 subscribe_emitter_joins_pg_group(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testpgjoin-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testpgjoin-001">>),
     SubName = <<"pg_join_test">>,
 
     ok = wait_for_leader(StoreId, 10000),
@@ -208,7 +208,7 @@ subscribe_emitter_joins_pg_group(Config) ->
 %%      hang because no emitter pool existed to deliver events.
 subscribe_then_append_delivers_event(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testdelivery-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testdelivery-001">>),
     SubName = <<"delivery_test">>,
 
     ok = wait_for_leader(StoreId, 10000),
@@ -225,7 +225,7 @@ subscribe_then_append_delivers_event(Config) ->
     %% Append an event
     Event = #{
         event_type => <<"venture_initiated_v1">>,
-        data => #{<<"venture_id">> => <<"v-001">>, <<"name">> => <<"Test">>}
+        data => #{<<"venture_id">> => reckon_db_test_helpers:sid(<<"v-001">>), <<"name">> => <<"Test">>}
     },
     {ok, _Version} = reckon_db_streams:append(StoreId, StreamId, -2, [Event]),
 
@@ -235,7 +235,7 @@ subscribe_then_append_delivers_event(Config) ->
             ?assertEqual(<<"venture_initiated_v1">>, ReceivedEvent#event.event_type),
             ?assertEqual(StreamId, ReceivedEvent#event.stream_id),
             ReceivedData = ReceivedEvent#event.data,
-            ?assertEqual(<<"v-001">>, maps:get(<<"venture_id">>, ReceivedData))
+            ?assertEqual(reckon_db_test_helpers:sid(<<"v-001">>), maps:get(<<"venture_id">>, ReceivedData))
     after 5000 ->
         ct:fail("Subscriber did not receive event — leader activation or emitter startup failed")
     end,
@@ -260,18 +260,18 @@ subscribe_by_event_type_delivers_event(Config) ->
     timer:sleep(300),
 
     %% Append a matching event
-    MatchStream = <<"divisiondiv-001">>,
+    MatchStream = reckon_db_test_helpers:sid(<<"divisiondiv-001">>),
     MatchEvent = #{
         event_type => <<"division_designed_v1">>,
-        data => #{<<"division_id">> => <<"div-001">>}
+        data => #{<<"division_id">> => reckon_db_test_helpers:sid(<<"div-001">>)}
     },
     {ok, _} = reckon_db_streams:append(StoreId, MatchStream, -2, [MatchEvent]),
 
     %% Append a non-matching event to a different stream
-    OtherStream = <<"venturev-001">>,
+    OtherStream = reckon_db_test_helpers:sid(<<"venturev-001">>),
     OtherEvent = #{
         event_type => <<"venture_archived_v1">>,
-        data => #{<<"venture_id">> => <<"v-002">>}
+        data => #{<<"venture_id">> => reckon_db_test_helpers:sid(<<"v-002">>)}
     },
     {ok, _} = reckon_db_streams:append(StoreId, OtherStream, -2, [OtherEvent]),
 
@@ -299,8 +299,8 @@ subscribe_by_event_type_delivers_event(Config) ->
 subscribe_multiple_subscriptions_all_deliver(Config) ->
     StoreId = proplists:get_value(store_id, Config),
 
-    Stream1 = <<"venturemultiv-001">>,
-    Stream2 = <<"divisionmultid-001">>,
+    Stream1 = reckon_db_test_helpers:sid(<<"venturemultiv-001">>),
+    Stream2 = reckon_db_test_helpers:sid(<<"divisionmultid-001">>),
 
     ok = wait_for_leader(StoreId, 10000),
 
@@ -337,7 +337,7 @@ subscribe_multiple_subscriptions_all_deliver(Config) ->
 %%      THEN the correct number of emitter workers join the pg group
 subscribe_with_pool_size_starts_correct_workers(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testpoolsizetest-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testpoolsizetest-001">>),
     SubName = <<"pool_size_3_test">>,
     PoolSize = 3,
 
@@ -363,7 +363,7 @@ subscribe_with_pool_size_starts_correct_workers(Config) ->
 %%      THEN the emitter pool is stopped
 subscribe_then_unsubscribe_stops_emitter_pool(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testunsubpoolstop-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testunsubpoolstop-001">>),
     SubName = <<"unsub_pool_stop_test">>,
 
     ok = wait_for_leader(StoreId, 10000),
@@ -396,7 +396,7 @@ subscribe_then_unsubscribe_stops_emitter_pool(Config) ->
 %%      THEN it returns already_exists and the original pool keeps running
 duplicate_subscribe_returns_already_exists(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testdupidempotent-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testdupidempotent-001">>),
     SubName = <<"dup_idempotent_test">>,
 
     ok = wait_for_leader(StoreId, 10000),
@@ -433,7 +433,7 @@ duplicate_subscribe_returns_already_exists(Config) ->
 %%      THEN the emitter pool is stopped (dead subscriber cleanup)
 dead_subscriber_stops_emitter_pool(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testsubdeath-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testsubdeath-001">>),
     SubName = <<"subscriber_death_test">>,
 
     ok = wait_for_leader(StoreId, 10000),
@@ -487,7 +487,7 @@ health_monitor_reports_healthy(Config) ->
 
     %% Create a subscription with a live subscriber (self)
     {ok, SubKey} = reckon_db_subscriptions:subscribe(
-        StoreId, stream, <<"testhealthok-001">>, <<"health_ok_test">>,
+        StoreId, stream, reckon_db_test_helpers:sid(<<"testhealthok-001">>), <<"health_ok_test">>,
         #{subscriber => self()}
     ),
 
@@ -517,7 +517,7 @@ health_monitor_detects_missing_pool(Config) ->
 
     %% Create a subscription
     {ok, SubKey} = reckon_db_subscriptions:subscribe(
-        StoreId, stream, <<"testhealthmissing-001">>, <<"health_missing_test">>,
+        StoreId, stream, reckon_db_test_helpers:sid(<<"testhealthmissing-001">>), <<"health_missing_test">>,
         #{subscriber => self()}
     ),
 
@@ -558,7 +558,7 @@ health_monitor_detects_missing_pool(Config) ->
 %%           but no emitter pool exists (no emitter supervisor)
 bare_khepri_subscribe_no_emitter_pool(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testbarekhepri-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testbarekhepri-001">>),
     SubName = <<"bare_khepri_test">>,
 
     %% Subscribe — should succeed (stores subscription in Khepri)
@@ -592,7 +592,7 @@ bare_khepri_subscribe_no_emitter_pool(Config) ->
 %%      events were silently dropped until the health monitor recovered.
 late_subscribe_starts_pool_immediately(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testlatesubimmediate-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testlatesubimmediate-001">>),
     SubName = <<"late_sub_immediate_test">>,
 
     ok = wait_for_leader(StoreId, 10000),

@@ -133,7 +133,7 @@ end_per_testcase(_TestCase, Config) ->
 %% anchor_hash + mac (32 bytes / {1, 32-byte} respectively).
 save_with_integrity_populates_fields(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"snap-save-1">>,
+    StreamId = reckon_db_test_helpers:sid(<<"snap-save-1">>),
     write_n_events(StoreId, StreamId, 3),
 
     ok = reckon_db_snapshots:save(StoreId, StreamId, 2, #{count => 3}),
@@ -151,7 +151,7 @@ save_with_integrity_populates_fields(Config) ->
 save_on_disabled_store_is_legacy(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     %% Integrity not loaded — store is in default disabled state.
-    StreamId = <<"snap-disabled">>,
+    StreamId = reckon_db_test_helpers:sid(<<"snap-disabled">>),
     {ok, _} = reckon_db_streams:append(
         StoreId, StreamId, ?NO_STREAM,
         [#{event_type => <<"e">>, data => #{n => I}} || I <- [1, 2, 3]]),
@@ -170,7 +170,7 @@ save_on_disabled_store_is_legacy(Config) ->
 %% snapshot at all.
 save_refused_when_event_absent(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"snap-no-event">>,
+    StreamId = reckon_db_test_helpers:sid(<<"snap-no-event">>),
     %% Write only events 0, 1, 2.
     write_n_events(StoreId, StreamId, 3),
     %% Try to snapshot at version 99 — no event there.
@@ -185,7 +185,7 @@ save_refused_when_event_absent(Config) ->
 %% land before taking the snapshot, OR snapshot a later version.
 save_refused_when_event_is_legacy(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"snap-legacy-event">>,
+    StreamId = reckon_db_test_helpers:sid(<<"snap-legacy-event">>),
     %% Write a legacy event (integrity not yet enabled).
     {ok, _} = reckon_db_streams:append(
         StoreId, StreamId, ?NO_STREAM,
@@ -206,7 +206,7 @@ save_refused_when_event_is_legacy(Config) ->
 %% Save + load roundtrip on an intact stream.
 load_intact_snapshot_succeeds(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"snap-load-ok">>,
+    StreamId = reckon_db_test_helpers:sid(<<"snap-load-ok">>),
     write_n_events(StoreId, StreamId, 5),
 
     ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{state => intact}),
@@ -217,13 +217,13 @@ load_intact_snapshot_succeeds(Config) ->
 
 %% Tampering with the snapshot's data field breaks the MAC.
 tampered_snapshot_state_is_caught(Config) ->
-    expect_load_violation(Config, <<"snap-t-state">>,
+    expect_load_violation(Config, reckon_db_test_helpers:sid(<<"snap-t-state">>),
         fun(S) -> S#snapshot{data = #{forged => true}} end,
         snapshot_mac_mismatch).
 
 %% Tampering with the snapshot's metadata also breaks the MAC.
 tampered_snapshot_metadata_is_caught(Config) ->
-    expect_load_violation(Config, <<"snap-t-meta">>,
+    expect_load_violation(Config, reckon_db_test_helpers:sid(<<"snap-t-meta">>),
         fun(S) -> S#snapshot{metadata = #{forged => true}} end,
         snapshot_mac_mismatch).
 
@@ -233,7 +233,7 @@ tampered_snapshot_metadata_is_caught(Config) ->
 %% but the anchor check runs first and surfaces a more specific
 %% failure kind.)
 tampered_snapshot_anchor_is_caught(Config) ->
-    expect_load_violation(Config, <<"snap-t-anchor">>,
+    expect_load_violation(Config, reckon_db_test_helpers:sid(<<"snap-t-anchor">>),
         fun(S) -> S#snapshot{anchor_hash = <<99:256>>} end,
         snapshot_anchor_mismatch).
 
@@ -241,7 +241,7 @@ tampered_snapshot_anchor_is_caught(Config) ->
 %% may or may not pass (depending on whether the attacker also
 %% mutated the anchor); if it does pass, the MAC check catches it.
 tampered_snapshot_mac_is_caught(Config) ->
-    expect_load_violation(Config, <<"snap-t-mac">>,
+    expect_load_violation(Config, reckon_db_test_helpers:sid(<<"snap-t-mac">>),
         fun(#snapshot{mac = {KeyId, _}} = S) ->
             S#snapshot{mac = {KeyId, <<0:256>>}}
         end,
@@ -254,7 +254,7 @@ tampered_snapshot_mac_is_caught(Config) ->
 %% over the MAC alone.
 tampered_stream_event_breaks_snapshot(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
-    StreamId = <<"snap-t-stream">>,
+    StreamId = reckon_db_test_helpers:sid(<<"snap-t-stream">>),
     write_n_events(StoreId, StreamId, 5),
     ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{state => intact}),
 
@@ -264,10 +264,10 @@ tampered_stream_event_breaks_snapshot(Config) ->
     %% anchor is the load-bearing check, not the event MAC.
     Key = reckon_db_integrity_key:get(StoreId),
     PadV = pad_version_for_event(4),
-    {ok, Event} = khepri:get(StoreId, [streams, StreamId, PadV]),
+    {ok, Event} = khepri:get(StoreId, reckon_db_stream_path:event_path(StreamId, PadV)),
     Tampered = sign_event_with_key(
         Event#event{data = #{n => 99999}}, Key, Event#event.prev_event_hash),
-    ok = khepri:put(StoreId, [streams, StreamId, PadV], Tampered),
+    ok = khepri:put(StoreId, reckon_db_stream_path:event_path(StreamId, PadV), Tampered),
 
     %% The snapshot's anchor still refers to the ORIGINAL event 4's
     %% chain hash. Now that event 4 has been mutated, the recomputed
@@ -283,7 +283,7 @@ tampered_stream_event_breaks_snapshot(Config) ->
 %% skip_legacy default.
 legacy_snapshot_passes_through_on_load(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"snap-legacy">>,
+    StreamId = reckon_db_test_helpers:sid(<<"snap-legacy">>),
     %% Write everything as legacy first.
     {ok, _} = reckon_db_streams:append(
         StoreId, StreamId, ?NO_STREAM,
@@ -304,7 +304,7 @@ legacy_snapshot_passes_through_on_load(Config) ->
 %% if they happen to carry integrity fields somehow.
 integrity_disabled_store_skips_load_verification(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"snap-disabled-load">>,
+    StreamId = reckon_db_test_helpers:sid(<<"snap-disabled-load">>),
     %% Write events, save snapshot — all legacy.
     {ok, _} = reckon_db_streams:append(
         StoreId, StreamId, ?NO_STREAM,

@@ -110,7 +110,7 @@ end_per_testcase(_TestCase, Config) ->
 %%      THEN the subscribing process receives the event
 subscribe_then_append_delivers_event(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testdelivery-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testdelivery-001">>),
     SubName = <<"delivery_test_sub">>,
 
     %% Subscribe with self() as subscriber
@@ -151,7 +151,7 @@ subscribe_then_append_delivers_event(Config) ->
 %%      THEN all events are received
 subscribe_then_append_multiple_delivers_all(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testdeliverymulti-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testdeliverymulti-001">>),
     SubName = <<"multi_delivery_sub">>,
 
     {ok, SubKey} = reckon_db_subscriptions:subscribe(
@@ -204,7 +204,7 @@ subscribe_by_event_type_delivers_matching(Config) ->
     ),
 
     %% Append a matching event
-    StreamId = <<"orderorder-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"orderorder-001">>),
     MatchingEvent = #{
         event_type => <<"order_placed_v1">>,
         data => #{<<"amount">> => 42}
@@ -212,7 +212,7 @@ subscribe_by_event_type_delivers_matching(Config) ->
     {ok, _} = reckon_db_streams:append(StoreId, StreamId, -2, [MatchingEvent]),
 
     %% Append a non-matching event to a different stream
-    StreamId2 = <<"useruser-001">>,
+    StreamId2 = reckon_db_test_helpers:sid(<<"useruser-001">>),
     NonMatchingEvent = #{
         event_type => <<"user_registered_v1">>,
         data => #{<<"name">> => <<"alice">>}
@@ -244,7 +244,7 @@ subscribe_by_event_type_delivers_matching(Config) ->
 %%      THEN no event is delivered
 unsubscribe_stops_delivery(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testunsubdelivery-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testunsubdelivery-001">>),
     SubName = <<"unsub_delivery_sub">>,
 
     {ok, SubKey} = reckon_db_subscriptions:subscribe(
@@ -290,7 +290,7 @@ unsubscribe_stops_delivery(Config) ->
 %%      THEN the received event contains the correct data, type, and stream_id
 subscriber_receives_correct_event_data(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"ventureventureabc-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"ventureventureabc-001">>),
     SubName = <<"data_verify_sub">>,
 
     {ok, SubKey} = reckon_db_subscriptions:subscribe(

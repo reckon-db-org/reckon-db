@@ -153,7 +153,7 @@ end_per_testcase(_TestCase, _Config) ->
 %% @doc Test saving and loading a snapshot
 save_and_load_snapshot(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testbasicstream-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testbasicstream-001">>),
     Data = #{name => <<"Alice">>, balance => 100},
 
     %% Save snapshot
@@ -170,7 +170,7 @@ save_and_load_snapshot(Config) ->
 %% @doc Test loading non-existent snapshot returns error
 load_nonexistent_snapshot(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testnonexistent-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testnonexistent-001">>),
 
     Result = reckon_db_snapshots:load(StoreId, StreamId),
 
@@ -180,7 +180,7 @@ load_nonexistent_snapshot(Config) ->
 %% @doc Test saving snapshot with metadata
 save_with_metadata(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testmetadatastream-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testmetadatastream-001">>),
     Data = #{count => 42},
     Metadata = #{source => <<"test">>, version => 1},
 
@@ -195,7 +195,7 @@ save_with_metadata(Config) ->
 %% @doc Test overwriting snapshot at same version
 overwrite_snapshot(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testoverwritestream-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testoverwritestream-001">>),
 
     %% Save first version
     ok = reckon_db_snapshots:save(StoreId, StreamId, 5, #{value => 1}),
@@ -215,7 +215,7 @@ overwrite_snapshot(Config) ->
 %% @doc Test saving multiple snapshot versions
 save_multiple_versions(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testmultiversion-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testmultiversion-001">>),
 
     %% Save multiple versions
     ok = reckon_db_snapshots:save(StoreId, StreamId, 10, #{version => 10}),
@@ -233,7 +233,7 @@ save_multiple_versions(Config) ->
 %% @doc Test loading a specific version
 load_specific_version(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testspecificversion-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testspecificversion-001">>),
 
     ok = reckon_db_snapshots:save(StoreId, StreamId, 5, #{v => 5}),
     ok = reckon_db_snapshots:save(StoreId, StreamId, 10, #{v => 10}),
@@ -248,7 +248,7 @@ load_specific_version(Config) ->
 %% @doc Test loading latest version
 load_latest_version(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testlatestversion-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testlatestversion-001">>),
 
     ok = reckon_db_snapshots:save(StoreId, StreamId, 5, #{v => 5}),
     ok = reckon_db_snapshots:save(StoreId, StreamId, 15, #{v => 15}),
@@ -267,7 +267,7 @@ load_latest_version(Config) ->
 %% @doc Test listing snapshots
 list_snapshots(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testliststream-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testliststream-001">>),
 
     ok = reckon_db_snapshots:save(StoreId, StreamId, 1, #{a => 1}),
     ok = reckon_db_snapshots:save(StoreId, StreamId, 2, #{a => 2}),
@@ -279,7 +279,7 @@ list_snapshots(Config) ->
 %% @doc Test deleting all snapshots for a stream
 delete_all_snapshots(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testdeleteall-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testdeleteall-001">>),
 
     ok = reckon_db_snapshots:save(StoreId, StreamId, 1, #{a => 1}),
     ok = reckon_db_snapshots:save(StoreId, StreamId, 2, #{a => 2}),
@@ -295,7 +295,7 @@ delete_all_snapshots(Config) ->
 %% @doc Test deleting a specific snapshot version
 delete_specific_version(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testdeletespecific-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testdeletespecific-001">>),
 
     ok = reckon_db_snapshots:save(StoreId, StreamId, 1, #{a => 1}),
     ok = reckon_db_snapshots:save(StoreId, StreamId, 2, #{a => 2}),
@@ -312,7 +312,7 @@ delete_specific_version(Config) ->
 %% @doc Test exists check
 exists_check(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testexists-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testexists-001">>),
 
     ?assertEqual(false, reckon_db_snapshots:exists(StoreId, StreamId)),
     ?assertEqual(false, reckon_db_snapshots:exists_at(StoreId, StreamId, 5)),
@@ -331,7 +331,7 @@ exists_check(Config) ->
 %% @doc Test snapshot with stream events
 snapshot_with_stream_events(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testintegration-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testintegration-001">>),
 
     %% Write some events
     Events = [
@@ -352,7 +352,7 @@ snapshot_with_stream_events(Config) ->
 
 %% @doc Test aggregating from a snapshot
 aggregate_from_snapshot(_Config) ->
-    StreamId = <<"testaggregate-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testaggregate-001">>),
 
     %% Create initial state via snapshot
     Snapshot = #snapshot{

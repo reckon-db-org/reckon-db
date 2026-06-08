@@ -107,10 +107,39 @@ subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
     Subscription = Draft#subscription{id = Key},
     case reckon_db_subscriptions_store:exists(StoreId, Key) of
         true ->
-            reregister_subscriber(StoreId, Key, SubscriptionName, Opts);
+            resubscribe_or_reject(StoreId, Key, SubscriptionName, Opts);
         false ->
             store_and_setup(StoreId, Key, Type, Selector, Subscription, StartTime)
     end.
+
+%% @private An existing subscription with a STILL-LIVE subscriber is an
+%% active subscription — re-subscribing to it is a genuine duplicate and
+%% is rejected. An existing subscription whose subscriber is dead or never
+%% set (the persisted-after-restart case) is reclaimed: the reconnect path
+%% re-binds the new pid and refreshes the Khepri trigger.
+-spec resubscribe_or_reject(atom(), binary(), binary(), subscribe_opts()) ->
+    {ok, binary()} | {error, {already_exists, binary()}}.
+resubscribe_or_reject(StoreId, Key, SubscriptionName, Opts) ->
+    case subscriber_alive(reckon_db_subscriptions_store:get(StoreId, Key)) of
+        true ->
+            {error, {already_exists, SubscriptionName}};
+        false ->
+            reregister_subscriber(StoreId, Key, SubscriptionName, Opts)
+    end.
+
+%% @private True only when the subscription carries a subscriber pid that
+%% is currently alive. Local pids are probed directly; a remote pid (the
+%% subscriber lives on another node) is conservatively treated as alive,
+%% since a cheap cross-node liveness probe isn't available here and a live
+%% remote subscriber must not be silently displaced.
+-spec subscriber_alive(subscription() | undefined) -> boolean().
+subscriber_alive(#subscription{subscriber_pid = Pid}) when is_pid(Pid) ->
+    case node(Pid) =:= node() of
+        true  -> is_process_alive(Pid);
+        false -> true
+    end;
+subscriber_alive(_) ->
+    false.
 
 %% @private
 store_and_setup(StoreId, Key, Type, Selector, Subscription, StartTime) ->

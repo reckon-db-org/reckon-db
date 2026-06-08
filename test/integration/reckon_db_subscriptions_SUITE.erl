@@ -165,7 +165,7 @@ end_per_testcase(_TestCase, _Config) ->
 %% @doc Test subscribing to a stream
 subscribe_to_stream(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"teststreamsub-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"teststreamsub-001">>),
 
     {ok, Key} = reckon_db_subscriptions:subscribe(
         StoreId,
@@ -222,7 +222,7 @@ subscribe_to_event_pattern(Config) ->
 %% @doc Test subscribing with custom pool size
 subscribe_with_pool_size(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testpooledstream-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testpooledstream-001">>),
 
     {ok, Key} = reckon_db_subscriptions:subscribe(
         StoreId,
@@ -250,7 +250,7 @@ subscribe_with_pool_size(Config) ->
 %% re-binds the subscriber pid and refreshes the Khepri trigger.
 subscribe_duplicate_is_idempotent(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testdupstream-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testdupstream-001">>),
     SubName = <<"duplicate_test">>,
 
     %% First subscription creates the record
@@ -279,7 +279,7 @@ subscribe_duplicate_is_idempotent(Config) ->
 %% @doc Test unsubscribing by key
 unsubscribe_by_key(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testunsubstream-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testunsubstream-001">>),
 
     {ok, Key} = reckon_db_subscriptions:subscribe(
         StoreId,
@@ -311,7 +311,7 @@ unsubscribe_nonexistent(Config) ->
 %% @doc Test that subscriptions are persisted
 subscription_persisted(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-    StreamId = <<"testpersiststream-001">>,
+    StreamId = reckon_db_test_helpers:sid(<<"testpersiststream-001">>),
 
     {ok, Key} = reckon_db_subscriptions:subscribe(
         StoreId,
@@ -337,10 +337,10 @@ list_subscriptions(Config) ->
 
     %% Create multiple subscriptions
     {ok, Key1} = reckon_db_subscriptions:subscribe(
-        StoreId, stream, <<"testlist-001">>, <<"list_test_1">>
+        StoreId, stream, reckon_db_test_helpers:sid(<<"testlist-001">>), <<"list_test_1">>
     ),
     {ok, Key2} = reckon_db_subscriptions:subscribe(
-        StoreId, stream, <<"testlist-002">>, <<"list_test_2">>
+        StoreId, stream, reckon_db_test_helpers:sid(<<"testlist-002">>), <<"list_test_2">>
     ),
 
     %% List all subscriptions
@@ -358,7 +358,7 @@ subscription_exists(Config) ->
     StoreId = proplists:get_value(store_id, Config),
 
     {ok, Key} = reckon_db_subscriptions:subscribe(
-        StoreId, stream, <<"testexists-001">>, <<"exists_test">>
+        StoreId, stream, reckon_db_test_helpers:sid(<<"testexists-001">>), <<"exists_test">>
     ),
 
     ?assertEqual(true, reckon_db_subscriptions:exists(StoreId, Key)),
@@ -430,7 +430,7 @@ emitter_group_broadcast(Config) ->
     TestEvent = #event{
         event_id = <<"test-event-1">>,
         event_type = <<"test_event">>,
-        stream_id = <<"teststream-001">>,
+        stream_id = reckon_db_test_helpers:sid(<<"teststream-001">>),
         version = 0,
         data = #{<<"key">> => <<"value">>},
         metadata = #{},

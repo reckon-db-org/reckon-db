@@ -266,7 +266,7 @@ delete_event_versions(StoreId, StreamId, FromVersion, ToVersion) ->
     lists:foreach(
         fun(Version) ->
             PaddedVersion = pad_version(Version, ?VERSION_PADDING),
-            Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
+            Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
             khepri:delete(StoreId, Path)
         end,
         lists:seq(FromVersion, ToVersion)

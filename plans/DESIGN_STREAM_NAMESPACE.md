@@ -262,7 +262,10 @@ decision) — this RFC does not re-open that.
 - [x] **Adopt Model C (structural type subtree)** — accepted.
 - [x] **Clean break, no migration** — not in production; delete the old layout,
       recreate stores fresh.
-- [ ] DCB stays per-store by default? (recommend **yes** — confirm at impl)
+- [x] DCB stays per-store by default — **confirmed 2026-06-08**. Per-type DCB
+      is not built now; revisit only on a concrete need.
+
+Implementation plan: [PLAN_STREAM_NAMESPACE_MODEL_C.md](PLAN_STREAM_NAMESPACE_MODEL_C.md).
 
 Sequencing: implement Model C (primary layout) first, then the secondary index
 ([DESIGN_SECONDARY_INDEX.md](DESIGN_SECONDARY_INDEX.md)) on top — the index's

@@ -12,6 +12,7 @@
     stop_store/1,
     cleanup_data_dir/1,
     generate_stream_id/0,
+    sid/1,
     generate_event/1,
     generate_events/2,
     wait_for/2,
@@ -106,6 +107,26 @@ generate_stream_id() ->
 generate_hex() ->
     Bytes = crypto:strong_rand_bytes(16),
     binary:encode_hex(Bytes, lowercase).
+
+%% @doc Deterministically map a human-readable label to a conforming
+%% user stream id (`<prefix>-<32hex>'). Same label always yields the same
+%% id (so a test referring to one logical stream by label gets one stream),
+%% distinct labels yield distinct ids. The prefix keeps the label's
+%% lowercase letters (capped at 32) for log legibility; the 32-hex suffix
+%% is md5(label).
+%%
+%% Lets integration tests name streams semantically while still passing
+%% the strict reckon_gater_stream_id:validate/1 gate.
+-spec sid(binary() | string()) -> binary().
+sid(Label) ->
+    Bin = iolist_to_binary(Label),
+    Letters = << <<C>> || <<C>> <= Bin, C >= $a, C =< $z >>,
+    Prefix = case Letters of
+        <<>> -> <<"s">>;
+        _    -> binary:part(Letters, 0, min(32, byte_size(Letters)))
+    end,
+    Hex = binary:encode_hex(crypto:hash(md5, Bin), lowercase),
+    <<Prefix/binary, "-", Hex/binary>>.
 
 %% @doc Generate a single test event
 -spec generate_event(binary()) -> map().

@@ -293,7 +293,7 @@ emit_load_violation_telemetry(StoreId, StreamId, Version, _Violation) ->
 %% comparison will catch it.
 compute_event_chain_hash(StoreId, StreamId, Version) ->
     PaddedVersion = pad_version_for_event(Version),
-    Path = [streams, StreamId, PaddedVersion],
+    Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
     case khepri:get(StoreId, Path) of
         {ok, #event{prev_event_hash = PrevHash} = Event}
                 when is_binary(PrevHash) ->
