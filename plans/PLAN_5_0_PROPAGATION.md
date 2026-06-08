@@ -93,3 +93,36 @@ the remaining manual step.
 `release-local.sh` for v0.6.0. **Operational reminder:** any reckon-gateway with
 an embedded store must recreate that store on the `reckon_db ~> 5.0` upgrade
 (Model C layout break) — catalogue-mode gateways are unaffected.
+
+## Lineage (correlation/causation) — design decision + additions (2026-06-08)
+
+After a deep review of Greg Young's book chapters (Message/Correlation/Causation/
+Conversation Id, all EIP patterns per Hohpe & Woolf 2004) and how AxonIQ, Marten,
+and Commanded handle them, the decision: **the generic store keeps only the
+`read_by_metadata` filter primitive (no `get_effects`/`get_causes`/graph verb);
+the intent-revealing API and auto-propagation live in the framework layer.** This
+mirrors EventStoreDB, whose lineage view is the `$by_correlation_id` *projection*,
+not a core read verb. Reasoning recorded in the session; the short version:
+
+- correlation/causation are first-class **canonical patterns**, so they deserve
+  first-class treatment — but as a typed envelope field + auto-propagation in the
+  CQRS framework (Marten/Commanded model), not as a verb baked into a generic,
+  polyglot store.
+- Auto-propagation requires a dispatch layer that knows "the message I am
+  handling." Raw clients (reckon-go) and the pass-through gateway cannot do it; a
+  framework (evoq) can. So it is irreducibly a framework concern.
+- The polyglot store/wire layer (reckon-db family) is the EventStoreDB analog:
+  the ids are **reserved metadata keys**, queried via `read_by_metadata`.
+
+Additions made (the names are pinned once in reckon-proto and reused everywhere):
+
+| Repo | Version | Lineage addition |
+|------|---------|------------------|
+| reckon-proto | 0.6.1 | "Reserved metadata keys" doc block in `reckon_shared.proto` — `causation_id`/`correlation_id`/`conversation_id` as the cross-language source of truth (docs only) |
+| evoq | 1.20.0 | `evoq_lineage` (accessors + `get_effects`/`get_correlated`/`get_conversation` over `read_by_metadata`); reserved-key macros in `evoq.hrl`; `evoq_event_store:read_by_metadata/3`; aggregate propagation via the macros |
+| reckon-evoq | 2.4.0 | `read_by_metadata/3` adapter passthrough → `reckon_gater_api:read_by_metadata/3` |
+| reckon-go | 0.6.0 | `streams/lineage.go` — reserved-key constants + `ReadEffects`/`ReadCorrelated`/`ReadConversation` + `WithLineage` (convention sugar; not auto-propagation) |
+
+No `get_effects`/`get_causes`/graph verb was added to reckon-db or reckon-gater.
+Multi-hop chain/graph assembly is composed by applications over these primitives,
+or built as a read-model/projection — never in the store.
