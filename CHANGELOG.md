@@ -5,6 +5,41 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] - 2026-06-10
+
+### Security — multicast discovery hardened (gossip protocol v2)
+
+Fixes the 2026-06-10 audit finding: the discovery listener fed
+attacker-controllable UDP multicast datagrams straight into an
+unsafe `binary_to_term/1` *before* any authentication (remote
+atom-table exhaustion + unbounded allocation from any LAN host), the
+cluster secret rode the wire in cleartext, and an unconfigured
+deployment silently fell back to the hardcoded
+`reckon_db_default_secret`.
+
+- **Safe decode first.** Inbound datagrams are decoded with
+  `binary_to_term(_, [safe])` and pattern-matched against the exact
+  v2 shape; anything else is dropped.
+- **HMAC instead of cleartext secret.** v2 gossip is
+  `{gossip_v2, NodeBin, Timestamp, Hmac}` with HMAC-SHA256 keyed by
+  the cluster secret (constant-time compare, ±60s freshness window).
+  The secret never goes on the wire. Node names travel as binaries
+  and are only atomized after authentication.
+- **No default secret.** Cluster-mode discovery now requires
+  `RECKON_DB_CLUSTER_SECRET` (or the new `{reckon_db, cluster_secret}`
+  app env) and stays passive with a loud error log when unset.
+  Manual/static cluster joins are unaffected.
+
+**Rolling-upgrade note:** v1 and v2 gossip are mutually
+unintelligible. During a mixed-version window, old and new nodes will
+not discover each other via multicast; upgrade all cluster nodes, or
+join explicitly. Deployments that relied on the implicit default
+secret must now set one.
+
+New test module: `reckon_db_discovery_gossip_tests` (roundtrip,
+secret-not-on-wire, wrong secret, tampered name, stale timestamp,
+legacy v1, garbage, unknown-atom ETF payload, oversized node name).
+
 ## [5.0.0] - 2026-06-08
 
 ### Changed — structural aggregate-type stream namespace (Model C) — BREAKING (on-disk layout)
