@@ -102,17 +102,18 @@ committed, conflict, err := d.Append(ctx,
 
 ## TagFilter algebra
 
-A `tag_filter()` is a recursive predicate over an event's tag set.
-Four shapes:
+A `tag_filter()` is a recursive predicate over an event's fields.
+Five shapes:
 
 | Shape | Meaning | Erlang term |
 |-------|---------|-------------|
 | `any_of` | Event matches if it carries ANY of these tags | `{any_of, [Tag]}` |
 | `all_of` | Event matches if it carries ALL of these tags | `{all_of, [Tag]}` |
+| `event_type` | Event matches if its `event_type` field equals Type | `{event_type, Type}` |
 | `and_` | Event matches if ALL sub-filters match | `{and_, [Filter]}` |
 | `or_` | Event matches if ANY sub-filter matches | `{or_, [Filter]}` |
 
-Filters compose to arbitrary depth. Example:
+Filters compose to arbitrary depth. Examples:
 
 ```erlang
 %% "Has tag 'slot:42' AND either tag 'tenant:acme' or tag 'tenant:globex'"
@@ -122,6 +123,13 @@ Filter = {and_, [
         {any_of, [<<"tenant:acme">>]},
         {any_of, [<<"tenant:globex">>]}
     ]}
+]}.
+
+%% "Event of type user_registered_v1 AND carries this email tag"
+%% (canonical DCB spec query-item pattern: type + tags)
+Filter = {and_, [
+    {event_type, <<"user_registered_v1">>},
+    {any_of, [<<"email:alice@example.com">>]}
 ]}.
 ```
 

@@ -5,6 +5,47 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] - 2026-06-22
+
+### Added — DCB event-type filter and `[by_event_type]` index
+
+Closes the spec-conformance gap with the canonical DCB specification
+(dcb.events): `tag_filter()` now supports an `{event_type, binary()}`
+leaf that matches events by their `event_type` field, composable with
+the full boolean algebra.
+
+**New filter shape (requires reckon-gater 3.4.0+):**
+
+```erlang
+{event_type, <<"user_registered_v1">>}
+
+%% Compose freely with tags — this is the canonical DCB "query item":
+{and_, [
+    {event_type, <<"user_registered_v1">>},
+    {any_of, [<<"email:alice@example.com">>]}
+]}
+```
+
+**Storage:** Each DCB event is now indexed at
+`[by_event_type, EventType, SeqKey]` alongside the existing
+`[by_tag, Tag, SeqKey]` entries. The index is written atomically
+inside the same Khepri transaction as the event itself.
+
+**Evaluation:** `reckon_db_dcb_filter:match_seqs/2` handles the new
+`{event_type, T}` clause; `match_any_above_cutoff/2` uses a new
+`default_provider/1` that dispatches to `seqs_for_tag/1` for binary
+keys and `seqs_for_event_type/1` for `{event_type, T}` keys. Both
+follow the same O(bounded-subtree) pattern as the tag lookup.
+
+**Migration:** Existing DCB events written before 5.2.0 have no
+`[by_event_type]` index entries. `{event_type, T}` filters will not
+match pre-existing events. If you need full coverage, re-write those
+events through `append_if_no_tag_matches/4` or accept that the cutoff
+for pre-5.2.0 events is effectively -1 for type-based queries.
+
+**Backward compatible:** All existing `{any_of, ...}`, `{all_of, ...}`,
+`{and_, ...}`, `{or_, ...}` filters are unchanged.
+
 ## [5.1.0] - 2026-06-10
 
 ### Security — multicast discovery hardened (gossip protocol v2)

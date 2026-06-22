@@ -42,6 +42,7 @@
 -define(DCB_STREAM, <<"_dcb">>).
 -define(DCB_STREAM_PATH, ?STREAMS_PATH ++ [?DCB_STREAM]).
 -define(BY_TAG_PATH, [by_tag]).
+-define(BY_EVENT_TYPE_PATH, [by_event_type]).
 %% Monotonic global counter for DCB seqs. One node, atomic via Khepri
 %% transactions. Holds the LAST-ASSIGNED seq (or absent if no DCB
 %% events yet).

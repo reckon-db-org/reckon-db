@@ -1,9 +1,11 @@
 %%% @doc DCB Khepri path helpers.
 %%%
 %%% DCB events live under [events, ?DCB_STREAM] and are mirrored under
-%%% [by_tag, Tag, SeqKey] for every tag they carry. The mirror entries
-%%% are the tag index: a subtree iteration on [by_tag, Tag, *] returns
-%%% all seq keys for that tag, lexicographically (numerically) sorted.
+%%% [by_tag, Tag, SeqKey] for every tag they carry, and under
+%%% [by_event_type, EventType, SeqKey] for their event_type field.
+%%% Both mirrors are the consistency index: a subtree iteration on
+%%% [by_tag, Tag, *] or [by_event_type, Type, *] returns all seq keys
+%%% for that tag or type, lexicographically (numerically) sorted.
 %%%
 %%% Seq keys are fixed-width zero-padded decimal binaries (see
 %%% ?DCB_SEQ_KEY_WIDTH), so lists:max/1 on a list of seq keys returns
@@ -23,6 +25,8 @@
     event_path/1,
     by_tag_path/2,
     by_tag_pattern/1,
+    by_event_type_path/2,
+    by_event_type_pattern/1,
     seq_key/1,
     seq_from_key/1
 ]).
@@ -44,6 +48,19 @@ by_tag_path(Tag, Seq) when is_binary(Tag), is_integer(Seq), Seq >= 0 ->
 -spec by_tag_pattern(binary()) -> [term()].
 by_tag_pattern(Tag) when is_binary(Tag) ->
     ?BY_TAG_PATH ++ [Tag, ?KHEPRI_WILDCARD_STAR].
+
+%% @doc Path to an event-type index entry:
+%%   [by_event_type, <<"user_registered_v1">>, <<"00000000000000000042">>]
+-spec by_event_type_path(binary(), non_neg_integer()) -> [term()].
+by_event_type_path(EventType, Seq)
+  when is_binary(EventType), is_integer(Seq), Seq >= 0 ->
+    ?BY_EVENT_TYPE_PATH ++ [EventType, seq_key(Seq)].
+
+%% @doc Pattern matching every seq under an event type (subtree wildcard).
+%% Use with khepri_tx:get_many/1 inside a transaction.
+-spec by_event_type_pattern(binary()) -> [term()].
+by_event_type_pattern(EventType) when is_binary(EventType) ->
+    ?BY_EVENT_TYPE_PATH ++ [EventType, ?KHEPRI_WILDCARD_STAR].
 
 %% @doc Convert a non-negative integer to a fixed-width zero-padded
 %% decimal binary (?DCB_SEQ_KEY_WIDTH digits).

@@ -242,7 +242,7 @@ write_on([{Seq, Record} | Rest], ExpectedSeq) ->
             khepri_tx:abort({dcb_state_changed, {seq_skew, Seq, ExpectedSeq}})
     end.
 
-write_one_record(#event{tags = Tags} = Record, Seq) ->
+write_one_record(#event{event_type = EventType, tags = Tags} = Record, Seq) ->
     ok = khepri_tx:put(reckon_db_dcb_paths:event_path(Seq), Record),
     TagList = case Tags of
                   undefined -> [];
@@ -253,6 +253,7 @@ write_one_record(#event{tags = Tags} = Record, Seq) ->
             ok = khepri_tx:put(reckon_db_dcb_paths:by_tag_path(Tag, Seq), #{})
         end,
         TagList),
+    ok = khepri_tx:put(reckon_db_dcb_paths:by_event_type_path(EventType, Seq), #{}),
     ok.
 
 verify_counter(ExpectedCounter) ->

@@ -11,11 +11,12 @@
 %% Mock seqs provider
 %%====================================================================
 
-%% Returns a provider over the given Tag => [Seq] mapping.
+%% Returns a provider over a Key => [Seq] mapping where Key is either
+%% a binary tag or {event_type, binary()}.
 mock_provider(MockData) ->
-    fun(Tag) ->
-        case lists:keyfind(Tag, 1, MockData) of
-            {Tag, Seqs} -> Seqs;
+    fun(Key) ->
+        case lists:keyfind(Key, 1, MockData) of
+            {Key, Seqs} -> Seqs;
             false       -> []
         end
     end.
@@ -208,3 +209,63 @@ cutoff_minus_one_matches_any_event_test() ->
     ?assertEqual(false,
         reckon_db_dcb_filter:match_any_above_cutoff(
             {any_of, [<<"a">>]}, -1, PEmpty)).
+
+%%====================================================================
+%% event_type filter
+%%====================================================================
+
+event_type_matches_indexed_seqs_test() ->
+    P = mock_provider([{{event_type, <<"user_registered_v1">>}, [3, 7, 11]}]),
+    Result = reckon_db_dcb_filter:match_seqs(
+               {event_type, <<"user_registered_v1">>}, P),
+    ?assertEqual([3, 7, 11], lists:sort(sets:to_list(Result))).
+
+event_type_no_matching_events_test() ->
+    P = mock_provider([{{event_type, <<"other_event_v1">>}, [1, 2]}]),
+    Result = reckon_db_dcb_filter:match_seqs(
+               {event_type, <<"user_registered_v1">>}, P),
+    ?assertEqual([], sets:to_list(Result)).
+
+event_type_composes_with_any_of_via_and_test() ->
+    %% Canonical DCB "query item": type AND tag.
+    %% event_type = user_registered_v1 -> {1, 2, 3}
+    %% any_of email:alice              -> {2, 4}
+    %% AND                             -> {2}
+    P = mock_provider([
+        {{event_type, <<"user_registered_v1">>}, [1, 2, 3]},
+        {<<"email:alice@example.com">>, [2, 4]}
+    ]),
+    Filter = {and_, [
+        {event_type, <<"user_registered_v1">>},
+        {any_of, [<<"email:alice@example.com">>]}
+    ]},
+    Result = reckon_db_dcb_filter:match_seqs(Filter, P),
+    ?assertEqual([2], lists:sort(sets:to_list(Result))).
+
+event_type_or_tag_test() ->
+    %% "Match either this type OR this tag" — broader consistency window.
+    P = mock_provider([
+        {{event_type, <<"order_placed_v1">>}, [1, 3]},
+        {<<"customer:42">>, [2, 3]}
+    ]),
+    Filter = {or_, [
+        {event_type, <<"order_placed_v1">>},
+        {any_of, [<<"customer:42">>]}
+    ]},
+    Result = reckon_db_dcb_filter:match_seqs(Filter, P),
+    ?assertEqual([1, 2, 3], lists:sort(sets:to_list(Result))).
+
+event_type_with_cutoff_test() ->
+    P = mock_provider([{{event_type, <<"user_registered_v1">>}, [1, 5, 9]}]),
+    ?assertEqual({true, 9},
+        reckon_db_dcb_filter:match_any_above_cutoff(
+            {event_type, <<"user_registered_v1">>}, 0, P)),
+    ?assertEqual(false,
+        reckon_db_dcb_filter:match_any_above_cutoff(
+            {event_type, <<"user_registered_v1">>}, 9, P)).
+
+event_type_cutoff_minus_one_test() ->
+    P = mock_provider([{{event_type, <<"user_registered_v1">>}, [0]}]),
+    ?assertEqual({true, 0},
+        reckon_db_dcb_filter:match_any_above_cutoff(
+            {event_type, <<"user_registered_v1">>}, -1, P)).
