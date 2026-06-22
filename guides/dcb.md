@@ -254,6 +254,7 @@ This is invisible to callers: same API, same return shape.
 
 ## See also
 
+- [DCB Raft design](dcb_raft_design.md) — why Raft changes the design vs. PostgreSQL, the Horus pre-stamp pattern, and the hybrid aggregate+DCB model
 - [evoq decisions guide](https://codeberg.org/reckon-db-org/evoq/src/branch/main/guides/decisions.md) — the high-level Erlang API
 - [`plans/PLAN_DCB_IMPLEMENTATION.md`](https://codeberg.org/reckon-db-org/reckon-db/src/branch/main/plans/PLAN_DCB_IMPLEMENTATION.md) — implementation design
 - [hecate-corpus `CONSISTENCY_BOUNDARIES.md`](https://codeberg.org/hecate-social/hecate-corpus/src/branch/main/philosophy/CONSISTENCY_BOUNDARIES.md) — the doctrine
