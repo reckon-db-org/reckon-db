@@ -49,8 +49,8 @@ by_tag_path(Tag, Seq) when is_binary(Tag), is_integer(Seq), Seq >= 0 ->
 by_tag_pattern(Tag) when is_binary(Tag) ->
     ?BY_TAG_PATH ++ [Tag, ?KHEPRI_WILDCARD_STAR].
 
-%% @doc Path to an event-type index entry:
-%%   [by_event_type, <<"user_registered_v1">>, <<"00000000000000000042">>]
+%% @doc Path to an event-type index entry for a given seq.
+%% Example key: [by_event_type, &lt;&lt;"user_registered_v1"&gt;&gt;, &lt;&lt;"00000000000000000042"&gt;&gt;]
 -spec by_event_type_path(binary(), non_neg_integer()) -> [term()].
 by_event_type_path(EventType, Seq)
   when is_binary(EventType), is_integer(Seq), Seq >= 0 ->
