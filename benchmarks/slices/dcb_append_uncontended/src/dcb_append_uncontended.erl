@@ -60,16 +60,22 @@ setup(Scenario) ->
     Size    = maps:get(event_size_bytes, Scenario, 256),
     StoreId = maps:get(store_id,         Scenario, bench_store),
     Payload = binary:copy(<<$x>>, Size),
-    %% Worker-local state: each worker process gets its own setup/1
-    %% call, so worker_tag is unique. `last_seq = -1` means "I've seen
-    %% nothing yet" — first call uses cutoff=-1.
+    %% worker_tag is left undefined here so that each harness phase
+    %% (warmup, measure) gets a FRESH tag on first run. The harness
+    %% restarts workers from the original setup state for each phase, so
+    %% if we set a tag here warmup events would pollute the measurement
+    %% phase's cutoff. On first run/2 call the tag is generated and
+    %% stored in the worker's state chain.
     #{
         store_id   => StoreId,
-        worker_tag => fresh_tag(),
+        worker_tag => undefined,
         data_bytes => Payload,
         last_seq   => -1
     }.
 
+%% First run in a phase: generate a fresh tag, then delegate.
+run(#{worker_tag := undefined} = State, Scenario) ->
+    run(State#{worker_tag => fresh_tag()}, Scenario);
 run(#{store_id   := Store,
       worker_tag := Tag,
       data_bytes := Payload,

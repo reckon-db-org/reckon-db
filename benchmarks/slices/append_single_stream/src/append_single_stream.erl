@@ -23,7 +23,7 @@
     teardown/2
 ]).
 
--define(STREAM_PREFIX, <<"bench.append_single_stream.">>).
+-define(STREAM_TYPE,   <<"bench">>).
 -define(EVENT_TYPE,    <<"bench.appended_v1">>).
 
 %% ---------------------------------------------------------------
@@ -99,5 +99,4 @@ teardown(#{store_id := Store, stream_id := Stream} = _State, _Scenario) ->
 %% ---------------------------------------------------------------
 
 fresh_stream_id() ->
-    <<?STREAM_PREFIX/binary,
-      (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
+    reckon_gater_stream_id:new(?STREAM_TYPE).

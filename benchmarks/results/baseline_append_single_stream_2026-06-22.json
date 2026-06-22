@@ -1,0 +1,885 @@
+{
+  "profile": "local",
+  "slice": "append_single_stream",
+  "ended_utc": "2026-06-22T05:11:04Z",
+  "latency_ns": {
+    "samples": 12232,
+    "coefficient_of_variation": 2.83991044783927670814e-01,
+    "p99": 36406714,
+    "mean": 2.45290515528940483928e+07,
+    "p50": 24102448,
+    "p90": 30667152,
+    "p95": 32319858,
+    "p99_9": 122402088,
+    "p99_99": 162320656,
+    "stddev": 6.96603097806520480663e+06
+  },
+  "phases": {
+    "warmup": {
+      "duration_sec": 161,
+      "operations": 10016,
+      "convergence_cv": 4.98980399981215905214e-02,
+      "converged": true,
+      "per_second": [
+        {
+          "ops": 84,
+          "cum_ops": 84,
+          "t_sec": 1
+        },
+        {
+          "ops": 65,
+          "cum_ops": 149,
+          "t_sec": 2
+        },
+        {
+          "ops": 59,
+          "cum_ops": 208,
+          "t_sec": 3
+        },
+        {
+          "ops": 89,
+          "cum_ops": 297,
+          "t_sec": 4
+        },
+        {
+          "ops": 79,
+          "cum_ops": 376,
+          "t_sec": 5
+        },
+        {
+          "ops": 77,
+          "cum_ops": 453,
+          "t_sec": 6
+        },
+        {
+          "ops": 72,
+          "cum_ops": 525,
+          "t_sec": 7
+        },
+        {
+          "ops": 75,
+          "cum_ops": 600,
+          "t_sec": 8
+        },
+        {
+          "ops": 80,
+          "cum_ops": 680,
+          "t_sec": 9
+        },
+        {
+          "ops": 76,
+          "cum_ops": 756,
+          "t_sec": 10
+        },
+        {
+          "ops": 75,
+          "cum_ops": 831,
+          "t_sec": 11
+        },
+        {
+          "ops": 70,
+          "cum_ops": 901,
+          "t_sec": 12
+        },
+        {
+          "ops": 75,
+          "cum_ops": 976,
+          "t_sec": 13
+        },
+        {
+          "ops": 80,
+          "cum_ops": 1056,
+          "t_sec": 14
+        },
+        {
+          "ops": 75,
+          "cum_ops": 1131,
+          "t_sec": 15
+        },
+        {
+          "ops": 77,
+          "cum_ops": 1208,
+          "t_sec": 16
+        },
+        {
+          "ops": 68,
+          "cum_ops": 1276,
+          "t_sec": 17
+        },
+        {
+          "ops": 74,
+          "cum_ops": 1350,
+          "t_sec": 18
+        },
+        {
+          "ops": 75,
+          "cum_ops": 1425,
+          "t_sec": 19
+        },
+        {
+          "ops": 70,
+          "cum_ops": 1495,
+          "t_sec": 20
+        },
+        {
+          "ops": 72,
+          "cum_ops": 1567,
+          "t_sec": 21
+        },
+        {
+          "ops": 70,
+          "cum_ops": 1637,
+          "t_sec": 22
+        },
+        {
+          "ops": 73,
+          "cum_ops": 1710,
+          "t_sec": 23
+        },
+        {
+          "ops": 77,
+          "cum_ops": 1787,
+          "t_sec": 24
+        },
+        {
+          "ops": 72,
+          "cum_ops": 1859,
+          "t_sec": 25
+        },
+        {
+          "ops": 72,
+          "cum_ops": 1931,
+          "t_sec": 26
+        },
+        {
+          "ops": 67,
+          "cum_ops": 1998,
+          "t_sec": 27
+        },
+        {
+          "ops": 71,
+          "cum_ops": 2069,
+          "t_sec": 28
+        },
+        {
+          "ops": 70,
+          "cum_ops": 2139,
+          "t_sec": 29
+        },
+        {
+          "ops": 67,
+          "cum_ops": 2206,
+          "t_sec": 30
+        },
+        {
+          "ops": 66,
+          "cum_ops": 2272,
+          "t_sec": 31
+        },
+        {
+          "ops": 66,
+          "cum_ops": 2338,
+          "t_sec": 32
+        },
+        {
+          "ops": 65,
+          "cum_ops": 2403,
+          "t_sec": 33
+        },
+        {
+          "ops": 68,
+          "cum_ops": 2471,
+          "t_sec": 34
+        },
+        {
+          "ops": 81,
+          "cum_ops": 2552,
+          "t_sec": 35
+        },
+        {
+          "ops": 71,
+          "cum_ops": 2623,
+          "t_sec": 36
+        },
+        {
+          "ops": 73,
+          "cum_ops": 2696,
+          "t_sec": 37
+        },
+        {
+          "ops": 65,
+          "cum_ops": 2761,
+          "t_sec": 38
+        },
+        {
+          "ops": 72,
+          "cum_ops": 2833,
+          "t_sec": 39
+        },
+        {
+          "ops": 79,
+          "cum_ops": 2912,
+          "t_sec": 40
+        },
+        {
+          "ops": 74,
+          "cum_ops": 2986,
+          "t_sec": 41
+        },
+        {
+          "ops": 76,
+          "cum_ops": 3062,
+          "t_sec": 42
+        },
+        {
+          "ops": 63,
+          "cum_ops": 3125,
+          "t_sec": 43
+        },
+        {
+          "ops": 72,
+          "cum_ops": 3197,
+          "t_sec": 44
+        },
+        {
+          "ops": 77,
+          "cum_ops": 3274,
+          "t_sec": 45
+        },
+        {
+          "ops": 75,
+          "cum_ops": 3349,
+          "t_sec": 46
+        },
+        {
+          "ops": 78,
+          "cum_ops": 3427,
+          "t_sec": 47
+        },
+        {
+          "ops": 62,
+          "cum_ops": 3489,
+          "t_sec": 48
+        },
+        {
+          "ops": 66,
+          "cum_ops": 3555,
+          "t_sec": 49
+        },
+        {
+          "ops": 72,
+          "cum_ops": 3627,
+          "t_sec": 50
+        },
+        {
+          "ops": 64,
+          "cum_ops": 3691,
+          "t_sec": 51
+        },
+        {
+          "ops": 66,
+          "cum_ops": 3757,
+          "t_sec": 52
+        },
+        {
+          "ops": 72,
+          "cum_ops": 3829,
+          "t_sec": 53
+        },
+        {
+          "ops": 66,
+          "cum_ops": 3895,
+          "t_sec": 54
+        },
+        {
+          "ops": 64,
+          "cum_ops": 3959,
+          "t_sec": 55
+        },
+        {
+          "ops": 68,
+          "cum_ops": 4027,
+          "t_sec": 56
+        },
+        {
+          "ops": 67,
+          "cum_ops": 4094,
+          "t_sec": 57
+        },
+        {
+          "ops": 71,
+          "cum_ops": 4165,
+          "t_sec": 58
+        },
+        {
+          "ops": 65,
+          "cum_ops": 4230,
+          "t_sec": 59
+        },
+        {
+          "ops": 70,
+          "cum_ops": 4300,
+          "t_sec": 60
+        },
+        {
+          "ops": 62,
+          "cum_ops": 4362,
+          "t_sec": 61
+        },
+        {
+          "ops": 69,
+          "cum_ops": 4431,
+          "t_sec": 62
+        },
+        {
+          "ops": 68,
+          "cum_ops": 4499,
+          "t_sec": 63
+        },
+        {
+          "ops": 56,
+          "cum_ops": 4555,
+          "t_sec": 64
+        },
+        {
+          "ops": 75,
+          "cum_ops": 4630,
+          "t_sec": 65
+        },
+        {
+          "ops": 70,
+          "cum_ops": 4700,
+          "t_sec": 66
+        },
+        {
+          "ops": 74,
+          "cum_ops": 4774,
+          "t_sec": 67
+        },
+        {
+          "ops": 67,
+          "cum_ops": 4841,
+          "t_sec": 68
+        },
+        {
+          "ops": 67,
+          "cum_ops": 4908,
+          "t_sec": 69
+        },
+        {
+          "ops": 63,
+          "cum_ops": 4971,
+          "t_sec": 70
+        },
+        {
+          "ops": 64,
+          "cum_ops": 5035,
+          "t_sec": 71
+        },
+        {
+          "ops": 69,
+          "cum_ops": 5104,
+          "t_sec": 72
+        },
+        {
+          "ops": 65,
+          "cum_ops": 5169,
+          "t_sec": 73
+        },
+        {
+          "ops": 64,
+          "cum_ops": 5233,
+          "t_sec": 74
+        },
+        {
+          "ops": 61,
+          "cum_ops": 5294,
+          "t_sec": 75
+        },
+        {
+          "ops": 63,
+          "cum_ops": 5357,
+          "t_sec": 76
+        },
+        {
+          "ops": 64,
+          "cum_ops": 5421,
+          "t_sec": 77
+        },
+        {
+          "ops": 67,
+          "cum_ops": 5488,
+          "t_sec": 78
+        },
+        {
+          "ops": 64,
+          "cum_ops": 5552,
+          "t_sec": 79
+        },
+        {
+          "ops": 64,
+          "cum_ops": 5616,
+          "t_sec": 80
+        },
+        {
+          "ops": 57,
+          "cum_ops": 5673,
+          "t_sec": 81
+        },
+        {
+          "ops": 59,
+          "cum_ops": 5732,
+          "t_sec": 82
+        },
+        {
+          "ops": 67,
+          "cum_ops": 5799,
+          "t_sec": 83
+        },
+        {
+          "ops": 61,
+          "cum_ops": 5860,
+          "t_sec": 84
+        },
+        {
+          "ops": 62,
+          "cum_ops": 5922,
+          "t_sec": 85
+        },
+        {
+          "ops": 62,
+          "cum_ops": 5984,
+          "t_sec": 86
+        },
+        {
+          "ops": 60,
+          "cum_ops": 6044,
+          "t_sec": 87
+        },
+        {
+          "ops": 62,
+          "cum_ops": 6106,
+          "t_sec": 88
+        },
+        {
+          "ops": 65,
+          "cum_ops": 6171,
+          "t_sec": 89
+        },
+        {
+          "ops": 62,
+          "cum_ops": 6233,
+          "t_sec": 90
+        },
+        {
+          "ops": 60,
+          "cum_ops": 6293,
+          "t_sec": 91
+        },
+        {
+          "ops": 59,
+          "cum_ops": 6352,
+          "t_sec": 92
+        },
+        {
+          "ops": 60,
+          "cum_ops": 6412,
+          "t_sec": 93
+        },
+        {
+          "ops": 59,
+          "cum_ops": 6471,
+          "t_sec": 94
+        },
+        {
+          "ops": 59,
+          "cum_ops": 6530,
+          "t_sec": 95
+        },
+        {
+          "ops": 65,
+          "cum_ops": 6595,
+          "t_sec": 96
+        },
+        {
+          "ops": 61,
+          "cum_ops": 6656,
+          "t_sec": 97
+        },
+        {
+          "ops": 61,
+          "cum_ops": 6717,
+          "t_sec": 98
+        },
+        {
+          "ops": 55,
+          "cum_ops": 6772,
+          "t_sec": 99
+        },
+        {
+          "ops": 57,
+          "cum_ops": 6829,
+          "t_sec": 100
+        },
+        {
+          "ops": 57,
+          "cum_ops": 6886,
+          "t_sec": 101
+        },
+        {
+          "ops": 62,
+          "cum_ops": 6948,
+          "t_sec": 102
+        },
+        {
+          "ops": 57,
+          "cum_ops": 7005,
+          "t_sec": 103
+        },
+        {
+          "ops": 57,
+          "cum_ops": 7062,
+          "t_sec": 104
+        },
+        {
+          "ops": 56,
+          "cum_ops": 7118,
+          "t_sec": 105
+        },
+        {
+          "ops": 53,
+          "cum_ops": 7171,
+          "t_sec": 106
+        },
+        {
+          "ops": 57,
+          "cum_ops": 7228,
+          "t_sec": 107
+        },
+        {
+          "ops": 56,
+          "cum_ops": 7284,
+          "t_sec": 108
+        },
+        {
+          "ops": 58,
+          "cum_ops": 7342,
+          "t_sec": 109
+        },
+        {
+          "ops": 55,
+          "cum_ops": 7397,
+          "t_sec": 110
+        },
+        {
+          "ops": 58,
+          "cum_ops": 7455,
+          "t_sec": 111
+        },
+        {
+          "ops": 53,
+          "cum_ops": 7508,
+          "t_sec": 112
+        },
+        {
+          "ops": 53,
+          "cum_ops": 7561,
+          "t_sec": 113
+        },
+        {
+          "ops": 54,
+          "cum_ops": 7615,
+          "t_sec": 114
+        },
+        {
+          "ops": 58,
+          "cum_ops": 7673,
+          "t_sec": 115
+        },
+        {
+          "ops": 54,
+          "cum_ops": 7727,
+          "t_sec": 116
+        },
+        {
+          "ops": 56,
+          "cum_ops": 7783,
+          "t_sec": 117
+        },
+        {
+          "ops": 58,
+          "cum_ops": 7841,
+          "t_sec": 118
+        },
+        {
+          "ops": 55,
+          "cum_ops": 7896,
+          "t_sec": 119
+        },
+        {
+          "ops": 53,
+          "cum_ops": 7949,
+          "t_sec": 120
+        },
+        {
+          "ops": 55,
+          "cum_ops": 8004,
+          "t_sec": 121
+        },
+        {
+          "ops": 51,
+          "cum_ops": 8055,
+          "t_sec": 122
+        },
+        {
+          "ops": 52,
+          "cum_ops": 8107,
+          "t_sec": 123
+        },
+        {
+          "ops": 52,
+          "cum_ops": 8159,
+          "t_sec": 124
+        },
+        {
+          "ops": 51,
+          "cum_ops": 8210,
+          "t_sec": 125
+        },
+        {
+          "ops": 51,
+          "cum_ops": 8261,
+          "t_sec": 126
+        },
+        {
+          "ops": 54,
+          "cum_ops": 8315,
+          "t_sec": 127
+        },
+        {
+          "ops": 54,
+          "cum_ops": 8369,
+          "t_sec": 128
+        },
+        {
+          "ops": 55,
+          "cum_ops": 8424,
+          "t_sec": 129
+        },
+        {
+          "ops": 51,
+          "cum_ops": 8475,
+          "t_sec": 130
+        },
+        {
+          "ops": 55,
+          "cum_ops": 8530,
+          "t_sec": 131
+        },
+        {
+          "ops": 55,
+          "cum_ops": 8585,
+          "t_sec": 132
+        },
+        {
+          "ops": 56,
+          "cum_ops": 8641,
+          "t_sec": 133
+        },
+        {
+          "ops": 54,
+          "cum_ops": 8695,
+          "t_sec": 134
+        },
+        {
+          "ops": 53,
+          "cum_ops": 8748,
+          "t_sec": 135
+        },
+        {
+          "ops": 51,
+          "cum_ops": 8799,
+          "t_sec": 136
+        },
+        {
+          "ops": 51,
+          "cum_ops": 8850,
+          "t_sec": 137
+        },
+        {
+          "ops": 51,
+          "cum_ops": 8901,
+          "t_sec": 138
+        },
+        {
+          "ops": 52,
+          "cum_ops": 8953,
+          "t_sec": 139
+        },
+        {
+          "ops": 53,
+          "cum_ops": 9006,
+          "t_sec": 140
+        },
+        {
+          "ops": 51,
+          "cum_ops": 9057,
+          "t_sec": 141
+        },
+        {
+          "ops": 51,
+          "cum_ops": 9108,
+          "t_sec": 142
+        },
+        {
+          "ops": 53,
+          "cum_ops": 9161,
+          "t_sec": 143
+        },
+        {
+          "ops": 42,
+          "cum_ops": 9203,
+          "t_sec": 144
+        },
+        {
+          "ops": 50,
+          "cum_ops": 9253,
+          "t_sec": 145
+        },
+        {
+          "ops": 49,
+          "cum_ops": 9302,
+          "t_sec": 146
+        },
+        {
+          "ops": 52,
+          "cum_ops": 9354,
+          "t_sec": 147
+        },
+        {
+          "ops": 49,
+          "cum_ops": 9403,
+          "t_sec": 148
+        },
+        {
+          "ops": 48,
+          "cum_ops": 9451,
+          "t_sec": 149
+        },
+        {
+          "ops": 48,
+          "cum_ops": 9499,
+          "t_sec": 150
+        },
+        {
+          "ops": 50,
+          "cum_ops": 9549,
+          "t_sec": 151
+        },
+        {
+          "ops": 47,
+          "cum_ops": 9596,
+          "t_sec": 152
+        },
+        {
+          "ops": 47,
+          "cum_ops": 9643,
+          "t_sec": 153
+        },
+        {
+          "ops": 47,
+          "cum_ops": 9690,
+          "t_sec": 154
+        },
+        {
+          "ops": 49,
+          "cum_ops": 9739,
+          "t_sec": 155
+        },
+        {
+          "ops": 42,
+          "cum_ops": 9781,
+          "t_sec": 156
+        },
+        {
+          "ops": 48,
+          "cum_ops": 9829,
+          "t_sec": 157
+        },
+        {
+          "ops": 49,
+          "cum_ops": 9878,
+          "t_sec": 158
+        },
+        {
+          "ops": 49,
+          "cum_ops": 9927,
+          "t_sec": 159
+        },
+        {
+          "ops": 45,
+          "cum_ops": 9972,
+          "t_sec": 160
+        },
+        {
+          "ops": 44,
+          "cum_ops": 10016,
+          "t_sec": 161
+        }
+      ]
+    },
+    "measurement": {
+      "duration_sec": 3.00083574020000014571e+02,
+      "operations": 12232
+    }
+  },
+  "resources_per_op": {
+    "cpu_ms_per_op": 1.29147318508829300754e+01,
+    "memory_high_water_mb": 9.16851348876953125000e+01,
+    "disk_bytes_per_op": 3.69783209941137989517e+05
+  },
+  "resources_total": {
+    "cpu_ms_delta": 157973,
+    "disk_reads_b_delta": 81920,
+    "disk_writes_b_delta": 4523188224,
+    "memory_high_water_b": 96138832,
+    "memory_start_b": 80322376,
+    "wallclock_ns_delta": 300084873757
+  },
+  "scenario": "baseline",
+  "scenario_params": {
+    "parallelism": 1,
+    "tags": [
+      "baseline",
+      "steady_state",
+      "single_writer"
+    ],
+    "store_id": "bench_store",
+    "duration_seconds": 60,
+    "measure_max_seconds": 300,
+    "event_size_bytes": 256
+  },
+  "slice_metadata": {
+    "question": "How fast can we sustainably append to one stream via reckon_db_streams:append\/4, and what does the p99 tail look like?",
+    "metrics": [
+      "throughput_ops_sec",
+      "latency_ns_p50",
+      "latency_ns_p90",
+      "latency_ns_p95",
+      "latency_ns_p99",
+      "latency_ns_p99_9",
+      "latency_ns_p99_99",
+      "cpu_ms_per_op",
+      "memory_high_water_mb",
+      "disk_bytes_per_op"
+    ],
+    "units": {
+      "throughput_ops_sec": "appends per second, sustained",
+      "latency_ns_p50": "median append-call latency, nanoseconds",
+      "latency_ns_p99": "99th percentile append-call latency, nanoseconds",
+      "cpu_ms_per_op": "average CPU milliseconds per append",
+      "disk_bytes_per_op": "average disk write-amplification per event"
+    }
+  },
+  "throughput_ops_sec": 4.07619778588239540795e+01
+}

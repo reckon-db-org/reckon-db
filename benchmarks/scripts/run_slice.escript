@@ -26,7 +26,7 @@ main([SliceStr, ScenarioFile, OutPath, Profile]) ->
     ok = wait_for_store(bench_store, 30),
     io:format("[run_slice] store ready~n"),
 
-    WarmStream = <<"bench_prewarm">>,
+    WarmStream = reckon_gater_stream_id:new(<<"bench">>),
     _ = reckon_db_streams:append(bench_store, WarmStream, -2,
           [#{event_type => <<"bench.prewarm_v1">>, data => #{}}]),
     _ = reckon_db_streams:delete(bench_store, WarmStream),

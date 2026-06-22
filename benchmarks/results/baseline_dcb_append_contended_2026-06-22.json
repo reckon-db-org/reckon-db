@@ -1,0 +1,123 @@
+{
+  "profile": "local",
+  "slice": "dcb_append_contended",
+  "ended_utc": "2026-06-22T05:24:05Z",
+  "latency_ns": {
+    "samples": 73741,
+    "coefficient_of_variation": 6.68135463738464330241e-01,
+    "p99": 160842800,
+    "mean": 6.51837302878452986479e+07,
+    "p50": 57566418,
+    "p90": 130024119,
+    "p95": 144038742,
+    "p99_9": 263193620,
+    "p99_99": 438776959,
+    "stddev": 4.35515618640725016594e+07
+  },
+  "phases": {
+    "warmup": {
+      "duration_sec": 9,
+      "operations": 10249,
+      "convergence_cv": 2.94086818118545548217e-02,
+      "converged": true,
+      "per_second": [
+        {
+          "ops": 1094,
+          "cum_ops": 1094,
+          "t_sec": 1
+        },
+        {
+          "ops": 1195,
+          "cum_ops": 2289,
+          "t_sec": 2
+        },
+        {
+          "ops": 1141,
+          "cum_ops": 3430,
+          "t_sec": 3
+        },
+        {
+          "ops": 1163,
+          "cum_ops": 4593,
+          "t_sec": 4
+        },
+        {
+          "ops": 1077,
+          "cum_ops": 5670,
+          "t_sec": 5
+        },
+        {
+          "ops": 1152,
+          "cum_ops": 6822,
+          "t_sec": 6
+        },
+        {
+          "ops": 1154,
+          "cum_ops": 7976,
+          "t_sec": 7
+        },
+        {
+          "ops": 1121,
+          "cum_ops": 9097,
+          "t_sec": 8
+        },
+        {
+          "ops": 1152,
+          "cum_ops": 10249,
+          "t_sec": 9
+        }
+      ]
+    },
+    "measurement": {
+      "duration_sec": 3.00447787602999994760e+02,
+      "operations": 73741
+    }
+  },
+  "resources_per_op": {
+    "cpu_ms_per_op": 3.98879863305352522218e+00,
+    "memory_high_water_mb": 7.78363876342773437500e+01,
+    "disk_bytes_per_op": 3.57721925116285347030e+04
+  },
+  "resources_total": {
+    "cpu_ms_delta": 294138,
+    "disk_reads_b_delta": 0,
+    "disk_writes_b_delta": 2637877248,
+    "memory_high_water_b": 81617368,
+    "memory_start_b": 80005552,
+    "wallclock_ns_delta": 300448917626
+  },
+  "scenario": "baseline",
+  "scenario_params": {
+    "parallelism": 16,
+    "tags": [
+      "baseline",
+      "dcb",
+      "contended",
+      "contention"
+    ],
+    "store_id": "bench_store",
+    "duration_seconds": 60,
+    "measure_max_seconds": 300,
+    "event_size_bytes": 256
+  },
+  "slice_metadata": {
+    "question": "When N writers contend on the same DCB tag, what is the throughput floor (per-worker conflict rate vs commit rate)?",
+    "metrics": [
+      "throughput_ops_sec",
+      "latency_ns_p50",
+      "latency_ns_p90",
+      "latency_ns_p95",
+      "latency_ns_p99",
+      "latency_ns_p99_9",
+      "cpu_ms_per_op",
+      "memory_high_water_mb",
+      "disk_bytes_per_op"
+    ],
+    "units": {
+      "throughput_ops_sec": "DCB append attempts\/sec across workers",
+      "latency_ns_p50": "median attempt latency, ns",
+      "latency_ns_p99": "99th percentile attempt latency, ns"
+    }
+  },
+  "throughput_ops_sec": 2.45436987865054561553e+02
+}
