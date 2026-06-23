@@ -68,7 +68,7 @@ The DCB conditional-append is this closure:
 ```erlang
 khepri:transaction(StoreId, fun() ->
     %% 1. Check: any matching event above cutoff?
-    case reckon_db_dcb_filter:match_any_above_cutoff(TagFilter, SeqCutoff) of
+    case reckon_db_ccc_filter:match_any_above_cutoff(TagFilter, SeqCutoff) of
         {true, MaxSeq} ->
             khepri_tx:abort({context_changed, MaxSeq});  %% conflict
         false ->
@@ -132,7 +132,7 @@ Time →
                                 quorum ACK → result returned to caller
 ```
 
-The outer retry loop (`try_append/6`) handles `{dcb_state_changed}` with
+The outer retry loop (`try_append/7`) handles `{dcb_state_changed}` with
 a budget of 5 retries before surfacing
 `{error, dcb_concurrent_writer_exhausted}`. In practice the race window
 is sub-millisecond; contention on the pre-stamp read is rare.
@@ -150,11 +150,13 @@ Checking "does any event with tag X have seq > cutoff?" naïvely requires
 scanning all DCB events. That is O(total events) inside a Raft transaction
 — unacceptable.
 
-reckon-db maintains a secondary index alongside each DCB event:
+reckon-db maintains indexes alongside each DCB event:
 
 ```
-[by_tag,        Tag,       SeqKey] → #{}
-[by_event_type, EventType, SeqKey] → #{}
+[by_tag,          Tag,       SeqKey]        → #{}
+[by_event_type,   EventType, SeqKey]        → #{}
+[by_payload,      Key, Value, SeqKey]       → #{}  (5.3.0+, opt-in)
+[by_payload_hash, Hash,       SeqKey]       → #{}  (5.3.0+, opt-in)
 ```
 
 SeqKey is a fixed-width zero-padded decimal binary (`"00000000000000000042"`).
@@ -165,10 +167,18 @@ Inside the transaction, checking `{any_of, [<<"email:foo">>]}` reads the
 `[by_tag, <<"email:foo">>, *]` subtree — bounded by the number of events
 with that tag, not the total event count. For a uniqueness claim on a
 specific email, this is typically O(1) or O(2) (zero or one matching
-event).
+event). Payload indexes follow the same pattern: `{payload_match, K, V}`
+reads `[by_payload, K, V, *]`, bounded by the number of events with that
+field value.
 
-Both the event record and the index entries are written in the same
-transaction body, so the index is always consistent with the events.
+Both the event record and all index entries are written in the same
+transaction body, so all indexes are always consistent with the events.
+
+The tag/event_type indexes are always built; payload indexes are opt-in
+per store — declare them in `store_config.indexes`. See [ccc.md](ccc.md)
+for details on the `{payload_hash_match, Keys, Values}` variant and the
+Horus constraint (the hash is pre-computed outside the transaction by
+`reckon_db_ccc_filter:preprocess_filter/1`).
 
 ## Comparing to PostgreSQL-based implementations
 

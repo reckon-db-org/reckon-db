@@ -2,6 +2,8 @@
 %%%
 %%% Pure-function tests — no Khepri required. The paths module is the
 %%% foundation for DCB (Phase 3) so its invariants must be airtight.
+%%%
+%%% Payload index path tests are in reckon_db_ccc_paths_tests (5.4.0+).
 %%% @end
 -module(reckon_db_dcb_paths_tests).
 
@@ -126,92 +128,3 @@ by_tag_pattern_distinct_from_path_test() ->
     Path = reckon_db_dcb_paths:by_tag_path(Tag, 42),
     ?assertNotEqual(Pattern, Path).
 
-%%====================================================================
-%% by_payload_path / by_payload_pattern (CCC, 5.3.0+)
-%%====================================================================
-
-by_payload_path_shape_test() ->
-    Key = <<"account_id">>,
-    Value = <<"acc-42">>,
-    Path = reckon_db_dcb_paths:by_payload_path(Key, Value, 7),
-    ?assertEqual(4, length(Path)),
-    [ByPayload, K, V, SeqKey] = Path,
-    ?assertEqual(by_payload, ByPayload),
-    ?assertEqual(Key, K),
-    ?assertEqual(Value, V),
-    ?assertEqual(reckon_db_dcb_paths:seq_key(7), SeqKey).
-
-by_payload_pattern_shape_test() ->
-    Key = <<"email">>,
-    Value = <<"alice@example.com">>,
-    Pattern = reckon_db_dcb_paths:by_payload_pattern(Key, Value),
-    ?assertEqual(4, length(Pattern)),
-    [ByPayload, K, V, Wildcard] = Pattern,
-    ?assertEqual(by_payload, ByPayload),
-    ?assertEqual(Key, K),
-    ?assertEqual(Value, V),
-    ?assertEqual(?KHEPRI_WILDCARD_STAR, Wildcard).
-
-by_payload_pattern_distinct_from_path_test() ->
-    Key = <<"k">>,
-    Value = <<"v">>,
-    ?assertNotEqual(
-        reckon_db_dcb_paths:by_payload_pattern(Key, Value),
-        reckon_db_dcb_paths:by_payload_path(Key, Value, 0)).
-
-%%====================================================================
-%% by_payload_hash_path / by_payload_hash_pattern (CCC, 5.3.0+)
-%%====================================================================
-
-by_payload_hash_path_shape_test() ->
-    Hash = reckon_db_dcb_paths:payload_combo_hash(
-        [<<"flight_id">>, <<"seat_no">>], [<<"FL001">>, <<"12A">>]),
-    Path = reckon_db_dcb_paths:by_payload_hash_path(Hash, 3),
-    ?assertEqual(3, length(Path)),
-    [ByHash, H, SeqKey] = Path,
-    ?assertEqual(by_payload_hash, ByHash),
-    ?assertEqual(Hash, H),
-    ?assertEqual(reckon_db_dcb_paths:seq_key(3), SeqKey).
-
-by_payload_hash_pattern_shape_test() ->
-    Hash = reckon_db_dcb_paths:payload_combo_hash([<<"a">>], [<<"b">>]),
-    Pattern = reckon_db_dcb_paths:by_payload_hash_pattern(Hash),
-    ?assertEqual(3, length(Pattern)),
-    [ByHash, H, Wildcard] = Pattern,
-    ?assertEqual(by_payload_hash, ByHash),
-    ?assertEqual(Hash, H),
-    ?assertEqual(?KHEPRI_WILDCARD_STAR, Wildcard).
-
-%%====================================================================
-%% payload_combo_hash (CCC, 5.3.0+)
-%%====================================================================
-
-payload_combo_hash_is_32_bytes_test() ->
-    Hash = reckon_db_dcb_paths:payload_combo_hash(
-        [<<"flight_id">>, <<"seat_no">>], [<<"FL001">>, <<"12A">>]),
-    ?assertEqual(32, byte_size(Hash)).
-
-payload_combo_hash_order_independent_test() ->
-    %% The hash must be the same regardless of the order Keys/Values are given.
-    Hash1 = reckon_db_dcb_paths:payload_combo_hash(
-        [<<"a">>, <<"b">>], [<<"x">>, <<"y">>]),
-    Hash2 = reckon_db_dcb_paths:payload_combo_hash(
-        [<<"b">>, <<"a">>], [<<"y">>, <<"x">>]),
-    ?assertEqual(Hash1, Hash2).
-
-payload_combo_hash_different_values_differ_test() ->
-    Hash1 = reckon_db_dcb_paths:payload_combo_hash([<<"k">>], [<<"v1">>]),
-    Hash2 = reckon_db_dcb_paths:payload_combo_hash([<<"k">>], [<<"v2">>]),
-    ?assertNotEqual(Hash1, Hash2).
-
-payload_combo_hash_different_keys_differ_test() ->
-    Hash1 = reckon_db_dcb_paths:payload_combo_hash([<<"k1">>], [<<"v">>]),
-    Hash2 = reckon_db_dcb_paths:payload_combo_hash([<<"k2">>], [<<"v">>]),
-    ?assertNotEqual(Hash1, Hash2).
-
-payload_combo_hash_deterministic_test() ->
-    %% Same input always produces the same hash (no randomness).
-    Keys = [<<"flight_id">>, <<"seat_no">>],
-    Values = [<<"FL001">>, <<"12A">>],
-    Hash = reckon_db_dcb_paths:payload_combo_hash(Keys, Values),
-    ?assertEqual(Hash, reckon_db_dcb_paths:payload_combo_hash(Keys, Values)).

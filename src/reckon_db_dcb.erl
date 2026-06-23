@@ -151,7 +151,7 @@ append_if_no_tag_matches(_StoreId, _TagFilter, _SeqCutoff, []) ->
 append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events)
   when is_list(Events), is_integer(SeqCutoff) ->
     PayloadDecls = reckon_db_index_config:declared_dcb_payload(StoreId),
-    ProcessedFilter = reckon_db_dcb_filter:preprocess_filter(TagFilter),
+    ProcessedFilter = reckon_db_ccc_filter:preprocess_filter(TagFilter),
     IntegrityCtx = setup_integrity_ctx(StoreId),
     try_append(StoreId, ProcessedFilter, SeqCutoff, Events, IntegrityCtx,
                PayloadDecls, ?INTEGRITY_RETRY_BUDGET).
@@ -272,7 +272,7 @@ stamp_chain([EM | Rest], Seq, Now, EpochUs, Key, Tip, PayloadDecls, Acc) ->
 
 %% Integrity-OFF path. The transaction picks seqs from the live counter.
 tx_body(TagFilter, SeqCutoff, Stamped, disabled, _FinalTip) ->
-    case reckon_db_dcb_filter:match_any_above_cutoff(TagFilter, SeqCutoff) of
+    case reckon_db_ccc_filter:match_any_above_cutoff(TagFilter, SeqCutoff) of
         {true, MaxSeq} ->
             khepri_tx:abort({context_changed, MaxSeq});
         false ->
@@ -296,7 +296,7 @@ tx_body(TagFilter, SeqCutoff, Stamped,
                 {error, Actual} ->
                     khepri_tx:abort({dcb_state_changed, {tip, Actual}});
                 ok ->
-                    case reckon_db_dcb_filter:match_any_above_cutoff(
+                    case reckon_db_ccc_filter:match_any_above_cutoff(
                            TagFilter, SeqCutoff) of
                         {true, MaxSeq} ->
                             khepri_tx:abort({context_changed, MaxSeq});
@@ -355,10 +355,10 @@ write_one_record(#event{event_type = EventType, tags = Tags} = Record, Seq,
     lists:foreach(
         fun({single, Key, Value}) ->
             ok = khepri_tx:put(
-                   reckon_db_dcb_paths:by_payload_path(Key, Value, Seq), #{});
+                   reckon_db_ccc_paths:by_payload_path(Key, Value, Seq), #{});
            ({combo, Hash}) ->
             ok = khepri_tx:put(
-                   reckon_db_dcb_paths:by_payload_hash_path(Hash, Seq), #{})
+                   reckon_db_ccc_paths:by_payload_hash_path(Hash, Seq), #{})
         end,
         PayloadEntries),
     ok.
@@ -473,7 +473,7 @@ entry_for_decl({payload_hash, Keys}, JsonMap) ->
     Values = [maps:get(K, JsonMap, undefined) || K <- Keys],
     case lists:all(fun is_binary/1, Values) of
         true ->
-            Hash = reckon_db_dcb_paths:payload_combo_hash(Keys, Values),
+            Hash = reckon_db_ccc_paths:payload_combo_hash(Keys, Values),
             [{combo, Hash}];
         false ->
             []
@@ -492,7 +492,7 @@ entry_for_decl(_, _) ->
 -spec read_by_payload(atom(), binary(), binary(), pos_integer()) ->
     {ok, [#event{}]} | {error, term()}.
 read_by_payload(StoreId, Key, Value, Limit) ->
-    Pattern = reckon_db_dcb_paths:by_payload_pattern(Key, Value),
+    Pattern = reckon_db_ccc_paths:by_payload_pattern(Key, Value),
     case khepri:get_many(StoreId, Pattern) of
         {ok, NodeMap} when is_map(NodeMap) ->
             SeqKeys = [SK || [_, _, _, SK] <- maps:keys(NodeMap)],
@@ -511,8 +511,8 @@ read_by_payload(StoreId, Key, Value, Limit) ->
 -spec read_by_payload_hash(atom(), [binary()], [binary()], pos_integer()) ->
     {ok, [#event{}]} | {error, term()}.
 read_by_payload_hash(StoreId, Keys, Values, Limit) ->
-    Hash = reckon_db_dcb_paths:payload_combo_hash(Keys, Values),
-    Pattern = reckon_db_dcb_paths:by_payload_hash_pattern(Hash),
+    Hash = reckon_db_ccc_paths:payload_combo_hash(Keys, Values),
+    Pattern = reckon_db_ccc_paths:by_payload_hash_pattern(Hash),
     case khepri:get_many(StoreId, Pattern) of
         {ok, NodeMap} when is_map(NodeMap) ->
             SeqKeys = [SK || [_, _, SK] <- maps:keys(NodeMap)],

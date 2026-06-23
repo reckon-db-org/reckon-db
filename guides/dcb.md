@@ -103,15 +103,27 @@ committed, conflict, err := d.Append(ctx,
 ## TagFilter algebra
 
 A `tag_filter()` is a recursive predicate over an event's fields.
-Five shapes:
+Seven shapes:
 
-| Shape | Meaning | Erlang term |
-|-------|---------|-------------|
-| `any_of` | Event matches if it carries ANY of these tags | `{any_of, [Tag]}` |
-| `all_of` | Event matches if it carries ALL of these tags | `{all_of, [Tag]}` |
-| `event_type` | Event matches if its `event_type` field equals Type | `{event_type, Type}` |
-| `and_` | Event matches if ALL sub-filters match | `{and_, [Filter]}` |
-| `or_` | Event matches if ANY sub-filter matches | `{or_, [Filter]}` |
+| Shape | Meaning | Erlang term | Index |
+|-------|---------|-------------|-------|
+| `any_of` | Event matches if it carries ANY of these tags | `{any_of, [Tag]}` | `[by_tag, Tag, *]` |
+| `all_of` | Event matches if it carries ALL of these tags | `{all_of, [Tag]}` | intersection over `[by_tag, Tag, *]` |
+| `event_type` | Event matches if its `event_type` field equals Type | `{event_type, Type}` | `[by_event_type, Type, *]` |
+| `payload_match` | Event matches if `data[Key] == Value` (JSON string field) | `{payload_match, Key, Value}` | `[by_payload, Key, Value, *]` (5.3.0+, opt-in) |
+| `payload_hash_match` | Event matches if the given fields jointly equal the given values | `{payload_hash_match, [Key], [Value]}` | `[by_payload_hash, Hash, *]` (5.3.0+, opt-in) |
+| `and_` | Event matches if ALL sub-filters match | `{and_, [Filter]}` | set intersection |
+| `or_` | Event matches if ANY sub-filter matches | `{or_, [Filter]}` | set union |
+
+`payload_match` and `payload_hash_match` require the matching index declaration
+in the store's `store_config`. See the [CCC guide](ccc.md) for payload index
+setup and the multi-field hash pattern.
+
+> **CCC superset note.** `payload_match` and `payload_hash_match` are CCC
+> (Command Context Consistency) extensions — they allow the command to scope
+> its consistency window to payload field values, not just tags. DCB
+> (tag/event_type filters) is a strict subset of CCC. See [ccc.md](ccc.md)
+> for the full CCC framing.
 
 Filters compose to arbitrary depth. Examples:
 
@@ -254,8 +266,10 @@ This is invisible to callers: same API, same return shape.
 
 ## See also
 
+- [CCC guide](ccc.md) — payload-indexed filters, multi-field hash pattern, and the full CCC framing (5.3.0+)
 - [DCB Raft design](dcb_raft_design.md) — why Raft changes the design vs. PostgreSQL, the Horus pre-stamp pattern, and the hybrid aggregate+DCB model
 - [evoq decisions guide](https://codeberg.org/reckon-db-org/evoq/src/branch/main/guides/decisions.md) — the high-level Erlang API
 - [`plans/PLAN_DCB_IMPLEMENTATION.md`](https://codeberg.org/reckon-db-org/reckon-db/src/branch/main/plans/PLAN_DCB_IMPLEMENTATION.md) — implementation design
 - [hecate-corpus `CONSISTENCY_BOUNDARIES.md`](https://codeberg.org/hecate-social/hecate-corpus/src/branch/main/philosophy/CONSISTENCY_BOUNDARIES.md) — the doctrine
 - Ericsson Architects' [aggregateless event sourcing](https://ricofritzsche.me/aggregateless-event-sourcing/) — the inspiration
+- Rico Fritzsche's *Simply Event Sourcing* (2025) — formal CCC treatment and worked DCB patterns

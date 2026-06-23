@@ -1,23 +1,27 @@
-%%% @doc DCB tag-filter evaluation inside Khepri transactions.
+%%% @doc CCC (Command Context Consistency) filter evaluation inside Khepri transactions.
 %%%
-%%% Evaluates a tag_filter() against the tag index (/by_tag/Tag/SeqKey
-%%% subtree) and event-type index (/by_event_type/Type/SeqKey subtree),
-%%% returning either the set of matching seqs OR an answer to
-%%% "does any matching event have seq above Cutoff?".
+%%% Evaluates a tag_filter() against the full set of CCC indexes — tags,
+%%% event types, single-field payload, and composite payload hash — and
+%%% returns either the set of matching seqs or an answer to "does any
+%%% matching event have seq above Cutoff?".
+%%%
+%%% This module supersedes reckon_db_dcb_filter (removed in 5.4.0). CCC is a
+%%% superset of DCB: all tag/event_type filters still work; payload_match and
+%%% payload_hash_match add CCC payload predicate support.
 %%%
 %%% Two layers:
-%%%   - match_seqs/2: pure-by-construction set algebra over seqs. The
-%%%     only side effect is the seqs-provider function, which the caller
-%%%     supplies. Test with a hardcoded mock provider.
+%%%   - match_seqs/2: pure set algebra over seqs. Side effects are
+%%%     confined to the seqs-provider function, which the caller supplies.
+%%%     Test with a hardcoded mock provider.
 %%%   - match_any_above_cutoff/2: wraps match_seqs with the cutoff
 %%%     comparison and the production seqs-provider that reads from
 %%%     Khepri via khepri_tx:get_many/1. Must be called from inside a
 %%%     khepri:transaction/2 body.
 %%%
 %%% The tag_filter() type is canonical in reckon_gater_types.hrl
-%%% (reckon-gater 3.4.0+). Use it via the include; do NOT redefine here.
+%%% (reckon-gater 3.5.0+). Use it via the include; do NOT redefine here.
 %%% @end
--module(reckon_db_dcb_filter).
+-module(reckon_db_ccc_filter).
 
 -include("reckon_db.hrl").
 -include_lib("khepri/include/khepri.hrl").
@@ -40,7 +44,7 @@
 %%====================================================================
 
 %% tag_filter() and seq_cutoff() are CANONICAL in reckon_gater_types.hrl
-%% (reckon-gater 3.4.0+). Use them via the include; do NOT redefine here.
+%% (reckon-gater 3.5.0+). Use them via the include; do NOT redefine here.
 
 %% Fetches the seqs indexed under one lookup key. In production this hits
 %% Khepri via khepri_tx:get_many/1. In tests, supply a mock.
@@ -69,11 +73,13 @@
 %% @doc Set of seqs whose events match the filter, per-event semantics.
 %%
 %% Algebra:
-%%   any_of(Tags)       = union(seqs_for_tag(T) | T in Tags)
-%%   all_of(Tags)       = intersection(seqs_for_tag(T) | T in Tags)
-%%   event_type(Type)   = seqs_for_event_type(Type)
-%%   or_(Filters)       = union(match_seqs(F) | F in Filters)
-%%   and_(Filters)      = intersection(match_seqs(F) | F in Filters)
+%%   any_of(Tags)             = union(seqs_for_tag(T) | T in Tags)
+%%   all_of(Tags)             = intersection(seqs_for_tag(T) | T in Tags)
+%%   event_type(Type)         = seqs_for_event_type(Type)
+%%   payload_match(K, V)      = seqs_for_payload(K, V)
+%%   payload_hash_match_pre(H)= seqs_for_payload_hash_pre(H)
+%%   or_(Filters)             = union(match_seqs(F) | F in Filters)
+%%   and_(Filters)            = intersection(match_seqs(F) | F in Filters)
 %%
 %% Empty tag/filter lists yield the empty set (no event matches "nothing").
 -spec match_seqs(reckon_gater_types:tag_filter(), seqs_provider()) ->
@@ -134,7 +140,7 @@ match_seqs({payload_hash_match_pre, Hash}, Provider) when is_binary(Hash) ->
 -spec preprocess_filter(reckon_gater_types:tag_filter()) ->
     reckon_gater_types:tag_filter().
 preprocess_filter({payload_hash_match, Keys, Values}) ->
-    Hash = reckon_db_dcb_paths:payload_combo_hash(Keys, Values),
+    Hash = reckon_db_ccc_paths:payload_combo_hash(Keys, Values),
     {payload_hash_match_pre, Hash};
 preprocess_filter({and_, Filters}) ->
     {and_, [preprocess_filter(F) || F <- Filters]};
@@ -217,7 +223,7 @@ seqs_for_event_type(EventType) when is_binary(EventType) ->
 %% index [by_payload, Key, Value, *] inside a transaction.
 -spec seqs_for_payload(binary(), binary()) -> [non_neg_integer()].
 seqs_for_payload(Key, Value) when is_binary(Key), is_binary(Value) ->
-    Pattern = reckon_db_dcb_paths:by_payload_pattern(Key, Value),
+    Pattern = reckon_db_ccc_paths:by_payload_pattern(Key, Value),
     case khepri_tx:get_many(Pattern) of
         {ok, Map} ->
             [reckon_db_dcb_paths:seq_from_key(SeqKey)
@@ -231,11 +237,11 @@ seqs_for_payload(Key, Value) when is_binary(Key), is_binary(Value) ->
 %% payload hash index [by_payload_hash, Hash, *] inside a transaction.
 %%
 %% The Hash must be pre-computed OUTSIDE the transaction via
-%% payload_combo_hash/2 — this function is called inside the transaction
-%% and must not perform any crypto calls.
+%% reckon_db_ccc_paths:payload_combo_hash/2 — this function is called
+%% inside the transaction and must not perform any crypto calls.
 -spec seqs_for_payload_hash_pre(binary()) -> [non_neg_integer()].
 seqs_for_payload_hash_pre(Hash) when is_binary(Hash) ->
-    Pattern = reckon_db_dcb_paths:by_payload_hash_pattern(Hash),
+    Pattern = reckon_db_ccc_paths:by_payload_hash_pattern(Hash),
     case khepri_tx:get_many(Pattern) of
         {ok, Map} ->
             [reckon_db_dcb_paths:seq_from_key(SeqKey)

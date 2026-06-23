@@ -5,6 +5,51 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.0] - 2026-06-23
+
+### Changed — CCC module rename
+
+Renames two modules to reflect that their scope is CCC (Command Context
+Consistency), not just the DCB subset. Storage-layer modules (`reckon_db_dcb`,
+`reckon_db_dcb_paths`) retain their `dcb` prefix because the on-disk Khepri
+paths (`[by_tag, ...]`, `[by_payload, ...]`) are unchanged — renaming them
+would break existing stores.
+
+- `reckon_db_dcb_filter` → **`reckon_db_ccc_filter`** (deleted; module
+  evaluates the full CCC tag_filter algebra including payload predicates).
+- Payload path builders extracted from `reckon_db_dcb_paths` into new
+  **`reckon_db_ccc_paths`** (`by_payload_path/3`, `by_payload_pattern/2`,
+  `by_payload_hash_path/2`, `by_payload_hash_pattern/1`, `payload_combo_hash/2`).
+  `reckon_db_dcb_paths` retains only DCB-scoped functions (event path, tag
+  paths, event-type paths, seq_key encoding).
+
+### Added
+
+- `reckon_db_ccc_filter` — CCC filter evaluation (matches all filter shapes:
+  tags, event_type, payload_match, payload_hash_match_pre, and_, or_).
+- `reckon_db_ccc_paths` — Khepri path builders for payload indexes.
+- `guides/ccc.md` — reckon-db CCC guide covering store index configuration,
+  filter shapes, the Horus constraint, and implementation module references.
+
+### Docs
+
+- `guides/dcb.md` — TagFilter table extended from 5 to 7 shapes (added
+  `payload_match` and `payload_hash_match` rows with index column); cross-
+  reference to `ccc.md` added.
+- `guides/dcb_raft_design.md` — code example updated to `reckon_db_ccc_filter`,
+  `try_append/7` arity corrected, payload index paths added to the index table,
+  CCC guide cross-reference added.
+
+### Upgrading from 5.3.0
+
+Replace all references to `reckon_db_dcb_filter:` with `reckon_db_ccc_filter:`
+and all references to `reckon_db_dcb_paths:by_payload_*` /
+`reckon_db_dcb_paths:payload_combo_hash` with the equivalent functions in
+`reckon_db_ccc_paths`. On-disk Khepri state is unchanged; no store migration
+required.
+
+---
+
 ## [5.3.0] - 2026-06-23
 
 ### Added — CCC payload indexes (Command Context Consistency)
@@ -37,9 +82,9 @@ requiring writers to anticipate future queries as tags.
 - `read_by_payload/4` — reads events by single-field payload value.
 - `read_by_payload_hash/4` — reads events by composite payload field combination.
 
-**New helper**:
+**New helper** (in `reckon_db_ccc_paths` as of 5.4.0):
 
-- `reckon_db_dcb_paths:payload_combo_hash/2` — SHA-256 of a sorted
+- `reckon_db_ccc_paths:payload_combo_hash/2` — SHA-256 of a sorted
   `[{Key,Value}]` list. Order-independent. Must NOT be called from inside a
   Khepri transaction (NIF constraint).
 
@@ -47,8 +92,9 @@ requiring writers to anticipate future queries as tags.
 
 - All payload writes happen inside the existing conditional-append Khepri
   transaction, atomically with the event record and tag/event-type index entries.
-- Hash pre-computation uses `preprocess_filter/1` in `reckon_db_dcb_filter`,
-  invoked outside the transaction by `append_if_no_tag_matches`.
+- Hash pre-computation uses `preprocess_filter/1` in `reckon_db_ccc_filter`
+  (was `reckon_db_dcb_filter` in 5.3.0; renamed in 5.4.0), invoked outside the
+  transaction by `append_if_no_tag_matches`.
 - The `reckon_db_index` secondary index is unaffected: `{payload, _}` and
   `{payload_hash, _}` declarations return `[]` from `entries_for/4`.
 - Stores without any `{payload, _}` or `{payload_hash, _}` declarations incur
@@ -57,7 +103,8 @@ requiring writers to anticipate future queries as tags.
 - Requires reckon-gater ~> 3.5 (for the new `tag_filter()` variants).
 
 **Tests**: 69 new unit tests across `reckon_db_dcb_paths_tests`,
-`reckon_db_dcb_filter_tests`, and `reckon_db_index_config_tests`.
+`reckon_db_dcb_filter_tests`, and `reckon_db_index_config_tests` (modules
+renamed to `*_ccc_*` in 5.4.0).
 
 ## [5.2.2] - 2026-06-23
 
