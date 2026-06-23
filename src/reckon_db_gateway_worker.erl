@@ -152,6 +152,28 @@ handle_call({append_events, _StoreId, StreamId, ExpectedVersion, Events}, _From,
     Result = reckon_db_streams:append(StoreId, StreamId, ExpectedVersion, Events),
     {reply, Result, State};
 
+%% DCB log read (reckon-db 5.2.2+)
+handle_call({dcb_read_log, _StoreId, FromSeq, Limit}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = case reckon_db_dcb:read_log(StoreId, FromSeq, Limit) of
+        {ok, Events, TotalCount} ->
+            {ok, #{events => Events, total_count => TotalCount}};
+        Err -> Err
+    end,
+    {reply, Result, State};
+
+%% DCB tags index (reckon-db 5.2.2+)
+handle_call({dcb_all_tags, _StoreId}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_dcb:all_tags(StoreId),
+    {reply, Result, State};
+
+%% DCB event-types index (reckon-db 5.2.2+)
+handle_call({dcb_all_event_types, _StoreId}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_dcb:all_event_types(StoreId),
+    {reply, Result, State};
+
 %% DCB conditional-append (reckon-gater 2.3.0+, reckon-db 3.1.0+).
 %% TagFilter is `reckon_gater_types:tag_filter()`; SeqCutoff is `integer()`
 %% (-1 means "saw nothing"). See plans/PLAN_DCB_IMPLEMENTATION.md.

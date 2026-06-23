@@ -5,6 +5,23 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.2] - 2026-06-23
+
+### Added — DCB read APIs: log, tags, event-types
+
+Three new functions in `reckon_db_dcb`:
+
+- `read_log/3` — paginated sequential read of DCB events (`FromSeq`, `Limit`).
+  Returns `{ok, Events, TotalCount}` where `TotalCount` is the full log size.
+- `all_tags/1` — enumerate all tags in the by_tag index with event counts,
+  sorted descending. Returns `{ok, [{Tag, Count}]}`.
+- `all_event_types/1` — enumerate all event types in the by_event_type index
+  with event counts, sorted descending. Returns `{ok, [{EventType, Count}]}`.
+
+Gateway worker gains corresponding `dcb_read_log`, `dcb_all_tags`,
+`dcb_all_event_types` handle_call clauses. These back the new admin UI
+DCB views (Log, Tags, Event Types) added in reckon-gateway 0.12.0.
+
 ## [5.2.1] - 2026-06-23
 
 ### Fixed — Khepri startup race: `{ok, {error, noproc}}` crash

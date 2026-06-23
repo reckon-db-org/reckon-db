@@ -42,7 +42,7 @@
 -include("reckon_db.hrl").
 -include_lib("khepri/include/khepri.hrl").
 
--export([append_if_no_tag_matches/4]).
+-export([append_if_no_tag_matches/4, read_log/3, all_tags/1, all_event_types/1]).
 
 %% Bounded retry budget for the pre-stamp / transaction race in
 %% integrity-on stores. Heavy contention escalates rather than spins.
@@ -51,6 +51,82 @@
 %%====================================================================
 %% Public API
 %%====================================================================
+
+%% @doc Read DCB events in ascending seq order.
+%%
+%% FromSeq is the first sequence number to include (0 for the beginning).
+%% Limit is the maximum number of events to return.
+%%
+%% Returns {ok, Events, TotalCount} where TotalCount is the total
+%% number of events in the DCB log (used for pagination).
+-spec read_log(atom(), non_neg_integer(), pos_integer()) ->
+    {ok, [#event{}], non_neg_integer()} | {error, term()}.
+read_log(StoreId, FromSeq, Limit) when is_integer(FromSeq), is_integer(Limit) ->
+    Pattern = ?DCB_STREAM_PATH ++ [?KHEPRI_WILDCARD_STAR],
+    FromKey = reckon_db_dcb_paths:seq_key(FromSeq),
+    case khepri:get_many(StoreId, Pattern) of
+        {ok, NodeMap} when is_map(NodeMap) ->
+            TotalCount = maps:size(NodeMap),
+            Events = maps:fold(fun
+                ([_, _, SeqKey], #event{} = E, Acc) when SeqKey >= FromKey ->
+                    [E | Acc];
+                (_, _, Acc) ->
+                    Acc
+            end, [], NodeMap),
+            Sorted = lists:sort(fun(A, B) -> A#event.version =< B#event.version end, Events),
+            {ok, lists:sublist(Sorted, Limit), TotalCount};
+        {error, {khepri, node_not_found, _}} ->
+            {ok, [], 0};
+        {error, _} = Err ->
+            Err
+    end.
+
+%% @doc Return all tags present in the DCB log, sorted by event count descending.
+%%
+%% Each tag is returned as {Tag, EventCount}. Uses the by_tag index
+%% so it does not scan DCB events directly.
+-spec all_tags(atom()) -> {ok, [{binary(), non_neg_integer()}]} | {error, term()}.
+all_tags(StoreId) ->
+    Pattern = ?BY_TAG_PATH ++ [?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR],
+    case khepri:get_many(StoreId, Pattern) of
+        {ok, NodeMap} when is_map(NodeMap) ->
+            Counts = maps:fold(fun
+                ([_Root, Tag, _SeqKey], _, Acc) when is_binary(Tag) ->
+                    maps:update_with(Tag, fun(C) -> C + 1 end, 1, Acc);
+                (_, _, Acc) ->
+                    Acc
+            end, #{}, NodeMap),
+            Sorted = lists:sort(fun({_, C1}, {_, C2}) -> C1 >= C2 end,
+                                maps:to_list(Counts)),
+            {ok, Sorted};
+        {error, {khepri, node_not_found, _}} ->
+            {ok, []};
+        {error, _} = Err ->
+            Err
+    end.
+
+%% @doc Return all event types present in the DCB log, sorted by count descending.
+%%
+%% Each type is returned as {EventType, EventCount}. Uses the by_event_type index.
+-spec all_event_types(atom()) -> {ok, [{binary(), non_neg_integer()}]} | {error, term()}.
+all_event_types(StoreId) ->
+    Pattern = ?BY_EVENT_TYPE_PATH ++ [?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR],
+    case khepri:get_many(StoreId, Pattern) of
+        {ok, NodeMap} when is_map(NodeMap) ->
+            Counts = maps:fold(fun
+                ([_Root, EventType, _SeqKey], _, Acc) when is_binary(EventType) ->
+                    maps:update_with(EventType, fun(C) -> C + 1 end, 1, Acc);
+                (_, _, Acc) ->
+                    Acc
+            end, #{}, NodeMap),
+            Sorted = lists:sort(fun({_, C1}, {_, C2}) -> C1 >= C2 end,
+                                maps:to_list(Counts)),
+            {ok, Sorted};
+        {error, {khepri, node_not_found, _}} ->
+            {ok, []};
+        {error, _} = Err ->
+            Err
+    end.
 
 -spec append_if_no_tag_matches(
     StoreId   :: atom() | binary(),
