@@ -42,7 +42,14 @@
 -include("reckon_db.hrl").
 -include_lib("khepri/include/khepri.hrl").
 
--export([append_if_no_tag_matches/4, read_log/3, all_tags/1, all_event_types/1]).
+-export([
+    append_if_no_tag_matches/4,
+    read_log/3,
+    all_tags/1,
+    all_event_types/1,
+    read_by_payload/4,
+    read_by_payload_hash/4
+]).
 
 %% Bounded retry budget for the pre-stamp / transaction race in
 %% integrity-on stores. Heavy contention escalates rather than spins.
@@ -143,21 +150,23 @@ append_if_no_tag_matches(_StoreId, _TagFilter, _SeqCutoff, []) ->
     {error, no_events};
 append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events)
   when is_list(Events), is_integer(SeqCutoff) ->
+    PayloadDecls = reckon_db_index_config:declared_dcb_payload(StoreId),
+    ProcessedFilter = reckon_db_dcb_filter:preprocess_filter(TagFilter),
     IntegrityCtx = setup_integrity_ctx(StoreId),
-    try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx,
-               ?INTEGRITY_RETRY_BUDGET).
+    try_append(StoreId, ProcessedFilter, SeqCutoff, Events, IntegrityCtx,
+               PayloadDecls, ?INTEGRITY_RETRY_BUDGET).
 
 %%====================================================================
 %% Outer retry loop (chain-tip / counter races on integrity-on stores)
 %%====================================================================
 
-try_append(_StoreId, _TF, _SC, _Events, _Ctx, 0) ->
+try_append(_StoreId, _TF, _SC, _Events, _Ctx, _PD, 0) ->
     {error, dcb_concurrent_writer_exhausted};
-try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx, Retries) ->
+try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx, PayloadDecls, Retries) ->
     Now = erlang:system_time(millisecond),
     EpochUs = erlang:system_time(microsecond),
     Snapshot = take_snapshot(StoreId, IntegrityCtx),
-    {Stamped, FinalTip} = stamp_events(Events, Now, EpochUs, Snapshot),
+    {Stamped, FinalTip} = stamp_events(Events, Now, EpochUs, Snapshot, PayloadDecls),
     case khepri:transaction(
            StoreId,
            fun() -> tx_body(TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip) end) of
@@ -171,7 +180,7 @@ try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx, Retries) ->
             {error, Reason};
         {error, {dcb_state_changed, _}} ->
             try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx,
-                       Retries - 1);
+                       PayloadDecls, Retries - 1);
         {error, _} = Error ->
             Error
     end.
@@ -219,33 +228,41 @@ take_snapshot(StoreId, {enabled, Key}) ->
 %% Outside transaction: pre-stamp event records
 %%====================================================================
 
-%% Returns {[{Seq, #event{}}], FinalTip}.
+%% Returns {[{Seq | undefined, #event{}, [payload_entry()]}], FinalTip}.
 %%   - For disabled snapshots, Seq is undefined (the transaction
 %%     picks the seq from the live counter) and FinalTip is
 %%     undefined (no chain to track).
 %%   - For integrity-on snapshots, Seq is pre-assigned, the record
 %%     carries prev_event_hash + mac, and FinalTip is the chain-hash
 %%     of the last event.
-stamp_events(EventMaps, Now, EpochUs, disabled) ->
-    Stamped = [{undefined, build_event_record(EM, undefined, Now, EpochUs)}
-               || EM <- EventMaps],
+%% PayloadDecls drives extraction of payload index entries from each record;
+%% extraction calls crypto (via payload_combo_hash) so it must stay here,
+%% outside the transaction body.
+stamp_events(EventMaps, Now, EpochUs, disabled, PayloadDecls) ->
+    Stamped = [begin
+        R = build_event_record(EM, undefined, Now, EpochUs),
+        PE = extract_payload_entries(R, PayloadDecls),
+        {undefined, R, PE}
+    end || EM <- EventMaps],
     {Stamped, undefined};
 stamp_events(EventMaps, Now, EpochUs,
              #{integrity := {enabled, Key},
                expected_tip := Tip,
-               next_seq := StartSeq}) ->
-    stamp_chain(EventMaps, StartSeq, Now, EpochUs, Key, Tip, []).
+               next_seq := StartSeq},
+             PayloadDecls) ->
+    stamp_chain(EventMaps, StartSeq, Now, EpochUs, Key, Tip, PayloadDecls, []).
 
-stamp_chain([], _Seq, _Now, _EpochUs, _Key, Tip, Acc) ->
+stamp_chain([], _Seq, _Now, _EpochUs, _Key, Tip, _PD, Acc) ->
     {lists:reverse(Acc), Tip};
-stamp_chain([EM | Rest], Seq, Now, EpochUs, Key, Tip, Acc) ->
+stamp_chain([EM | Rest], Seq, Now, EpochUs, Key, Tip, PayloadDecls, Acc) ->
     Record0 = build_event_record(EM, Seq, Now, EpochUs),
     Record1 = Record0#event{prev_event_hash = Tip},
     Mac = reckon_gater_integrity:compute_event_mac(Record1, Key),
     Record2 = Record1#event{mac = Mac},
     NextTip = reckon_gater_integrity:compute_chain_hash(Record2, Tip),
-    stamp_chain(Rest, Seq + 1, Now, EpochUs, Key, NextTip,
-                [{Seq, Record2} | Acc]).
+    PE = extract_payload_entries(Record2, PayloadDecls),
+    stamp_chain(Rest, Seq + 1, Now, EpochUs, Key, NextTip, PayloadDecls,
+                [{Seq, Record2, PE} | Acc]).
 
 %%====================================================================
 %% Transaction body — strictly Horus-extractable
@@ -296,9 +313,9 @@ tx_body(TagFilter, SeqCutoff, Stamped,
 %% the record and write at the right path.
 write_off([], LastSeq) ->
     LastSeq;
-write_off([{undefined, Record0} | Rest], Seq) ->
+write_off([{undefined, Record0, PayloadEntries} | Rest], Seq) ->
     Record = Record0#event{version = Seq},
-    write_one_record(Record, Seq),
+    write_one_record(Record, Seq, PayloadEntries),
     case Rest of
         [] -> Seq;
         _  -> write_off(Rest, Seq + 1)
@@ -307,13 +324,13 @@ write_off([{undefined, Record0} | Rest], Seq) ->
 %% Integrity-on write: records already carry the right version (Seq).
 write_on([], LastSeq) ->
     LastSeq;
-write_on([{Seq, Record} | Rest], ExpectedSeq) ->
+write_on([{Seq, Record, PayloadEntries} | Rest], ExpectedSeq) ->
     %% Pre-assigned seq must equal the expected position in the chain.
     %% If these diverge, our snapshot was inconsistent — but the
     %% counter+tip verification already prevents that.
     case Seq =:= ExpectedSeq of
         true ->
-            write_one_record(Record, Seq),
+            write_one_record(Record, Seq, PayloadEntries),
             case Rest of
                 [] -> Seq;
                 _  -> write_on(Rest, ExpectedSeq + 1)
@@ -322,10 +339,11 @@ write_on([{Seq, Record} | Rest], ExpectedSeq) ->
             khepri_tx:abort({dcb_state_changed, {seq_skew, Seq, ExpectedSeq}})
     end.
 
-write_one_record(#event{event_type = EventType, tags = Tags} = Record, Seq) ->
+write_one_record(#event{event_type = EventType, tags = Tags} = Record, Seq,
+                 PayloadEntries) ->
     ok = khepri_tx:put(reckon_db_dcb_paths:event_path(Seq), Record),
     TagList = case Tags of
-                  undefined -> [];
+                  undefined     -> [];
                   L when is_list(L) -> L
               end,
     lists:foreach(
@@ -334,6 +352,15 @@ write_one_record(#event{event_type = EventType, tags = Tags} = Record, Seq) ->
         end,
         TagList),
     ok = khepri_tx:put(reckon_db_dcb_paths:by_event_type_path(EventType, Seq), #{}),
+    lists:foreach(
+        fun({single, Key, Value}) ->
+            ok = khepri_tx:put(
+                   reckon_db_dcb_paths:by_payload_path(Key, Value, Seq), #{});
+           ({combo, Hash}) ->
+            ok = khepri_tx:put(
+                   reckon_db_dcb_paths:by_payload_hash_path(Hash, Seq), #{})
+        end,
+        PayloadEntries),
     ok.
 
 verify_counter(ExpectedCounter) ->
@@ -402,3 +429,109 @@ generate_event_id(undefined, EpochUs) ->
     iolist_to_binary(io_lib:format("dcb-~p-pre", [EpochUs]));
 generate_event_id(Seq, EpochUs) ->
     iolist_to_binary(io_lib:format("dcb-~p-~p", [EpochUs, Seq])).
+
+%%====================================================================
+%% Payload entry extraction (outside transaction)
+%%====================================================================
+
+%% @doc Extract payload index entries from an event record for the given
+%% declarations. Returns [{single, Key, Value}] for payload declarations
+%% and [{combo, Hash}] for payload_hash declarations where all field values
+%% are present as binaries in the event data JSON.
+%%
+%% Non-binary values and absent fields produce no entry (event invisible
+%% to that filter). Calls crypto:hash/2 for combo hashes — must NOT be
+%% called from inside a Khepri transaction.
+-spec extract_payload_entries(#event{}, [index_decl()]) ->
+    [{single, binary(), binary()} | {combo, binary()}].
+extract_payload_entries(_Event, []) ->
+    [];
+extract_payload_entries(#event{data = Data}, PayloadDecls) ->
+    JsonMap = decode_json_map(Data),
+    lists:flatmap(fun(D) -> entry_for_decl(D, JsonMap) end, PayloadDecls).
+
+decode_json_map(Bin) when is_binary(Bin) ->
+    try json:decode(Bin) of
+        M when is_map(M) -> M;
+        _                -> #{}
+    catch
+        _:_ -> #{}
+    end;
+decode_json_map(M) when is_map(M) ->
+    M;
+decode_json_map(_) ->
+    #{}.
+
+-spec entry_for_decl(index_decl(), map()) ->
+    [{single, binary(), binary()} | {combo, binary()}].
+entry_for_decl({payload, Key}, JsonMap) ->
+    case maps:get(Key, JsonMap, undefined) of
+        V when is_binary(V) -> [{single, Key, V}];
+        _                   -> []
+    end;
+entry_for_decl({payload_hash, Keys}, JsonMap) ->
+    Values = [maps:get(K, JsonMap, undefined) || K <- Keys],
+    case lists:all(fun is_binary/1, Values) of
+        true ->
+            Hash = reckon_db_dcb_paths:payload_combo_hash(Keys, Values),
+            [{combo, Hash}];
+        false ->
+            []
+    end;
+entry_for_decl(_, _) ->
+    [].
+
+%%====================================================================
+%% Payload-indexed reads
+%%====================================================================
+
+%% @doc Return DCB events where data[Key] = Value, up to Limit events
+%% in ascending seq order.
+%%
+%% Requires {payload, Key} declared in the store's index config.
+-spec read_by_payload(atom(), binary(), binary(), pos_integer()) ->
+    {ok, [#event{}]} | {error, term()}.
+read_by_payload(StoreId, Key, Value, Limit) ->
+    Pattern = reckon_db_dcb_paths:by_payload_pattern(Key, Value),
+    case khepri:get_many(StoreId, Pattern) of
+        {ok, NodeMap} when is_map(NodeMap) ->
+            SeqKeys = [SK || [_, _, _, SK] <- maps:keys(NodeMap)],
+            resolve_seqkeys(StoreId, SeqKeys, Limit);
+        {error, {khepri, node_not_found, _}} ->
+            {ok, []};
+        {error, _} = Err ->
+            Err
+    end.
+
+%% @doc Return DCB events matching the composite payload field combination,
+%% up to Limit events in ascending seq order.
+%%
+%% Requires {payload_hash, Keys} declared in the store's index config.
+%% Field order in Keys/Values is ignored (hash is order-independent).
+-spec read_by_payload_hash(atom(), [binary()], [binary()], pos_integer()) ->
+    {ok, [#event{}]} | {error, term()}.
+read_by_payload_hash(StoreId, Keys, Values, Limit) ->
+    Hash = reckon_db_dcb_paths:payload_combo_hash(Keys, Values),
+    Pattern = reckon_db_dcb_paths:by_payload_hash_pattern(Hash),
+    case khepri:get_many(StoreId, Pattern) of
+        {ok, NodeMap} when is_map(NodeMap) ->
+            SeqKeys = [SK || [_, _, SK] <- maps:keys(NodeMap)],
+            resolve_seqkeys(StoreId, SeqKeys, Limit);
+        {error, {khepri, node_not_found, _}} ->
+            {ok, []};
+        {error, _} = Err ->
+            Err
+    end.
+
+resolve_seqkeys(StoreId, SeqKeys, Limit) ->
+    Sorted = lists:sort(SeqKeys),
+    Limited = lists:sublist(Sorted, Limit),
+    Events = lists:filtermap(
+        fun(SK) ->
+            case khepri:get(StoreId, ?DCB_STREAM_PATH ++ [SK]) of
+                {ok, #event{} = E} -> {true, E};
+                _                  -> false
+            end
+        end,
+        Limited),
+    {ok, Events}.

@@ -18,6 +18,8 @@
 %%   <li>`tags' — index every tag in `#event.tags'.</li>
 %%   <li>`event_type' — index `#event.event_type'.</li>
 %%   <li>`{meta, Key}' — index `maps:get(Key, metadata)' when present.</li>
+%%   <li>`{payload, Key}' — DCB payload index: top-level JSON field (5.3.0+).</li>
+%%   <li>`{payload_hash, Keys}' — DCB composite payload hash index (5.3.0+).</li>
 %% </ul>
 %%
 %% See plans/DESIGN_SECONDARY_INDEX.md.
@@ -28,6 +30,7 @@
 -export([
     load/1,
     declared/1,
+    declared_dcb_payload/1,
     is_indexed/2,
     clear/1
 ]).
@@ -48,6 +51,19 @@ load(#store_config{store_id = StoreId, indexes = Indexes})
 -spec declared(StoreId :: atom()) -> [index_decl()].
 declared(StoreId) ->
     persistent_term:get({reckon_db, indexes, StoreId}, []).
+
+%% @doc The subset of declared indexes that are DCB payload indexes.
+%%
+%% Used by the DCB append path to extract payload entries for each event.
+%% Returns only `{payload, Key}' and `{payload_hash, Keys}' declarations.
+-spec declared_dcb_payload(StoreId :: atom()) -> [index_decl()].
+declared_dcb_payload(StoreId) ->
+    [D || D <- declared(StoreId),
+          case D of
+              {payload, _}      -> true;
+              {payload_hash, _} -> true;
+              _                 -> false
+          end].
 
 %% @doc Whether a given index kind is declared for a store. `Kind' is an
 %% `index_decl()' (`tags', `event_type', or `{meta, Key}'). Drives the
@@ -77,4 +93,8 @@ normalize(Indexes) ->
 is_valid_decl(tags) -> true;
 is_valid_decl(event_type) -> true;
 is_valid_decl({meta, Key}) when is_binary(Key) -> true;
+is_valid_decl({payload, Key}) when is_binary(Key) -> true;
+is_valid_decl({payload_hash, Keys})
+        when is_list(Keys), Keys =/= [] ->
+    lists:all(fun is_binary/1, Keys);
 is_valid_decl(_) -> false.

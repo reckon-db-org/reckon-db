@@ -27,6 +27,11 @@
     by_tag_pattern/1,
     by_event_type_path/2,
     by_event_type_pattern/1,
+    by_payload_path/3,
+    by_payload_pattern/2,
+    by_payload_hash_path/2,
+    by_payload_hash_pattern/1,
+    payload_combo_hash/2,
     seq_key/1,
     seq_from_key/1
 ]).
@@ -61,6 +66,48 @@ by_event_type_path(EventType, Seq)
 -spec by_event_type_pattern(binary()) -> [term()].
 by_event_type_pattern(EventType) when is_binary(EventType) ->
     ?BY_EVENT_TYPE_PATH ++ [EventType, ?KHEPRI_WILDCARD_STAR].
+
+%% @doc Path to a single-field payload index entry:
+%%   [by_payload, Key, Value, SeqKey]
+%%
+%% All functions in this module are PURE and safe to call from inside a
+%% Khepri transaction — EXCEPT payload_combo_hash/2, which calls
+%% crypto:hash/2 (a NIF). Call that one outside the transaction.
+-spec by_payload_path(binary(), binary(), non_neg_integer()) -> [term()].
+by_payload_path(Key, Value, Seq)
+  when is_binary(Key), is_binary(Value), is_integer(Seq), Seq >= 0 ->
+    ?BY_PAYLOAD_PATH ++ [Key, Value, seq_key(Seq)].
+
+%% @doc Pattern matching every seq under a payload field value (subtree wildcard).
+-spec by_payload_pattern(binary(), binary()) -> [term()].
+by_payload_pattern(Key, Value) when is_binary(Key), is_binary(Value) ->
+    ?BY_PAYLOAD_PATH ++ [Key, Value, ?KHEPRI_WILDCARD_STAR].
+
+%% @doc Path to a composite payload hash index entry:
+%%   [by_payload_hash, Hash, SeqKey]
+-spec by_payload_hash_path(binary(), non_neg_integer()) -> [term()].
+by_payload_hash_path(Hash, Seq)
+  when is_binary(Hash), is_integer(Seq), Seq >= 0 ->
+    ?BY_PAYLOAD_HASH_PATH ++ [Hash, seq_key(Seq)].
+
+%% @doc Pattern matching every seq under a composite payload hash.
+-spec by_payload_hash_pattern(binary()) -> [term()].
+by_payload_hash_pattern(Hash) when is_binary(Hash) ->
+    ?BY_PAYLOAD_HASH_PATH ++ [Hash, ?KHEPRI_WILDCARD_STAR].
+
+%% @doc SHA-256 of the sorted [{Key, Value}] pair list.
+%%
+%% Sort ensures field-order independence: the same set of fields produces
+%% the same hash regardless of the order Keys and Values are supplied.
+%%
+%% MUST NOT be called from inside a Khepri transaction — crypto:hash/2 is a
+%% NIF that Horus cannot extract. Pre-compute the hash in the stamp phase or
+%% via preprocess_filter/1 before entering the transaction.
+-spec payload_combo_hash([binary()], [binary()]) -> binary().
+payload_combo_hash(Keys, Values)
+  when is_list(Keys), is_list(Values), length(Keys) =:= length(Values) ->
+    Pairs = lists:sort(lists:zip(Keys, Values)),
+    crypto:hash(sha256, term_to_binary(Pairs)).
 
 %% @doc Convert a non-negative integer to a fixed-width zero-padded
 %% decimal binary (?DCB_SEQ_KEY_WIDTH digits).

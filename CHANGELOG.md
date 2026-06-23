@@ -5,6 +5,60 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0] - 2026-06-23
+
+### Added — CCC payload indexes (Command Context Consistency)
+
+Extends the DCB conditional-append primitive with two payload-indexed filter
+variants from reckon-gater 3.5.0, completing Command Context Consistency (CCC)
+support. Events are now indexed by declared JSON payload fields as well as tags
+and event types, enabling consistency boundaries on payload data without
+requiring writers to anticipate future queries as tags.
+
+**New index declarations** (`store_config.indexes`):
+
+- `{payload, Key :: binary()}` — indexes the top-level JSON field `Key` from
+  `event.data`. Values must be binary (string). Absent or non-binary values
+  produce no index entry.
+- `{payload_hash, Keys :: [binary()]}` — indexes a combination of fields as a
+  SHA-256 hash. Enables `{payload_hash_match, Keys, Values}` queries with O(1)
+  Khepri path length regardless of field count.
+
+**New filter variants** (handled in `append_if_no_tag_matches` and reads):
+
+- `{payload_match, Key, Value}` — matches events where `data[Key] = Value`.
+- `{payload_hash_match, Keys, Values}` — matches events where the composite of
+  all listed field values matches (field order is ignored; hash is pre-computed
+  outside the transaction to respect the Horus extraction constraint on
+  `crypto:hash/2`).
+
+**New read functions** in `reckon_db_dcb`:
+
+- `read_by_payload/4` — reads events by single-field payload value.
+- `read_by_payload_hash/4` — reads events by composite payload field combination.
+
+**New helper**:
+
+- `reckon_db_dcb_paths:payload_combo_hash/2` — SHA-256 of a sorted
+  `[{Key,Value}]` list. Order-independent. Must NOT be called from inside a
+  Khepri transaction (NIF constraint).
+
+**Implementation notes**:
+
+- All payload writes happen inside the existing conditional-append Khepri
+  transaction, atomically with the event record and tag/event-type index entries.
+- Hash pre-computation uses `preprocess_filter/1` in `reckon_db_dcb_filter`,
+  invoked outside the transaction by `append_if_no_tag_matches`.
+- The `reckon_db_index` secondary index is unaffected: `{payload, _}` and
+  `{payload_hash, _}` declarations return `[]` from `entries_for/4`.
+- Stores without any `{payload, _}` or `{payload_hash, _}` declarations incur
+  zero overhead — `declared_dcb_payload/1` returns `[]` on every append and
+  the payload extraction path is skipped.
+- Requires reckon-gater ~> 3.5 (for the new `tag_filter()` variants).
+
+**Tests**: 69 new unit tests across `reckon_db_dcb_paths_tests`,
+`reckon_db_dcb_filter_tests`, and `reckon_db_index_config_tests`.
+
 ## [5.2.2] - 2026-06-23
 
 ### Added — DCB read APIs: log, tags, event-types

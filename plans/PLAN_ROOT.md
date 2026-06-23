@@ -14,6 +14,8 @@ This directory tracks design plans, research, and roadmap documents for `reckon-
 | [PLAN_SECONDARY_INDEX_IMPL.md](PLAN_SECONDARY_INDEX_IMPL.md) | ✅ Implemented (2026-06-08) | `reckon-db` (after Model C) | **Implementation of the secondary index.** New `reckon_db_index` (`[idx]` layout, `entries/2`, `lookup_*`) + `reckon_db_index_config` (per-store opt-in via persistent_term); transactional write path (`build_event_writes` + `write_batch`); `read_by_tags`/`read_by_event_types` index-or-scan dispatch + new `read_by_metadata/3`. 579 eunit + 143 ct green. |
 | [DESIGN_SECONDARY_INDEX.md](DESIGN_SECONDARY_INDEX.md) | ✅ Accepted + Implemented (2026-06-08) | `reckon-db` (after Model C) | Generic **opt-in, write-maintained** secondary index (`by_tag` for all events / `by_event_type` / `{meta, Key}`) — turns cross-cutting lookups (`read_by_tags`, `read_by_event_types`, `read_by_metadata`) from O(total) scans into O(matches) subtree reads, mirroring the DCB `by_tag` mechanism. The **index primitive** apps build causation/correlation read models on (`read_by_metadata`); the store never interprets lineage. Transactional with append; per-store opt-in (don't index "just in case"). Complementary to Model C. |
 
+| [PLAN_CCC.md](PLAN_CCC.md) | Design | `reckon-db` 5.3.0, `reckon-gater` 3.5.0, `reckon-gateway` 0.13.0 | Command Context Consistency — extends DCB with payload predicates. New `{payload, Key}` index declaration, `[by_payload, ...]` DCB path, `{payload_match, K, V}` filter variant, gateway + proto exposure. DCB-scoped (not global). |
+
 ## Cross-repo propagation
 
 | Document | Status | Description |

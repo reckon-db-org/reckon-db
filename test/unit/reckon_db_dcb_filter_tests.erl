@@ -6,6 +6,7 @@
 -module(reckon_db_dcb_filter_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("../../include/reckon_db.hrl").
 
 %%====================================================================
 %% Mock seqs provider
@@ -269,3 +270,108 @@ event_type_cutoff_minus_one_test() ->
     ?assertEqual({true, 0},
         reckon_db_dcb_filter:match_any_above_cutoff(
             {event_type, <<"user_registered_v1">>}, -1, P)).
+
+%%====================================================================
+%% payload_match filter (CCC, 5.3.0+)
+%%====================================================================
+
+payload_match_returns_indexed_seqs_test() ->
+    P = mock_provider([{{payload, <<"account_id">>, <<"acc-42">>}, [1, 5, 9]}]),
+    Result = reckon_db_dcb_filter:match_seqs(
+               {payload_match, <<"account_id">>, <<"acc-42">>}, P),
+    ?assertEqual([1, 5, 9], lists:sort(sets:to_list(Result))).
+
+payload_match_no_matching_events_test() ->
+    P = mock_provider([{{payload, <<"account_id">>, <<"acc-42">>}, [1, 2]}]),
+    Result = reckon_db_dcb_filter:match_seqs(
+               {payload_match, <<"account_id">>, <<"acc-99">>}, P),
+    ?assertEqual([], sets:to_list(Result)).
+
+payload_match_composes_with_event_type_via_and_test() ->
+    %% event_type="seat_reserved_v1" AND payload account_id="acc-1"
+    %% type: {1,2,3}, payload: {2,4} → AND → {2}
+    P = mock_provider([
+        {{event_type, <<"seat_reserved_v1">>}, [1, 2, 3]},
+        {{payload, <<"account_id">>, <<"acc-1">>}, [2, 4]}
+    ]),
+    Filter = {and_, [
+        {event_type, <<"seat_reserved_v1">>},
+        {payload_match, <<"account_id">>, <<"acc-1">>}
+    ]},
+    Result = reckon_db_dcb_filter:match_seqs(Filter, P),
+    ?assertEqual([2], lists:sort(sets:to_list(Result))).
+
+payload_match_with_cutoff_test() ->
+    P = mock_provider([{{payload, <<"user_id">>, <<"u1">>}, [1, 3, 7]}]),
+    ?assertEqual({true, 7},
+        reckon_db_dcb_filter:match_any_above_cutoff(
+            {payload_match, <<"user_id">>, <<"u1">>}, 3, P)),
+    ?assertEqual(false,
+        reckon_db_dcb_filter:match_any_above_cutoff(
+            {payload_match, <<"user_id">>, <<"u1">>}, 7, P)).
+
+%%====================================================================
+%% payload_hash_match_pre filter (CCC, 5.3.0+)
+%%====================================================================
+
+payload_hash_match_pre_returns_indexed_seqs_test() ->
+    Hash = reckon_db_dcb_paths:payload_combo_hash(
+        [<<"flight_id">>, <<"seat_no">>], [<<"FL001">>, <<"12A">>]),
+    P = mock_provider([{{payload_hash_pre, Hash}, [2, 8]}]),
+    Result = reckon_db_dcb_filter:match_seqs(
+               {payload_hash_match_pre, Hash}, P),
+    ?assertEqual([2, 8], lists:sort(sets:to_list(Result))).
+
+payload_hash_match_pre_no_match_test() ->
+    Hash = reckon_db_dcb_paths:payload_combo_hash([<<"k">>], [<<"v">>]),
+    P = mock_provider([{{payload_hash_pre, Hash}, []}]),
+    Result = reckon_db_dcb_filter:match_seqs({payload_hash_match_pre, Hash}, P),
+    ?assertEqual([], sets:to_list(Result)).
+
+%%====================================================================
+%% preprocess_filter/1 (CCC, 5.3.0+)
+%%====================================================================
+
+preprocess_filter_replaces_payload_hash_match_test() ->
+    Keys = [<<"flight_id">>, <<"seat_no">>],
+    Values = [<<"FL001">>, <<"12A">>],
+    Expected = {payload_hash_match_pre,
+                reckon_db_dcb_paths:payload_combo_hash(Keys, Values)},
+    ?assertEqual(Expected,
+        reckon_db_dcb_filter:preprocess_filter(
+            {payload_hash_match, Keys, Values})).
+
+preprocess_filter_is_order_independent_test() ->
+    %% Swapping key-value order must produce the same pre-computed hash.
+    F1 = reckon_db_dcb_filter:preprocess_filter(
+           {payload_hash_match, [<<"a">>, <<"b">>], [<<"x">>, <<"y">>]}),
+    F2 = reckon_db_dcb_filter:preprocess_filter(
+           {payload_hash_match, [<<"b">>, <<"a">>], [<<"y">>, <<"x">>]}),
+    ?assertEqual(F1, F2).
+
+preprocess_filter_recurses_into_and_test() ->
+    Keys = [<<"k">>],
+    Values = [<<"v">>],
+    Hash = reckon_db_dcb_paths:payload_combo_hash(Keys, Values),
+    Filter = {and_, [
+        {event_type, <<"t">>},
+        {payload_hash_match, Keys, Values}
+    ]},
+    ?assertEqual(
+        {and_, [{event_type, <<"t">>}, {payload_hash_match_pre, Hash}]},
+        reckon_db_dcb_filter:preprocess_filter(Filter)).
+
+preprocess_filter_recurses_into_or_test() ->
+    Hash = reckon_db_dcb_paths:payload_combo_hash([<<"a">>], [<<"b">>]),
+    Filter = {or_, [{payload_hash_match, [<<"a">>], [<<"b">>]}, {any_of, [<<"x">>]}]},
+    ?assertEqual(
+        {or_, [{payload_hash_match_pre, Hash}, {any_of, [<<"x">>]}]},
+        reckon_db_dcb_filter:preprocess_filter(Filter)).
+
+preprocess_filter_passthrough_for_other_filters_test() ->
+    ?assertEqual({any_of, [<<"a">>]},
+        reckon_db_dcb_filter:preprocess_filter({any_of, [<<"a">>]})),
+    ?assertEqual({event_type, <<"t">>},
+        reckon_db_dcb_filter:preprocess_filter({event_type, <<"t">>})),
+    ?assertEqual({payload_match, <<"k">>, <<"v">>},
+        reckon_db_dcb_filter:preprocess_filter({payload_match, <<"k">>, <<"v">>})).

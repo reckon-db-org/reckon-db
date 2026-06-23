@@ -14,7 +14,7 @@
 %% Version
 %%====================================================================
 
--define(RECKON_DB_VERSION, "5.0.0").
+-define(RECKON_DB_VERSION, "5.3.0").
 
 %%====================================================================
 %% Khepri Paths
@@ -43,6 +43,13 @@
 -define(DCB_STREAM_PATH, ?STREAMS_PATH ++ [?DCB_STREAM]).
 -define(BY_TAG_PATH, [by_tag]).
 -define(BY_EVENT_TYPE_PATH, [by_event_type]).
+%% CCC payload indexes (5.3.0+). Separate from the secondary index [idx, ...]
+%% which is OrderKey-keyed for general event lookups. These are DCB-scoped,
+%% SeqKey-ordered, and serve the conditional-append consistency check.
+%%   [by_payload, Key, Value, SeqKey] -> #{}   (single-field)
+%%   [by_payload_hash, Hash, SeqKey]  -> #{}   (composite SHA-256 hash)
+-define(BY_PAYLOAD_PATH, [by_payload]).
+-define(BY_PAYLOAD_HASH_PATH, [by_payload_hash]).
 %% Monotonic global counter for DCB seqs. One node, atomic via Khepri
 %% transactions. Holds the LAST-ASSIGNED seq (or absent if no DCB
 %% events yet).
@@ -149,9 +156,11 @@
 }).
 
 -type index_decl() ::
-    tags |                     %% index every tag in #event.tags
-    event_type |               %% index #event.event_type
-    {meta, Key :: binary()}.   %% index maps:get(Key, metadata) when present
+    tags |                              %% index every tag in #event.tags
+    event_type |                        %% index #event.event_type
+    {meta, Key :: binary()} |           %% index maps:get(Key, metadata) when present
+    {payload, Key :: binary()} |        %% DCB payload index: top-level JSON field (5.3.0+)
+    {payload_hash, Keys :: [binary()]}. %% DCB composite payload hash (5.3.0+)
 
 -type integrity_key_source() ::
     {env_var, EnvName :: binary()} |

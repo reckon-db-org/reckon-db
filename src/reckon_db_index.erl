@@ -85,6 +85,12 @@ entries_for({meta, Key}, #event{metadata = M}, OrderKey, Ref) when is_map(M) ->
         _ -> []
     end;
 entries_for({meta, _Key}, _Event, _OrderKey, _Ref) ->
+    [];
+%% Payload indexes are DCB-scoped (under ?BY_PAYLOAD_PATH / ?BY_PAYLOAD_HASH_PATH)
+%% and written by reckon_db_dcb, not by the secondary index mechanism.
+entries_for({payload, _Key}, _Event, _OrderKey, _Ref) ->
+    [];
+entries_for({payload_hash, _Keys}, _Event, _OrderKey, _Ref) ->
     [].
 
 %% @doc The unique, time-orderable leaf key for an event's index entries.

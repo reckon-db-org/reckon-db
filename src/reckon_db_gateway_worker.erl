@@ -184,6 +184,20 @@ handle_call({append_if_no_tag_matches, _StoreId, TagFilter, SeqCutoff, Events},
                StoreId, TagFilter, SeqCutoff, Events),
     {reply, Result, State};
 
+%% DCB payload-indexed read (reckon-db 5.3.0+, reckon-gater 3.5.1+).
+%% Requires {payload, Key} declared in the store's index_config.
+handle_call({dcb_read_by_payload, _StoreId, Key, Value, Limit}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_dcb:read_by_payload(StoreId, Key, Value, Limit),
+    {reply, Result, State};
+
+%% DCB composite payload hash read (reckon-db 5.3.0+, reckon-gater 3.5.1+).
+%% Requires {payload_hash, Keys} declared in the store's index_config.
+handle_call({dcb_read_by_payload_hash, _StoreId, Keys, Values, Limit}, _From,
+            #state{store_id = StoreId} = State) ->
+    Result = reckon_db_dcb:read_by_payload_hash(StoreId, Keys, Values, Limit),
+    {reply, Result, State};
+
 %%====================================================================
 %% Snapshot Operations (handle_call)
 %%====================================================================
