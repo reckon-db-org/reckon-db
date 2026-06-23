@@ -5,6 +5,21 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.1] - 2026-06-23
+
+### Fixed — Khepri startup race: `{ok, {error, noproc}}` crash
+
+In Khepri 0.17.x, `readwrite_transaction1` has a catch-all clause
+`Ret -> {ok, Ret}` that wraps `process_command` failures (e.g.
+`{error, noproc}` when Ra is not yet ready during store startup) as
+`{ok, {error, noproc}}`. Neither `reckon_db_streams:write_batch/3`
+nor `reckon_db_dcb:try_append/6` handled this shape, causing gateway
+workers to crash and retry-loop on first writes after a node restart.
+
+Added `{ok, {error, E}} -> {error, E}` clause to both paths. The DCB
+path also now guards `{ok, LastSeq}` with `is_integer(LastSeq)` to
+prevent a silent wrong-type success if this race recurs.
+
 ## [5.2.0] - 2026-06-22
 
 ### Added — DCB event-type filter and `[by_event_type]` index

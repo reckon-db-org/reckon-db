@@ -85,8 +85,12 @@ try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx, Retries) ->
     case khepri:transaction(
            StoreId,
            fun() -> tx_body(TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip) end) of
-        {ok, LastSeq} ->
+        {ok, LastSeq} when is_integer(LastSeq) ->
             {ok, LastSeq};
+        %% Khepri 0.17.x catch-all wraps process_command errors as {ok, Err}
+        %% when Ra is not yet ready (e.g. store startup race).
+        {ok, {error, E}} ->
+            {error, E};
         {error, {context_changed, _} = Reason} ->
             {error, Reason};
         {error, {dcb_state_changed, _}} ->

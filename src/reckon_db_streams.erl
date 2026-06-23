@@ -732,6 +732,9 @@ write_batch(StoreId, Writes, IndexEntries) ->
     case khepri:transaction(StoreId, Fun) of
         {ok, ok}            -> ok;
         ok                  -> ok;
+        %% Khepri 0.17.x catch-all wraps process_command errors as {ok, Err}
+        %% when Ra is not yet ready (e.g. store startup race).
+        {ok, {error, E}}    -> {error, E};
         {error, _} = Error  -> Error
     end.
 
