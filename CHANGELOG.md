@@ -5,6 +5,20 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.0] - 2026-06-24
+
+### Added — gateway worker payload index introspection
+
+`reckon_db_gateway_worker` now handles `{get_payload_indexes, StoreId}` and
+`{get_payload_hash_indexes, StoreId}` requests from reckon-gater 3.7.0+.
+
+The worker reads directly from the `#store_config{}` it holds in its gen_server
+state (captured at `start_link/1` time) — no Khepri I/O. The filters extract
+`{payload, Key}` and `{payload_hash, Keys}` entries from the `indexes` field.
+
+Required by `reckon_gater_api:get_payload_indexes/1` and
+`reckon_gater_api:get_payload_hash_indexes/1`.
+
 ## [5.4.0] - 2026-06-23
 
 ### Changed — CCC module rename

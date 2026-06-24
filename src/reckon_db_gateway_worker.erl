@@ -468,6 +468,18 @@ handle_call({ack_event, _StoreId, SubscriptionName, _SubscriberPid, Event}, _Fro
     Result = reckon_db_subscriptions:ack(StoreId, SubscriptionName, StreamId, EventNumber),
     {reply, Result, State};
 
+%% Payload index introspection (reckon-db 5.5.0+, reckon-gater 3.7.0+).
+%% Reads directly from the store_config stored in worker state — no store I/O.
+handle_call({get_payload_indexes, _StoreId}, _From,
+            #state{config = #store_config{indexes = Indexes}} = State) ->
+    Keys = [K || {payload, K} <- Indexes],
+    {reply, {ok, Keys}, State};
+
+handle_call({get_payload_hash_indexes, _StoreId}, _From,
+            #state{config = #store_config{indexes = Indexes}} = State) ->
+    KeySets = [KS || {payload_hash, KS} <- Indexes],
+    {reply, {ok, KeySets}, State};
+
 %% Unknown request
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
