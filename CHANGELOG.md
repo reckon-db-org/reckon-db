@@ -5,6 +5,24 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.1] - 2026-06-24
+
+### Fixed — CCC payload indexes silently empty for atom-keyed event data
+
+`extract_payload_entries/2` looked up declared payload keys (binary, e.g.
+`<<"lot_id">>`) against the event's `data` map with `maps:get/3`, but
+event-sourced producers (evoq) build domain events whose `data` is a map with
+**atom** keys and binary values (`#{lot_id => <<"L1">>}`). The binary key never
+matched the atom key, so `by_payload` / `by_payload_hash` index entries were
+never written — `tags` and `event_type` indexed fine (those come from the
+binary `#event` fields), so the gap was invisible until a CCC payload/hash
+query returned nothing despite matching events existing.
+
+`decode_json_map/1` now normalises atom keys to binary, so the declared binary
+key matches regardless of whether the producer keyed `data` with atoms,
+binaries, or a JSON binary. The producer owns event content; the store indexes
+it as given. Covered by `reckon_db_dcb_payload_extract_tests`.
+
 ## [5.5.0] - 2026-06-24
 
 ### Added — gateway worker payload index introspection

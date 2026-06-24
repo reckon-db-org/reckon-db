@@ -51,6 +51,12 @@
     read_by_payload_hash/4
 ]).
 
+-ifdef(TEST).
+%% Exposed for unit tests: payload-entry extraction must accept both
+%% atom-keyed (evoq-built) and binary-keyed (JSON-decoded) data maps.
+-export([extract_payload_entries/2]).
+-endif.
+
 %% Bounded retry budget for the pre-stamp / transaction race in
 %% integrity-on stores. Heavy contention escalates rather than spins.
 -define(INTEGRITY_RETRY_BUDGET, 5).
@@ -458,9 +464,22 @@ decode_json_map(Bin) when is_binary(Bin) ->
         _:_ -> #{}
     end;
 decode_json_map(M) when is_map(M) ->
-    M;
+    normalize_payload_keys(M);
 decode_json_map(_) ->
     #{}.
+
+%% Event data maps may carry atom keys — evoq-built domain events look like
+%% #{lot_id => <<"...">>}, with atom keys and binary values — while payload
+%% index declarations use binary keys (<<"lot_id">>). Normalise atom keys to
+%% binary so the declared binary key matches via maps:get/3 regardless of how
+%% the producer keyed the map. JSON-decoded maps already have binary keys and
+%% pass through unchanged. (The producer owns event content; the store must
+%% index it as given.)
+normalize_payload_keys(M) ->
+    maps:fold(
+        fun(K, V, Acc) when is_atom(K) -> Acc#{atom_to_binary(K, utf8) => V};
+           (K, V, Acc)                 -> Acc#{K => V}
+        end, #{}, M).
 
 -spec entry_for_decl(index_decl(), map()) ->
     [{single, binary(), binary()} | {combo, binary()}].
