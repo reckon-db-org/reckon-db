@@ -724,11 +724,7 @@ build_event_writes(StreamId, CurrentVersion, Events, Now, EpochUs,
     [{khepri_path:native_path(), reckon_db_index:event_ref()}]
 ) -> ok | {error, term()}.
 write_batch(StoreId, Writes, IndexEntries) ->
-    Fun = fun() ->
-        lists:foreach(fun({P, Record}) -> ok = khepri_tx:put(P, Record) end, Writes),
-        lists:foreach(fun({P, Ref}) -> ok = khepri_tx:put(P, Ref) end, IndexEntries),
-        ok
-    end,
+    Fun = fun() -> write_batch_tx(Writes, IndexEntries) end,
     case khepri:transaction(StoreId, Fun) of
         {ok, ok}            -> ok;
         ok                  -> ok;
@@ -737,6 +733,15 @@ write_batch(StoreId, Writes, IndexEntries) ->
         {ok, {error, E}}    -> {error, E};
         {error, _} = Error  -> Error
     end.
+
+%% @private The body of the write-batch transaction.
+write_batch_tx(Writes, IndexEntries) ->
+    lists:foreach(fun put_tx_entry/1, Writes),
+    lists:foreach(fun put_tx_entry/1, IndexEntries),
+    ok.
+
+put_tx_entry({P, Record}) ->
+    ok = khepri_tx:put(P, Record).
 
 %% @private Tamper-resistance context for a single append batch.
 %%
@@ -871,28 +876,25 @@ do_read(StoreId, StreamId, StartVersion, Count, Direction) ->
     atom(), binary(), non_neg_integer(), pos_integer(), direction(), read_opts()
 ) -> {ok, [event()]} | {error, term()}.
 do_read_with_verify(StoreId, StreamId, StartVersion, Count, Direction, Opts) ->
-    case exists(StoreId, StreamId) of
-        false ->
-            {error, {stream_not_found, StreamId}};
-        true ->
-            case read_events(StoreId, StreamId, StartVersion, Count, Direction) of
-                {ok, Events} ->
-                    case maybe_verify_events(
-                            StoreId, StreamId, StartVersion, Direction,
-                            Events, Opts) of
-                        {ok, _} = Ok ->
-                            Ok;
-                        {integrity_violation, _} = Violation ->
-                            %% Wrap at the public API boundary so
-                            %% callers see {error, _}. Internal
-                            %% helpers and the gater module return
-                            %% the bare tuple.
-                            {error, Violation}
-                    end;
-                Other ->
-                    Other
-            end
-    end.
+    read_if_stream_exists(exists(StoreId, StreamId),
+                          StoreId, StreamId, StartVersion, Count, Direction, Opts).
+
+read_if_stream_exists(false, _StoreId, StreamId, _StartVersion, _Count, _Direction, _Opts) ->
+    {error, {stream_not_found, StreamId}};
+read_if_stream_exists(true, StoreId, StreamId, StartVersion, Count, Direction, Opts) ->
+    verify_read_result(read_events(StoreId, StreamId, StartVersion, Count, Direction),
+                       StoreId, StreamId, StartVersion, Direction, Opts).
+
+verify_read_result({ok, Events}, StoreId, StreamId, StartVersion, Direction, Opts) ->
+    %% Wrap at the public API boundary so callers see {error, _}; internal
+    %% helpers and the gater module return the bare integrity tuple.
+    wrap_verification(
+        maybe_verify_events(StoreId, StreamId, StartVersion, Direction, Events, Opts));
+verify_read_result(Other, _StoreId, _StreamId, _StartVersion, _Direction, _Opts) ->
+    Other.
+
+wrap_verification({ok, _} = Ok) -> Ok;
+wrap_verification({integrity_violation, _} = Violation) -> {error, Violation}.
 
 %% @private Apply the configured verification mode to a fresh result.
 %%
@@ -1062,23 +1064,20 @@ resolve_read_initial_tip(StoreId, StreamId, StartVersion, _ChainStart)
     {ok, [event()]}.
 read_events(StoreId, StreamId, StartVersion, Count, Direction) ->
     Versions = calculate_versions(StartVersion, Count, Direction),
-    Events = lists:filtermap(
-        fun(Version) ->
-            PaddedVersion = pad_version(Version, ?VERSION_PADDING),
-            Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
-            case khepri:get(StoreId, Path) of
-                {ok, Event} when is_record(Event, event) ->
-                    {true, Event};
-                {ok, EventMap} when is_map(EventMap) ->
-                    %% Convert map to record if needed
-                    {true, map_to_event(EventMap)};
-                _ ->
-                    false
-            end
-        end,
-        Versions
-    ),
+    Events = lists:filtermap(fun(Version) -> read_one_event(StoreId, StreamId, Version) end,
+                             Versions),
     {ok, Events}.
+
+%% @private Fetch a single event by version, converting a stored map to a
+%% record if needed; drops versions with no event.
+read_one_event(StoreId, StreamId, Version) ->
+    PaddedVersion = pad_version(Version, ?VERSION_PADDING),
+    Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
+    event_from_khepri(khepri:get(StoreId, Path)).
+
+event_from_khepri({ok, Event}) when is_record(Event, event) -> {true, Event};
+event_from_khepri({ok, EventMap}) when is_map(EventMap) -> {true, map_to_event(EventMap)};
+event_from_khepri(_) -> false.
 
 %% @private
 -spec calculate_versions(non_neg_integer(), pos_integer(), direction()) -> [non_neg_integer()].
