@@ -363,31 +363,28 @@ extract_nodes_from_members(Members) ->
 %% @private Collect membership views from all nodes
 -spec collect_membership_views(atom(), [node()]) -> #{node() => {ok, [term()]} | {error, term()}}.
 collect_membership_views(StoreId, Nodes) ->
-    lists:foldl(fun(Node, Acc) ->
-        Result = case Node of
-            N when N =:= node() ->
-                khepri_cluster:members(StoreId);
-            _ ->
-                rpc:call(Node, khepri_cluster, members, [StoreId], ?RPC_TIMEOUT)
-        end,
-        NormalizedResult = case Result of
-            {ok, Members} -> {ok, lists:sort(Members)};
-            {badrpc, Reason} -> {error, {rpc_failed, Reason}};
-            Other -> Other
-        end,
-        Acc#{Node => NormalizedResult}
-    end, #{}, Nodes).
+    lists:foldl(fun(Node, Acc) -> membership_view_acc(StoreId, Node, Acc) end, #{}, Nodes).
+
+%% @private
+membership_view_acc(StoreId, Node, Acc) ->
+    Acc#{Node => normalize_members(fetch_members(StoreId, Node))}.
+
+%% @private
+fetch_members(StoreId, Node) when Node =:= node() ->
+    khepri_cluster:members(StoreId);
+fetch_members(StoreId, Node) ->
+    rpc:call(Node, khepri_cluster, members, [StoreId], ?RPC_TIMEOUT).
+
+%% @private
+normalize_members({ok, Members}) -> {ok, lists:sort(Members)};
+normalize_members({badrpc, Reason}) -> {error, {rpc_failed, Reason}};
+normalize_members(Other) -> Other.
 
 %% @private Analyze membership consensus
 -spec analyze_membership_consensus(#{node() => term()}, [term()]) -> {ok, map()}.
 analyze_membership_consensus(Views, LocalMembers) ->
-    SuccessfulViews = maps:filter(fun(_, V) ->
-        case V of {ok, _} -> true; _ -> false end
-    end, Views),
-
-    FailedNodes = maps:keys(maps:filter(fun(_, V) ->
-        case V of {ok, _} -> false; _ -> true end
-    end, Views)),
+    SuccessfulViews = maps:filter(fun is_ok_view/2, Views),
+    FailedNodes = maps:keys(maps:filter(fun is_failed_view/2, Views)),
 
     %% Extract member lists and find unique views
     MemberLists = [M || {ok, M} <- maps:values(SuccessfulViews)],
@@ -420,28 +417,28 @@ analyze_membership_consensus(Views, LocalMembers) ->
 %% @private Collect leader views from all nodes
 -spec collect_leader_views(atom(), [node()]) -> #{node() => term()}.
 collect_leader_views(StoreId, Nodes) ->
-    lists:foldl(fun(Node, Acc) ->
-        Result = case Node of
-            N when N =:= node() ->
-                ra_leaderboard:lookup_leader(StoreId);
-            _ ->
-                rpc:call(Node, ra_leaderboard, lookup_leader, [StoreId], ?RPC_TIMEOUT)
-        end,
-        NormalizedResult = case Result of
-            {badrpc, Reason} -> {error, {rpc_failed, Reason}};
-            undefined -> {error, no_leader};
-            {_, LeaderNode} when is_atom(LeaderNode) -> {ok, LeaderNode};
-            Other -> {error, Other}
-        end,
-        Acc#{Node => NormalizedResult}
-    end, #{}, Nodes).
+    lists:foldl(fun(Node, Acc) -> leader_view_acc(StoreId, Node, Acc) end, #{}, Nodes).
+
+%% @private
+leader_view_acc(StoreId, Node, Acc) ->
+    Acc#{Node => normalize_leader(fetch_leader(StoreId, Node))}.
+
+%% @private
+fetch_leader(StoreId, Node) when Node =:= node() ->
+    ra_leaderboard:lookup_leader(StoreId);
+fetch_leader(StoreId, Node) ->
+    rpc:call(Node, ra_leaderboard, lookup_leader, [StoreId], ?RPC_TIMEOUT).
+
+%% @private
+normalize_leader({badrpc, Reason}) -> {error, {rpc_failed, Reason}};
+normalize_leader(undefined) -> {error, no_leader};
+normalize_leader({_, LeaderNode}) when is_atom(LeaderNode) -> {ok, LeaderNode};
+normalize_leader(Other) -> {error, Other}.
 
 %% @private Analyze leader consensus
 -spec analyze_leader_consensus(#{node() => term()}) -> {ok, map()}.
 analyze_leader_consensus(Views) ->
-    SuccessfulViews = maps:filter(fun(_, V) ->
-        case V of {ok, _} -> true; _ -> false end
-    end, Views),
+    SuccessfulViews = maps:filter(fun is_ok_view/2, Views),
 
     Leaders = [L || {ok, L} <- maps:values(SuccessfulViews)],
     UniqueLeaders = lists:usort(Leaders),
@@ -472,19 +469,21 @@ analyze_leader_consensus(Views) ->
 %% @private Collect Raft statistics from members
 -spec collect_raft_stats(atom(), [term()]) -> #{node() => term()}.
 collect_raft_stats(StoreId, Members) ->
-    lists:foldl(fun({_, Node}, Acc) ->
-        Result = case Node of
-            N when N =:= node() ->
-                get_local_raft_stats(StoreId);
-            _ ->
-                rpc:call(Node, ?MODULE, get_local_raft_stats, [StoreId], ?RPC_TIMEOUT)
-        end,
-        NormalizedResult = case Result of
-            {badrpc, Reason} -> {error, {rpc_failed, Reason}};
-            Other -> Other
-        end,
-        Acc#{Node => NormalizedResult}
-    end, #{}, Members).
+    lists:foldl(fun({_, Node}, Acc) -> raft_stats_acc(StoreId, Node, Acc) end, #{}, Members).
+
+%% @private
+raft_stats_acc(StoreId, Node, Acc) ->
+    Acc#{Node => normalize_stats(fetch_raft_stats(StoreId, Node))}.
+
+%% @private
+fetch_raft_stats(StoreId, Node) when Node =:= node() ->
+    get_local_raft_stats(StoreId);
+fetch_raft_stats(StoreId, Node) ->
+    rpc:call(Node, ?MODULE, get_local_raft_stats, [StoreId], ?RPC_TIMEOUT).
+
+%% @private
+normalize_stats({badrpc, Reason}) -> {error, {rpc_failed, Reason}};
+normalize_stats(Other) -> Other.
 
 %% @private Get local Raft statistics (exported for RPC)
 -spec get_local_raft_stats(atom()) -> {ok, map()} | {error, term()}.
@@ -510,9 +509,7 @@ get_local_raft_stats(StoreId) ->
 %% @private Analyze Raft consistency
 -spec analyze_raft_consistency(#{node() => term()}, term()) -> {ok, map()}.
 analyze_raft_consistency(Stats, Leader) ->
-    SuccessfulStats = maps:filter(fun(_, V) ->
-        case V of {ok, _} -> true; _ -> false end
-    end, Stats),
+    SuccessfulStats = maps:filter(fun is_ok_view/2, Stats),
 
     case maps:size(SuccessfulStats) of
         0 ->
@@ -525,11 +522,7 @@ analyze_raft_consistency(Stats, Leader) ->
             TermsConsistent = length(lists:usort(Terms)) =< 1,
             MaxCommitDiff = lists:max(CommitIndices) - lists:min(CommitIndices),
 
-            Status = case {TermsConsistent, MaxCommitDiff} of
-                {true, Diff} when Diff < 100 -> consensus;
-                {true, _} -> warning;
-                {false, _} -> warning
-            end,
+            Status = raft_status(TermsConsistent, MaxCommitDiff),
 
             {ok, #{
                 status => Status,
@@ -591,18 +584,32 @@ emit_telemetry(StoreId, #{status := Status, duration_us := Duration} = Result, P
 %% @private Notify registered callbacks
 -spec notify_callbacks(#{reference() => fun()}, consistency_status()) -> ok.
 notify_callbacks(Callbacks, Status) ->
-    maps:foreach(fun(_Ref, Callback) ->
-        spawn(fun() ->
-            try
-                Callback(Status)
-            catch
-                Class:Reason:Stack ->
-                    logger:warning("Consistency callback failed: ~p:~p~n~p",
-                                  [Class, Reason, Stack])
-            end
-        end)
-    end, Callbacks),
+    maps:foreach(fun(_Ref, Callback) -> spawn_callback(Callback, Status) end, Callbacks),
     ok.
+
+%% @private
+spawn_callback(Callback, Status) ->
+    spawn(fun() -> run_callback(Callback, Status) end),
+    ok.
+
+%% @private
+run_callback(Callback, Status) ->
+    try
+        Callback(Status)
+    catch
+        Class:Reason:Stack ->
+            logger:warning("Consistency callback failed: ~p:~p~n~p", [Class, Reason, Stack])
+    end.
+
+%% @private View/stat predicates shared by the consensus analyzers
+is_ok_view(_, {ok, _}) -> true;
+is_ok_view(_, _) -> false.
+
+is_failed_view(K, V) -> not is_ok_view(K, V).
+
+%% @private Raft consistency verdict from term agreement + commit lag
+raft_status(true, Diff) when Diff < 100 -> consensus;
+raft_status(_, _) -> warning.
 
 %% @private Schedule next check
 -spec schedule_check(pos_integer()) -> reference().

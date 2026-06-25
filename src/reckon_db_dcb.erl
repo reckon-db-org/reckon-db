@@ -79,20 +79,28 @@ read_log(StoreId, FromSeq, Limit) when is_integer(FromSeq), is_integer(Limit) ->
     FromKey = reckon_db_dcb_paths:seq_key(FromSeq),
     case khepri:get_many(StoreId, Pattern) of
         {ok, NodeMap} when is_map(NodeMap) ->
-            TotalCount = maps:size(NodeMap),
-            Events = maps:fold(fun
-                ([_, _, SeqKey], #event{} = E, Acc) when SeqKey >= FromKey ->
-                    [E | Acc];
-                (_, _, Acc) ->
-                    Acc
-            end, [], NodeMap),
-            Sorted = lists:sort(fun(A, B) -> A#event.version =< B#event.version end, Events),
-            {ok, lists:sublist(Sorted, Limit), TotalCount};
+            read_log_result(NodeMap, FromKey, Limit);
         {error, {khepri, node_not_found, _}} ->
             {ok, [], 0};
         {error, _} = Err ->
             Err
     end.
+
+%% @private
+read_log_result(NodeMap, FromKey, Limit) ->
+    TotalCount = maps:size(NodeMap),
+    Events = maps:fold(fun(K, V, Acc) -> collect_event_from(FromKey, K, V, Acc) end, [], NodeMap),
+    Sorted = lists:sort(fun cmp_event_version/2, Events),
+    {ok, lists:sublist(Sorted, Limit), TotalCount}.
+
+%% @private
+collect_event_from(FromKey, [_, _, SeqKey], #event{} = E, Acc) when SeqKey >= FromKey ->
+    [E | Acc];
+collect_event_from(_FromKey, _, _, Acc) ->
+    Acc.
+
+%% @private
+cmp_event_version(A, B) -> A#event.version =< B#event.version.
 
 %% @doc Return all tags present in the DCB log, sorted by event count descending.
 %%
@@ -103,20 +111,23 @@ all_tags(StoreId) ->
     Pattern = ?BY_TAG_PATH ++ [?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR],
     case khepri:get_many(StoreId, Pattern) of
         {ok, NodeMap} when is_map(NodeMap) ->
-            Counts = maps:fold(fun
-                ([_Root, Tag, _SeqKey], _, Acc) when is_binary(Tag) ->
-                    maps:update_with(Tag, fun(C) -> C + 1 end, 1, Acc);
-                (_, _, Acc) ->
-                    Acc
-            end, #{}, NodeMap),
-            Sorted = lists:sort(fun({_, C1}, {_, C2}) -> C1 >= C2 end,
-                                maps:to_list(Counts)),
-            {ok, Sorted};
+            {ok, sorted_tag_counts(NodeMap)};
         {error, {khepri, node_not_found, _}} ->
             {ok, []};
         {error, _} = Err ->
             Err
     end.
+
+%% @private
+sorted_tag_counts(NodeMap) ->
+    Counts = maps:fold(fun count_by_tag/3, #{}, NodeMap),
+    lists:sort(fun cmp_count_desc/2, maps:to_list(Counts)).
+
+%% @private
+count_by_tag([_Root, Tag, _SeqKey], _, Acc) when is_binary(Tag) ->
+    maps:update_with(Tag, fun inc/1, 1, Acc);
+count_by_tag(_, _, Acc) ->
+    Acc.
 
 %% @doc Return all event types present in the DCB log, sorted by count descending.
 %%
@@ -126,20 +137,29 @@ all_event_types(StoreId) ->
     Pattern = ?BY_EVENT_TYPE_PATH ++ [?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR],
     case khepri:get_many(StoreId, Pattern) of
         {ok, NodeMap} when is_map(NodeMap) ->
-            Counts = maps:fold(fun
-                ([_Root, EventType, _SeqKey], _, Acc) when is_binary(EventType) ->
-                    maps:update_with(EventType, fun(C) -> C + 1 end, 1, Acc);
-                (_, _, Acc) ->
-                    Acc
-            end, #{}, NodeMap),
-            Sorted = lists:sort(fun({_, C1}, {_, C2}) -> C1 >= C2 end,
-                                maps:to_list(Counts)),
-            {ok, Sorted};
+            {ok, sorted_event_type_counts(NodeMap)};
         {error, {khepri, node_not_found, _}} ->
             {ok, []};
         {error, _} = Err ->
             Err
     end.
+
+%% @private
+sorted_event_type_counts(NodeMap) ->
+    Counts = maps:fold(fun count_by_event_type/3, #{}, NodeMap),
+    lists:sort(fun cmp_count_desc/2, maps:to_list(Counts)).
+
+%% @private
+count_by_event_type([_Root, EventType, _SeqKey], _, Acc) when is_binary(EventType) ->
+    maps:update_with(EventType, fun inc/1, 1, Acc);
+count_by_event_type(_, _, Acc) ->
+    Acc.
+
+%% @private
+inc(C) -> C + 1.
+
+%% @private
+cmp_count_desc({_, C1}, {_, C2}) -> C1 >= C2.
 
 -spec append_if_no_tag_matches(
     StoreId   :: atom() | binary(),
@@ -173,9 +193,7 @@ try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx, PayloadDecls, Re
     EpochUs = erlang:system_time(microsecond),
     Snapshot = take_snapshot(StoreId, IntegrityCtx),
     {Stamped, FinalTip} = stamp_events(Events, Now, EpochUs, Snapshot, PayloadDecls),
-    case khepri:transaction(
-           StoreId,
-           fun() -> tx_body(TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip) end) of
+    case run_tx(StoreId, TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip) of
         {ok, LastSeq} when is_integer(LastSeq) ->
             {ok, LastSeq};
         %% Khepri 0.17.x catch-all wraps process_command errors as {ok, Err}
@@ -190,6 +208,12 @@ try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx, PayloadDecls, Re
         {error, _} = Error ->
             Error
     end.
+
+%% @private Run the DCB write as a Khepri transaction.
+run_tx(StoreId, TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip) ->
+    khepri:transaction(
+      StoreId,
+      fun() -> tx_body(TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip) end).
 
 %%====================================================================
 %% Outside transaction: integrity context + state snapshot
@@ -294,26 +318,30 @@ tx_body(TagFilter, SeqCutoff, Stamped,
           expected_tip     := ExpectedTip,
           next_seq         := StartSeq},
         FinalTip) ->
-    case verify_counter(ExpectedCounter) of
-        {error, Actual} ->
-            khepri_tx:abort({dcb_state_changed, {counter, Actual}});
-        ok ->
-            case verify_tip(ExpectedTip) of
-                {error, Actual} ->
-                    khepri_tx:abort({dcb_state_changed, {tip, Actual}});
-                ok ->
-                    case reckon_db_ccc_filter:match_any_above_cutoff(
-                           TagFilter, SeqCutoff) of
-                        {true, MaxSeq} ->
-                            khepri_tx:abort({context_changed, MaxSeq});
-                        false ->
-                            LastSeq = write_on(Stamped, StartSeq),
-                            ok = khepri_tx:put(?DCB_SEQ_COUNTER_PATH, LastSeq),
-                            ok = khepri_tx:put(?DCB_CHAIN_TIP_PATH, FinalTip),
-                            LastSeq
-                    end
-            end
-    end.
+    tx_body_on(verify_counter(ExpectedCounter), ExpectedTip, TagFilter, SeqCutoff,
+               Stamped, StartSeq, FinalTip).
+
+%% @private Counter verified -> proceed to chain-tip verification.
+tx_body_on({error, Actual}, _ExpectedTip, _TagFilter, _SeqCutoff, _Stamped, _StartSeq, _FinalTip) ->
+    khepri_tx:abort({dcb_state_changed, {counter, Actual}});
+tx_body_on(ok, ExpectedTip, TagFilter, SeqCutoff, Stamped, StartSeq, FinalTip) ->
+    tx_body_tip(verify_tip(ExpectedTip), TagFilter, SeqCutoff, Stamped, StartSeq, FinalTip).
+
+%% @private Tip verified -> check the tag filter cutoff before writing.
+tx_body_tip({error, Actual}, _TagFilter, _SeqCutoff, _Stamped, _StartSeq, _FinalTip) ->
+    khepri_tx:abort({dcb_state_changed, {tip, Actual}});
+tx_body_tip(ok, TagFilter, SeqCutoff, Stamped, StartSeq, FinalTip) ->
+    tx_body_write(reckon_db_ccc_filter:match_any_above_cutoff(TagFilter, SeqCutoff),
+                  Stamped, StartSeq, FinalTip).
+
+%% @private Filter clear -> write events, bump counter + chain tip.
+tx_body_write({true, MaxSeq}, _Stamped, _StartSeq, _FinalTip) ->
+    khepri_tx:abort({context_changed, MaxSeq});
+tx_body_write(false, Stamped, StartSeq, FinalTip) ->
+    LastSeq = write_on(Stamped, StartSeq),
+    ok = khepri_tx:put(?DCB_SEQ_COUNTER_PATH, LastSeq),
+    ok = khepri_tx:put(?DCB_CHAIN_TIP_PATH, FinalTip),
+    LastSeq.
 
 %% Integrity-off write: live counter assigns seqs, stamp the seq into
 %% the record and write at the right path.
@@ -334,16 +362,18 @@ write_on([{Seq, Record, PayloadEntries} | Rest], ExpectedSeq) ->
     %% Pre-assigned seq must equal the expected position in the chain.
     %% If these diverge, our snapshot was inconsistent — but the
     %% counter+tip verification already prevents that.
-    case Seq =:= ExpectedSeq of
-        true ->
-            write_one_record(Record, Seq, PayloadEntries),
-            case Rest of
-                [] -> Seq;
-                _  -> write_on(Rest, ExpectedSeq + 1)
-            end;
-        false ->
-            khepri_tx:abort({dcb_state_changed, {seq_skew, Seq, ExpectedSeq}})
-    end.
+    write_on_check(Seq =:= ExpectedSeq, Seq, Record, PayloadEntries, Rest, ExpectedSeq).
+
+%% @private
+write_on_check(true, Seq, Record, PayloadEntries, Rest, ExpectedSeq) ->
+    write_one_record(Record, Seq, PayloadEntries),
+    write_on_next(Rest, Seq, ExpectedSeq);
+write_on_check(false, Seq, _Record, _PayloadEntries, _Rest, ExpectedSeq) ->
+    khepri_tx:abort({dcb_state_changed, {seq_skew, Seq, ExpectedSeq}}).
+
+%% @private
+write_on_next([], Seq, _ExpectedSeq) -> Seq;
+write_on_next(Rest, _Seq, ExpectedSeq) -> write_on(Rest, ExpectedSeq + 1).
 
 write_one_record(#event{event_type = EventType, tags = Tags} = Record, Seq,
                  PayloadEntries) ->
@@ -545,12 +575,12 @@ read_by_payload_hash(StoreId, Keys, Values, Limit) ->
 resolve_seqkeys(StoreId, SeqKeys, Limit) ->
     Sorted = lists:sort(SeqKeys),
     Limited = lists:sublist(Sorted, Limit),
-    Events = lists:filtermap(
-        fun(SK) ->
-            case khepri:get(StoreId, ?DCB_STREAM_PATH ++ [SK]) of
-                {ok, #event{} = E} -> {true, E};
-                _                  -> false
-            end
-        end,
-        Limited),
+    Events = lists:filtermap(fun(SK) -> resolve_seqkey(StoreId, SK) end, Limited),
     {ok, Events}.
+
+%% @private
+resolve_seqkey(StoreId, SK) ->
+    case khepri:get(StoreId, ?DCB_STREAM_PATH ++ [SK]) of
+        {ok, #event{} = E} -> {true, E};
+        _                  -> false
+    end.
