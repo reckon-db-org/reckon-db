@@ -152,30 +152,27 @@ run_health_check(StoreId) ->
 -spec check_subscriptions(atom(), [subscription()], [binary()]) ->
     {[{binary(), binary()}], [binary()], non_neg_integer()}.
 check_subscriptions(StoreId, Subscriptions, RunningPools) ->
-    lists:foldl(
-        fun(#subscription{id = SubId, subscription_name = Name,
-                          subscriber_pid = SubscriberPid}, {StaleAcc, MissingAcc, HealthyAcc}) ->
-            IsStale = is_subscriber_dead(SubscriberPid),
-            HasPool = has_running_pool(StoreId, SubId, RunningPools),
+    lists:foldl(fun(Sub, Acc) -> classify_subscription(StoreId, RunningPools, Sub, Acc) end,
+                {[], [], 0}, Subscriptions).
 
-            case {IsStale, HasPool} of
-                {true, false} ->
-                    %% Dead subscriber AND no emitter pool = truly stale
-                    {[{SubId, Name} | StaleAcc], MissingAcc, HealthyAcc};
-                {true, true} ->
-                    %% Dead subscriber BUT emitter pool running =
-                    %% restarted (persisted subscription from previous BEAM).
-                    %% The pool is serving events, so treat as healthy.
-                    {StaleAcc, MissingAcc, HealthyAcc + 1};
-                {false, false} ->
-                    {StaleAcc, [SubId | MissingAcc], HealthyAcc};
-                {false, true} ->
-                    {StaleAcc, MissingAcc, HealthyAcc + 1}
-            end
-        end,
-        {[], [], 0},
-        Subscriptions
-    ).
+classify_subscription(StoreId, RunningPools,
+                      #subscription{id = SubId, subscription_name = Name,
+                                    subscriber_pid = SubscriberPid}, Acc) ->
+    IsStale = is_subscriber_dead(SubscriberPid),
+    HasPool = has_running_pool(StoreId, SubId, RunningPools),
+    tally_subscription({IsStale, HasPool}, SubId, Name, Acc).
+
+%% Dead subscriber AND no emitter pool = truly stale.
+tally_subscription({true, false}, SubId, Name, {StaleAcc, MissingAcc, HealthyAcc}) ->
+    {[{SubId, Name} | StaleAcc], MissingAcc, HealthyAcc};
+%% Dead subscriber BUT pool running = restarted (persisted sub from a
+%% previous BEAM); the pool is serving events, so treat as healthy.
+tally_subscription({true, true}, _SubId, _Name, {StaleAcc, MissingAcc, HealthyAcc}) ->
+    {StaleAcc, MissingAcc, HealthyAcc + 1};
+tally_subscription({false, false}, SubId, _Name, {StaleAcc, MissingAcc, HealthyAcc}) ->
+    {StaleAcc, [SubId | MissingAcc], HealthyAcc};
+tally_subscription({false, true}, _SubId, _Name, {StaleAcc, MissingAcc, HealthyAcc}) ->
+    {StaleAcc, MissingAcc, HealthyAcc + 1}.
 
 %% @private Check if a subscriber PID is dead.
 %% In a cluster, PIDs from remote nodes may appear. is_process_alive/1
@@ -246,37 +243,28 @@ maybe_cleanup(StoreId, #health_report{
 %% @private Clean up stale subscriptions (dead subscriber)
 -spec cleanup_stale_subscriptions(atom(), [{binary(), binary()}]) -> non_neg_integer().
 cleanup_stale_subscriptions(StoreId, Stale) ->
-    lists:foldl(
-        fun({SubId, Name}, Count) ->
-            logger:warning("Cleaning up stale subscription ~s (~s) in store ~p",
-                          [Name, SubId, StoreId]),
-            %% Stop the emitter pool first
-            reckon_db_emitter_pool:stop(StoreId, SubId),
-            %% Remove the subscription
-            case reckon_db_subscriptions:unsubscribe(StoreId, SubId) of
-                ok -> Count + 1;
-                {error, _} -> Count
-            end
-        end,
-        0,
-        Stale
-    ).
+    lists:foldl(fun(SubInfo, Count) -> cleanup_one_stale(StoreId, SubInfo, Count) end,
+                0, Stale).
+
+cleanup_one_stale(StoreId, {SubId, Name}, Count) ->
+    logger:warning("Cleaning up stale subscription ~s (~s) in store ~p",
+                  [Name, SubId, StoreId]),
+    %% Stop the emitter pool first, then remove the subscription.
+    reckon_db_emitter_pool:stop(StoreId, SubId),
+    count_ok(reckon_db_subscriptions:unsubscribe(StoreId, SubId), Count).
+
+count_ok(ok, Count) -> Count + 1;
+count_ok({error, _}, Count) -> Count.
 
 %% @private Clean up orphaned emitter pools
 -spec cleanup_orphaned_pools(atom(), [binary()]) -> non_neg_integer().
 cleanup_orphaned_pools(StoreId, Orphaned) ->
-    lists:foldl(
-        fun(PoolId, Count) ->
-            logger:warning("Stopping orphaned emitter pool ~s in store ~p",
-                          [PoolId, StoreId]),
-            case reckon_db_emitter_pool:stop(StoreId, PoolId) of
-                ok -> Count + 1;
-                {error, _} -> Count
-            end
-        end,
-        0,
-        Orphaned
-    ).
+    lists:foldl(fun(PoolId, Count) -> stop_one_orphan(StoreId, PoolId, Count) end,
+                0, Orphaned).
+
+stop_one_orphan(StoreId, PoolId, Count) ->
+    logger:warning("Stopping orphaned emitter pool ~s in store ~p", [PoolId, StoreId]),
+    count_ok(reckon_db_emitter_pool:stop(StoreId, PoolId), Count).
 
 %% @private Start missing emitter pools
 -spec start_missing_pools(atom(), [binary()]) -> non_neg_integer().

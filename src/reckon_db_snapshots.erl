@@ -221,21 +221,22 @@ emit_save_telemetry({error, Reason}, _StartTime, StoreId, StreamId, Version, _Da
     atom(), binary(), non_neg_integer(), snapshot()
 ) -> {ok, snapshot()} | {error, term()}.
 apply_snapshot_integrity(StoreId, StreamId, Version, Snapshot) ->
-    case reckon_db_integrity_key:is_enabled(StoreId) of
-        false ->
-            {ok, Snapshot};
-        true ->
-            case compute_event_chain_hash(StoreId, StreamId, Version) of
-                {ok, AnchorHash} ->
-                    Key = reckon_db_integrity_key:get(StoreId),
-                    Snapshot1 = Snapshot#snapshot{anchor_hash = AnchorHash},
-                    Mac = reckon_gater_integrity:compute_snapshot_mac(
-                        Snapshot1, Key),
-                    {ok, Snapshot1#snapshot{mac = Mac}};
-                {error, _} = Err ->
-                    Err
-            end
-    end.
+    seal_if_enabled(reckon_db_integrity_key:is_enabled(StoreId),
+                    StoreId, StreamId, Version, Snapshot).
+
+seal_if_enabled(false, _StoreId, _StreamId, _Version, Snapshot) ->
+    {ok, Snapshot};
+seal_if_enabled(true, StoreId, StreamId, Version, Snapshot) ->
+    seal_with_anchor(compute_event_chain_hash(StoreId, StreamId, Version),
+                     StoreId, Snapshot).
+
+seal_with_anchor({ok, AnchorHash}, StoreId, Snapshot) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    Snapshot1 = Snapshot#snapshot{anchor_hash = AnchorHash},
+    Mac = reckon_gater_integrity:compute_snapshot_mac(Snapshot1, Key),
+    {ok, Snapshot1#snapshot{mac = Mac}};
+seal_with_anchor({error, _} = Err, _StoreId, _Snapshot) ->
+    Err.
 
 %%====================================================================
 %% Tamper-resistance — load side
@@ -247,26 +248,27 @@ apply_snapshot_integrity(StoreId, StreamId, Version, Snapshot) ->
 %% treated as legacy data).
 maybe_verify_snapshot_on_load(StoreId, StreamId,
                               #snapshot{version = Version} = Snapshot) ->
-    case should_verify_snapshot(StoreId, Snapshot) of
-        false ->
-            {ok, Snapshot};
-        true ->
-            case compute_event_chain_hash(StoreId, StreamId, Version) of
-                {ok, ActualAnchor} ->
-                    Key = reckon_db_integrity_key:get(StoreId),
-                    case reckon_gater_integrity:verify_snapshot(
-                            Snapshot, ActualAnchor, Key) of
-                        ok ->
-                            {ok, Snapshot};
-                        {integrity_violation, _} = Violation ->
-                            emit_load_violation_telemetry(
-                                StoreId, StreamId, Version, Violation),
-                            {error, Violation}
-                    end;
-                {error, _} = Err ->
-                    Err
-            end
-    end.
+    verify_if_needed(should_verify_snapshot(StoreId, Snapshot),
+                     StoreId, StreamId, Version, Snapshot).
+
+verify_if_needed(false, _StoreId, _StreamId, _Version, Snapshot) ->
+    {ok, Snapshot};
+verify_if_needed(true, StoreId, StreamId, Version, Snapshot) ->
+    verify_against_anchor(compute_event_chain_hash(StoreId, StreamId, Version),
+                          StoreId, StreamId, Version, Snapshot).
+
+verify_against_anchor({ok, ActualAnchor}, StoreId, StreamId, Version, Snapshot) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    check_snapshot_mac(reckon_gater_integrity:verify_snapshot(Snapshot, ActualAnchor, Key),
+                       StoreId, StreamId, Version, Snapshot);
+verify_against_anchor({error, _} = Err, _StoreId, _StreamId, _Version, _Snapshot) ->
+    Err.
+
+check_snapshot_mac(ok, _StoreId, _StreamId, _Version, Snapshot) ->
+    {ok, Snapshot};
+check_snapshot_mac({integrity_violation, _} = Violation, StoreId, StreamId, Version, _Snapshot) ->
+    emit_load_violation_telemetry(StoreId, StreamId, Version, Violation),
+    {error, Violation}.
 
 should_verify_snapshot(StoreId, Snapshot) ->
     reckon_db_integrity_key:is_enabled(StoreId)

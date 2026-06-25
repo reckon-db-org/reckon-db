@@ -389,13 +389,14 @@ broadcast_unannouncement(StoreId, FromNode) ->
 
 %% @private Find an entry by the (store_id, node) composite key.
 find_entry(StoreId, Node, Stores) ->
-    case lists:search(
-            fun(#store_entry{store_id = S, node = N}) ->
-                S =:= StoreId andalso N =:= Node
-            end, Stores) of
-        {value, Entry} -> Entry;
-        false          -> not_found
-    end.
+    entry_or_not_found(
+        lists:search(fun(E) -> store_entry_matches(E, StoreId, Node) end, Stores)).
+
+store_entry_matches(#store_entry{store_id = S, node = N}, StoreId, Node) ->
+    S =:= StoreId andalso N =:= Node.
+
+entry_or_not_found({value, Entry}) -> Entry;
+entry_or_not_found(false) -> not_found.
 
 %% @private Cast a state request to every peer in the given list
 %% (filtering out self so we don't loop).
@@ -407,15 +408,13 @@ request_state_from(Self, Peers) ->
 %% list. Returns `{Merged, NewEntries}' so the caller can fire
 %% announce notifications for the newly-discovered ones.
 merge_entries(Stores, PeerEntries) ->
-    lists:foldl(
-        fun(#store_entry{store_id = S, node = N} = E, {Acc, NewAcc}) ->
-            case find_entry(S, N, Acc) of
-                not_found -> {add_store_entry(Acc, E), [E | NewAcc]};
-                _Already  -> {Acc, NewAcc}
-            end
-        end,
-        {Stores, []},
-        PeerEntries).
+    lists:foldl(fun merge_one_entry/2, {Stores, []}, PeerEntries).
+
+merge_one_entry(#store_entry{store_id = S, node = N} = E, {Acc, NewAcc}) ->
+    case find_entry(S, N, Acc) of
+        not_found -> {add_store_entry(Acc, E), [E | NewAcc]};
+        _Already  -> {Acc, NewAcc}
+    end.
 
 %% @private Push a store event to every live subscriber. Send is
 %% safe to dead pids — `Pid ! Msg' is silently dropped by the

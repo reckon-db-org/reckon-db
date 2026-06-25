@@ -102,23 +102,23 @@ init(#store_config{store_id = StoreId, data_dir = DataDir, mode = Mode} = Config
             %% deliberate fail-fast — a misconfigured key would
             %% silently leave the store unable to write or verify
             %% events, which is strictly worse than not starting.
-            case reckon_db_integrity_key:load(Config) of
-                ok ->
-                    %% Install the store's declared secondary indexes so the
-                    %% append path can read them. Always succeeds (a [] list
-                    %% just means no indexes).
-                    ok = reckon_db_index_config:load(Config),
-                    do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime);
-                {error, KeyReason} = KeyError ->
-                    logger:error(
-                        "Failed to load integrity key for store ~p: ~p",
-                        [StoreId, KeyReason]),
-                    {stop, KeyError}
-            end;
+            post_key_load(reckon_db_integrity_key:load(Config),
+                          StoreId, Mode, DataDir, Config, StartTime);
         {error, Reason} = Error ->
             logger:error("Failed to start Khepri store ~p: ~p", [StoreId, Reason]),
             {stop, Error}
     end.
+
+%% @private After Khepri is up, load indexes and continue — or fail fast
+%% if the integrity key could not be loaded.
+post_key_load(ok, StoreId, Mode, DataDir, Config, StartTime) ->
+    %% Install the store's declared secondary indexes so the append path
+    %% can read them. Always succeeds (a [] list just means no indexes).
+    ok = reckon_db_index_config:load(Config),
+    do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime);
+post_key_load({error, KeyReason} = KeyError, StoreId, _Mode, _DataDir, _Config, _StartTime) ->
+    logger:error("Failed to load integrity key for store ~p: ~p", [StoreId, KeyReason]),
+    {stop, KeyError}.
 
 %% @private
 do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime) ->
@@ -264,18 +264,15 @@ init_store_paths(StoreId) ->
         ?SUBSCRIPTIONS_PATH,
         ?METADATA_PATH
     ],
-    lists:foreach(
-        fun(Path) ->
-            case khepri:exists(StoreId, Path) of
-                false ->
-                    khepri:put(StoreId, Path, #{});
-                true ->
-                    ok
-            end
-        end,
-        Paths
-    ),
+    lists:foreach(fun(Path) -> ensure_path(StoreId, Path) end, Paths),
     ok.
+
+%% @private Create a tree path with an empty map if it doesn't exist.
+ensure_path(StoreId, Path) ->
+    case khepri:exists(StoreId, Path) of
+        false -> khepri:put(StoreId, Path, #{});
+        true -> ok
+    end.
 
 %% @private Wait for the Khepri store to be queryable (Ra leader elected).
 -spec await_store_ready(atom(), non_neg_integer()) -> ok | {error, timeout}.
