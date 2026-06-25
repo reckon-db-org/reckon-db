@@ -142,25 +142,26 @@ load_key_bytes({env_var, EnvName}) when is_binary(EnvName) ->
         "" ->
             {error, {integrity_key_env_var_not_set, EnvName}};
         Value ->
-            case base64_decode_safe(Value) of
-                {ok, Bytes} -> {ok, Bytes};
-                error -> {error, {integrity_key_env_var_not_base64, EnvName}}
-            end
+            decoded_env_key(base64_decode_safe(Value), EnvName)
     end;
 load_key_bytes({sealed_file, Path}) ->
-    case check_file_mode(Path) of
-        ok ->
-            case file:read_file(Path) of
-                {ok, Bytes} ->
-                    %% Trim trailing newline if present (common in
-                    %% files generated with `echo`, `cat`, etc.)
-                    {ok, strip_trailing_newline(Bytes)};
-                {error, Reason} ->
-                    {error, {integrity_key_file_not_readable, Path, Reason}}
-            end;
-        {error, _} = Err ->
-            Err
-    end.
+    read_sealed_file(check_file_mode(Path), Path).
+
+decoded_env_key({ok, Bytes}, _EnvName) ->
+    {ok, Bytes};
+decoded_env_key(error, EnvName) ->
+    {error, {integrity_key_env_var_not_base64, EnvName}}.
+
+read_sealed_file(ok, Path) ->
+    sealed_file_bytes(file:read_file(Path), Path);
+read_sealed_file({error, _} = Err, _Path) ->
+    Err.
+
+%% Trim trailing newline if present (common in files made with echo/cat).
+sealed_file_bytes({ok, Bytes}, _Path) ->
+    {ok, strip_trailing_newline(Bytes)};
+sealed_file_bytes({error, Reason}, Path) ->
+    {error, {integrity_key_file_not_readable, Path, Reason}}.
 
 base64_decode_safe(Value) ->
     try base64:decode(Value) of
@@ -176,13 +177,15 @@ check_file_mode(Path) ->
             %% group + other permission bits are all zero. Owner bits
             %% are allowed to be anything except executable.
             Permissions = Mode band 8#777,
-            case Permissions band 8#077 of
-                0 -> ok;
-                _ -> {error, {integrity_key_file_insecure_mode, Path, Permissions}}
-            end;
+            secure_file_mode(Permissions band 8#077, Path, Permissions);
         {error, Reason} ->
             {error, {integrity_key_file_not_readable, Path, Reason}}
     end.
+
+secure_file_mode(0, _Path, _Permissions) ->
+    ok;
+secure_file_mode(_, Path, Permissions) ->
+    {error, {integrity_key_file_insecure_mode, Path, Permissions}}.
 
 strip_trailing_newline(Bin) ->
     Size = byte_size(Bin),

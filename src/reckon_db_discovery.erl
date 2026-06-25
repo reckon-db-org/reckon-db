@@ -250,13 +250,16 @@ handle_gossip_message(Data, #state{cluster_secret = Secret,
             %% secret reach this point, so atom creation is bounded
             %% to authenticated peers.
             Node = binary_to_atom(NodeBin, utf8),
-            case Node =:= node() of
-                true -> State;
-                false -> handle_discovered_node(Node, StoreId, KnownNodes, State)
-            end;
+            maybe_handle_node(Node =:= node(), Node, StoreId, KnownNodes, State);
         reject ->
             State
     end.
+
+%% @private Ignore our own gossip; handle a genuine peer.
+maybe_handle_node(true, _Node, _StoreId, _KnownNodes, State) ->
+    State;
+maybe_handle_node(false, Node, StoreId, KnownNodes, State) ->
+    handle_discovered_node(Node, StoreId, KnownNodes, State).
 
 %% @private Decode + authenticate one gossip datagram.
 %%
@@ -327,15 +330,16 @@ connect_discovered_node(Node, StoreId, KnownNodes, State) ->
 -spec trigger_cluster_join(atom()) -> ok.
 trigger_cluster_join(StoreId) ->
     %% Use spawn to avoid blocking discovery
-    spawn(fun() ->
-        try
-            reckon_db_store_coordinator:join_cluster(StoreId)
-        catch
-            _:Reason ->
-                logger:warning("Failed to trigger cluster join: ~p", [Reason])
-        end
-    end),
+    spawn(fun() -> do_cluster_join(StoreId) end),
     ok.
+
+do_cluster_join(StoreId) ->
+    try
+        reckon_db_store_coordinator:join_cluster(StoreId)
+    catch
+        _:Reason ->
+            logger:warning("Failed to trigger cluster join: ~p", [Reason])
+    end.
 
 %% @private Schedule next broadcast
 -spec schedule_broadcast(non_neg_integer()) -> reference().

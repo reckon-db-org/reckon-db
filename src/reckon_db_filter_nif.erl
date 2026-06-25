@@ -278,12 +278,11 @@ count_matches(Items, Pattern) ->
 
 %% @private
 nif_wildcard_to_regex_coerce(Pattern) ->
-    Result = nif_wildcard_to_regex(Pattern),
-    if
-        is_binary(Result) -> Result;
-        is_list(Result) -> list_to_binary(Result);
-        true -> Result
-    end.
+    coerce_regex(nif_wildcard_to_regex(Pattern)).
+
+coerce_regex(Result) when is_binary(Result) -> Result;
+coerce_regex(Result) when is_list(Result) -> list_to_binary(Result);
+coerce_regex(Result) -> Result.
 
 %%====================================================================
 %% NIF Stubs (replaced when NIF loads)
@@ -423,13 +422,15 @@ erlang_filter_by_suffix(Items, Suffix) ->
 -spec erlang_match_indices([binary()], binary()) -> [non_neg_integer()].
 erlang_match_indices(Items, Pattern) ->
     RegexPattern = erlang_wildcard_to_regex(Pattern),
-    {Indices, _} = lists:foldl(fun(Item, {Acc, Idx}) ->
-        case erlang_regex_match(Item, RegexPattern) of
-            true -> {[Idx | Acc], Idx + 1};
-            false -> {Acc, Idx + 1}
-        end
-    end, {[], 0}, Items),
+    {Indices, _} = lists:foldl(fun(Item, Acc) -> match_index_acc(Item, RegexPattern, Acc) end,
+                               {[], 0}, Items),
     lists:reverse(Indices).
+
+match_index_acc(Item, RegexPattern, {Acc, Idx}) ->
+    next_match_index(erlang_regex_match(Item, RegexPattern), Acc, Idx).
+
+next_match_index(true, Acc, Idx) -> {[Idx | Acc], Idx + 1};
+next_match_index(false, Acc, Idx) -> {Acc, Idx + 1}.
 
 %% @private
 -spec erlang_count_matches([binary()], binary()) -> non_neg_integer().

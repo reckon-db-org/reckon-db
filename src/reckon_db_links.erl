@@ -412,18 +412,16 @@ link_stream_id(Name) ->
 backfill_link(StoreId, Link) ->
     SourceStreams = get_source_streams(StoreId, Link#link.source),
 
-    lists:foreach(
-        fun(StreamId) ->
-            case reckon_db_streams:read(StoreId, StreamId, 0, 10000, forward) of
-                {ok, Events} ->
-                    process_events_for_link(StoreId, Link, Events);
-                {error, _} ->
-                    ok
-            end
-        end,
-        SourceStreams
-    ),
+    lists:foreach(fun(StreamId) -> process_link_stream(StoreId, Link, StreamId) end,
+                  SourceStreams),
     ok.
+
+%% @private Read one source stream and feed its events into the link.
+process_link_stream(StoreId, Link, StreamId) ->
+    case reckon_db_streams:read(StoreId, StreamId, 0, 10000, forward) of
+        {ok, Events} -> process_events_for_link(StoreId, Link, Events);
+        {error, _} -> ok
+    end.
 
 %% @private Get source stream IDs based on source spec
 -spec get_source_streams(atom(), source_spec()) -> [binary()].
@@ -476,21 +474,17 @@ process_events_for_link(StoreId, Link, Events) ->
     LinkStreamId = link_stream_id(Link#link.name),
 
     ProcessedEvents = lists:filtermap(
-        fun(Event) ->
-            %% Apply filter
-            case apply_filter(Filter, Event) of
-                true ->
-                    %% Apply transform
-                    TransformedEvent = apply_transform(Transform, Event),
-                    {true, TransformedEvent};
-                false ->
-                    false
-            end
-        end,
-        Events
-    ),
+                        fun(Event) -> filter_and_transform(Filter, Transform, Event) end,
+                        Events),
 
     append_processed_events(StoreId, Link#link.name, LinkStreamId, ProcessedEvents).
+
+%% @private Keep + transform events that pass the link filter.
+filter_and_transform(Filter, Transform, Event) ->
+    case apply_filter(Filter, Event) of
+        true -> {true, apply_transform(Transform, Event)};
+        false -> false
+    end.
 
 append_processed_events(_StoreId, _LinkName, _LinkStreamId, []) ->
     ok;
