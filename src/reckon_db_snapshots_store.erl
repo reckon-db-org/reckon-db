@@ -103,16 +103,15 @@ list(StoreId, StreamId) ->
             Snapshots = [convert_to_snapshot(V) || {_, V} <- maps:to_list(Results)],
             ValidSnapshots = [S || S <- Snapshots, S =/= undefined],
             %% Sort by version
-            Sorted = lists:sort(
-                fun(#snapshot{version = V1}, #snapshot{version = V2}) -> V1 =< V2 end,
-                ValidSnapshots
-            ),
-            {ok, Sorted};
+            {ok, lists:sort(fun by_snapshot_version/2, ValidSnapshots)};
         {ok, _} ->
             {ok, []};
         {error, _} = Error ->
             Error
     end.
+
+by_snapshot_version(#snapshot{version = V1}, #snapshot{version = V2}) ->
+    V1 =< V2.
 
 %% @doc Check if any snapshot exists for a stream
 -spec exists(store_id(), binary()) -> boolean().

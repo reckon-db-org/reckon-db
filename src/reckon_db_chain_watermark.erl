@@ -96,11 +96,13 @@ set_if_absent(StoreId, StreamId, Version)
             %% saw 'undefined' and both wrote. Whoever's write
             %% Khepri/Ra serialised last wins; we return that value.
             {ok, Recorded} = lookup(StoreId, StreamId),
-            case Recorded of
-                undefined -> {ok, Version}; %% defensive; should not happen
-                _ -> {ok, Recorded}
-            end
+            recorded_or_version(Recorded, Version)
     end.
+
+%% @private Prefer the re-read value; fall back to our own write (defensive;
+%% lookup should not be undefined immediately after a put).
+recorded_or_version(undefined, Version) -> {ok, Version};
+recorded_or_version(Recorded, _Version) -> {ok, Recorded}.
 
 %% @doc Delete a stream's watermark.
 %%

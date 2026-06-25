@@ -313,19 +313,18 @@ get_memory_info() ->
 %% @private Notify all registered callbacks
 -spec notify_callbacks(pressure_level(), pressure_level(), #{callback_ref() => callback_fun()}) -> ok.
 notify_callbacks(_OldLevel, NewLevel, Callbacks) ->
-    maps:foreach(
-        fun(_Ref, Fun) ->
-            try
-                Fun(NewLevel)
-            catch
-                Class:Reason:Stacktrace ->
-                    logger:warning("Memory pressure callback failed: ~p:~p~n~p",
-                                  [Class, Reason, Stacktrace])
-            end
-        end,
-        Callbacks
-    ),
+    maps:foreach(fun(_Ref, Fun) -> run_pressure_callback(Fun, NewLevel) end, Callbacks),
     ok.
+
+%% @private Run one pressure callback, logging (not propagating) failures.
+run_pressure_callback(Fun, NewLevel) ->
+    try
+        Fun(NewLevel)
+    catch
+        Class:Reason:Stacktrace ->
+            logger:warning("Memory pressure callback failed: ~p:~p~n~p",
+                          [Class, Reason, Stacktrace])
+    end.
 
 %% @private Emit telemetry for pressure change
 -spec emit_telemetry(pressure_level(), pressure_level(), float()) -> ok.

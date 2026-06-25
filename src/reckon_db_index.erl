@@ -201,17 +201,16 @@ subtree_refs(StoreId, Pattern) ->
 -spec refs_for_patterns(atom(), [khepri_path:native_pattern()]) ->
     {ok, [[event_ref()]]} | {error, term()}.
 refs_for_patterns(StoreId, Patterns) ->
-    lists:foldr(
-        fun(_Pattern, {error, _} = Error) ->
-                Error;
-           (Pattern, {ok, Acc}) ->
-                case subtree_refs(StoreId, Pattern) of
-                    {ok, Refs} -> {ok, [Refs | Acc]};
-                    {error, _} = Error -> Error
-                end
-        end,
-        {ok, []},
-        Patterns).
+    lists:foldr(fun(Pattern, Acc) -> accumulate_refs(StoreId, Pattern, Acc) end,
+                {ok, []}, Patterns).
+
+accumulate_refs(_StoreId, _Pattern, {error, _} = Error) ->
+    Error;
+accumulate_refs(StoreId, Pattern, {ok, Acc}) ->
+    merge_subtree_refs(subtree_refs(StoreId, Pattern), Acc).
+
+merge_subtree_refs({ok, Refs}, Acc) -> {ok, [Refs | Acc]};
+merge_subtree_refs({error, _} = Error, _Acc) -> Error.
 
 %% @private De-duplicate refs by {stream_id, version}.
 -spec dedup_refs([event_ref()]) -> [event_ref()].

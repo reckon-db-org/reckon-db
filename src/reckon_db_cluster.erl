@@ -39,15 +39,15 @@
 health_check(StoreId) ->
     case reckon_db_consistency_checker:get_quorum_status(StoreId) of
         {ok, #{has_quorum := HasQuorum} = Quorum} ->
-            LeaderStatus = case ra_leaderboard:lookup_leader(StoreId) of
-                undefined -> no_leader;
-                _Leader   -> has_leader
-            end,
+            LeaderStatus = leader_status(ra_leaderboard:lookup_leader(StoreId)),
             Status = classify_health(HasQuorum, LeaderStatus),
             {ok, Quorum#{status => Status, leader => LeaderStatus}};
         {error, Reason} ->
             {error, Reason}
     end.
+
+leader_status(undefined) -> no_leader;
+leader_status(_Leader) -> has_leader.
 
 %% @doc Full cluster consistency check.
 %%

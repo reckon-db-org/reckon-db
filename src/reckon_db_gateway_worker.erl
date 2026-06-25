@@ -580,17 +580,17 @@ find_subscription_by_name(StoreId, SubscriptionName) ->
     end.
 
 match_subscription_by_name(Subscriptions, SubscriptionName) ->
-    case lists:filter(
-        fun(S) when is_record(S, subscription) ->
-            S#subscription.subscription_name =:= SubscriptionName;
-           (S) when is_map(S) ->
-            maps:get(subscription_name, S, <<>>) =:= SubscriptionName
-        end,
-        Subscriptions
-    ) of
-        [Sub | _] -> {ok, subscription_to_map(Sub)};
-        [] -> {error, not_found}
-    end.
+    Matches = lists:filter(
+                fun(S) -> subscription_name_is(S, SubscriptionName) end, Subscriptions),
+    first_named_subscription(Matches).
+
+subscription_name_is(S, Name) when is_record(S, subscription) ->
+    S#subscription.subscription_name =:= Name;
+subscription_name_is(S, Name) when is_map(S) ->
+    maps:get(subscription_name, S, <<>>) =:= Name.
+
+first_named_subscription([Sub | _]) -> {ok, subscription_to_map(Sub)};
+first_named_subscription([]) -> {error, not_found}.
 
 %% @private Convert subscription record to map
 -spec subscription_to_map(subscription() | map()) -> map().

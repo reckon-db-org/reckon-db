@@ -122,19 +122,18 @@ archive_and_scavenge(StoreId, StreamId, {BackendMod, BackendState}, Opts) ->
                 archived => false
             }};
         {ok, Events, {FromVersion, ToVersion}} ->
-            %% Archive the events
+            %% Archive the events, then scavenge with the archive flag.
             ArchiveKey = reckon_db_archive_backend:make_key(StoreId, StreamId, FromVersion, ToVersion),
-            case BackendMod:archive(BackendState, ArchiveKey, Events) of
-                {ok, _NewBackendState} ->
-                    %% Now scavenge (with archive flag)
-                    ScavengeOpts = Opts#{archived_key => ArchiveKey},
-                    do_scavenge(StoreId, StreamId, ScavengeOpts);
-                {error, _} = Error ->
-                    Error
-            end;
+            archive_then_scavenge(BackendMod:archive(BackendState, ArchiveKey, Events),
+                                  StoreId, StreamId, Opts, ArchiveKey);
         {error, _} = Error ->
             Error
     end.
+
+archive_then_scavenge({ok, _NewBackendState}, StoreId, StreamId, Opts, ArchiveKey) ->
+    do_scavenge(StoreId, StreamId, Opts#{archived_key => ArchiveKey});
+archive_then_scavenge({error, _} = Error, _StoreId, _StreamId, _Opts, _ArchiveKey) ->
+    Error.
 
 %% @doc Preview what would be scavenged without making changes.
 -spec dry_run(atom(), binary(), scavenge_opts()) ->

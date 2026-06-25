@@ -219,11 +219,14 @@ send_to_subscriber(Pid, Event, StoreId, SubscriptionKey) when node(Pid) =:= node
             logger:warning("Subscriber ~p is dead for subscription ~s in store ~p, "
                            "stopping emitter pool",
                           [Pid, SubscriptionKey, StoreId]),
-            %% Stop the emitter pool asynchronously to avoid blocking the
-            %% emitter worker during event delivery
-            spawn(fun() -> reckon_db_emitter_pool:stop(StoreId, SubscriptionKey) end),
-            ok
+            stop_pool_async(StoreId, SubscriptionKey)
     end;
 send_to_subscriber(Pid, Event, _StoreId, _SubscriptionKey) when is_pid(Pid) ->
     catch (Pid ! {events, [Event]}),
+    ok.
+
+%% @private Stop the emitter pool asynchronously so event delivery isn't
+%% blocked during the (rare) dead-subscriber cleanup.
+stop_pool_async(StoreId, SubscriptionKey) ->
+    spawn(fun() -> reckon_db_emitter_pool:stop(StoreId, SubscriptionKey) end),
     ok.

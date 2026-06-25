@@ -100,17 +100,15 @@ exists(StoreId, Key) when is_binary(Key) ->
 exists(StoreId, Type, SubscriptionName) ->
     %% We need to search through subscriptions since we don't have
     %% the selector to generate the key
-    case list(StoreId) of
-        {ok, Subs} ->
-            lists:any(
-                fun(#subscription{type = T, subscription_name = N}) ->
-                    T =:= Type andalso N =:= SubscriptionName
-                end,
-                Subs
-            );
-        _ ->
-            false
-    end.
+    any_subscription_matches(list(StoreId), Type, SubscriptionName).
+
+any_subscription_matches({ok, Subs}, Type, SubscriptionName) ->
+    lists:any(fun(Sub) -> subscription_matches(Sub, Type, SubscriptionName) end, Subs);
+any_subscription_matches(_, _Type, _SubscriptionName) ->
+    false.
+
+subscription_matches(#subscription{type = T, subscription_name = N}, Type, Name) ->
+    T =:= Type andalso N =:= Name.
 
 %% @doc List all subscriptions in the store
 -spec list(store_id()) -> {ok, [subscription()]} | {error, term()}.
