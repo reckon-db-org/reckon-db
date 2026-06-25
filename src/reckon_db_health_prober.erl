@@ -283,9 +283,7 @@ terminate(Reason, #state{store_id = StoreId}) ->
 
 %% @private Perform a complete probe cycle
 -spec perform_probe_cycle(#state{}) -> #state{}.
-perform_probe_cycle(#state{store_id = StoreId, nodes = Nodes, probe_type = ProbeType,
-                           probe_timeout = Timeout, failure_threshold = Threshold,
-                           failed_callbacks = FailedCb, recovered_callbacks = RecoveredCb} = State) ->
+perform_probe_cycle(#state{store_id = StoreId, nodes = Nodes} = State) ->
     StartTime = erlang:monotonic_time(microsecond),
 
     %% Get current cluster members to probe
@@ -295,20 +293,9 @@ perform_probe_cycle(#state{store_id = StoreId, nodes = Nodes, probe_type = Probe
     UpdatedNodes = ensure_nodes_tracked(NodesToProbe, Nodes),
 
     %% Probe each node
-    {ProbedNodes, SuccessCount, FailureCount} = lists:foldl(fun(Node, {NodesAcc, Succ, Fail}) ->
-        case Node of
-            N when N =:= node() ->
-                %% Don't probe ourselves
-                {NodesAcc, Succ, Fail};
-            _ ->
-                NodeState = maps:get(Node, NodesAcc, new_node_state(Node)),
-                {ProbeResult, Duration} = probe_node(Node, ProbeType, Timeout),
-                {UpdatedNodeState, NewSucc, NewFail} =
-                    handle_probe_result(NodeState, ProbeResult, Duration, Threshold,
-                                        StoreId, FailedCb, RecoveredCb),
-                {NodesAcc#{Node => UpdatedNodeState}, Succ + NewSucc, Fail + NewFail}
-        end
-    end, {UpdatedNodes, 0, 0}, NodesToProbe),
+    {ProbedNodes, SuccessCount, FailureCount} = lists:foldl(
+        fun(Node, Acc) -> probe_node_fold(Node, Acc, State) end,
+        {UpdatedNodes, 0, 0}, NodesToProbe),
 
     EndTime = erlang:monotonic_time(microsecond),
     Duration = EndTime - StartTime,
@@ -321,6 +308,24 @@ perform_probe_cycle(#state{store_id = StoreId, nodes = Nodes, probe_type = Probe
     ),
 
     State#state{nodes = ProbedNodes}.
+
+%% @private Fold a single node into the probe accumulator
+probe_node_fold(Node, Acc, State) ->
+    probe_node_fold(Node =:= node(), Node, Acc, State).
+
+probe_node_fold(true, _Node, Acc, _State) ->
+    %% Don't probe ourselves
+    Acc;
+probe_node_fold(false, Node, {NodesAcc, Succ, Fail}, State) ->
+    #state{probe_type = ProbeType, probe_timeout = Timeout,
+           failure_threshold = Threshold, store_id = StoreId,
+           failed_callbacks = FailedCb, recovered_callbacks = RecoveredCb} = State,
+    NodeState = maps:get(Node, NodesAcc, new_node_state(Node)),
+    {ProbeResult, Duration} = probe_node(Node, ProbeType, Timeout),
+    {UpdatedNodeState, NewSucc, NewFail} =
+        handle_probe_result(NodeState, ProbeResult, Duration, Threshold,
+                            StoreId, FailedCb, RecoveredCb),
+    {NodesAcc#{Node => UpdatedNodeState}, Succ + NewSucc, Fail + NewFail}.
 
 %% @private Get nodes to probe
 -spec get_nodes_to_probe(atom()) -> [node()].
@@ -336,12 +341,14 @@ get_nodes_to_probe(StoreId) ->
 %% @private Ensure all nodes are tracked
 -spec ensure_nodes_tracked([node()], #{node() => #node_state{}}) -> #{node() => #node_state{}}.
 ensure_nodes_tracked(Nodes, TrackedNodes) ->
-    lists:foldl(fun(Node, Acc) ->
-        case maps:is_key(Node, Acc) of
-            true -> Acc;
-            false -> Acc#{Node => new_node_state(Node)}
-        end
-    end, TrackedNodes, Nodes).
+    lists:foldl(fun track_node/2, TrackedNodes, Nodes).
+
+%% @private
+track_node(Node, Acc) ->
+    track_node(maps:is_key(Node, Acc), Node, Acc).
+
+track_node(true, _Node, Acc) -> Acc;
+track_node(false, Node, Acc) -> Acc#{Node => new_node_state(Node)}.
 
 %% @private Create new node state
 -spec new_node_state(node()) -> #node_state{}.
@@ -477,34 +484,31 @@ emit_node_recovered(StoreId, Node) ->
 %% @private Notify failed callbacks
 -spec notify_failed_callbacks(#{reference() => fun()}, node()) -> ok.
 notify_failed_callbacks(Callbacks, Node) ->
-    maps:foreach(fun(_Ref, Callback) ->
-        spawn(fun() ->
-            try
-                Callback(Node)
-            catch
-                Class:Reason:Stack ->
-                    logger:warning("Failed callback error: ~p:~p~n~p",
-                                  [Class, Reason, Stack])
-            end
-        end)
-    end, Callbacks),
-    ok.
+    notify_callbacks(Callbacks, Node, "Failed callback error").
 
 %% @private Notify recovered callbacks
 -spec notify_recovered_callbacks(#{reference() => fun()}, node()) -> ok.
 notify_recovered_callbacks(Callbacks, Node) ->
-    maps:foreach(fun(_Ref, Callback) ->
-        spawn(fun() ->
-            try
-                Callback(Node)
-            catch
-                Class:Reason:Stack ->
-                    logger:warning("Recovered callback error: ~p:~p~n~p",
-                                  [Class, Reason, Stack])
-            end
-        end)
-    end, Callbacks),
+    notify_callbacks(Callbacks, Node, "Recovered callback error").
+
+%% @private Spawn each callback in isolation, logging failures under Label
+notify_callbacks(Callbacks, Node, Label) ->
+    maps:foreach(fun(_Ref, Callback) -> spawn_callback(Callback, Node, Label) end, Callbacks),
     ok.
+
+%% @private
+spawn_callback(Callback, Node, Label) ->
+    spawn(fun() -> run_callback(Callback, Node, Label) end),
+    ok.
+
+%% @private
+run_callback(Callback, Node, Label) ->
+    try
+        Callback(Node)
+    catch
+        Class:Reason:Stack ->
+            logger:warning("~s: ~p:~p~n~p", [Label, Class, Reason, Stack])
+    end.
 
 %% @private Schedule next probe
 -spec schedule_probe(pos_integer()) -> reference().

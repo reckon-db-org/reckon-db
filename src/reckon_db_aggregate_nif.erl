@@ -265,25 +265,29 @@ erlang_aggregate_events(Events, InitialState, Finalize) ->
 %% @private
 -spec erlang_sum_field([map()], atom() | binary()) -> number().
 erlang_sum_field(Events, Field) ->
-    lists:foldl(fun(Event, Acc) ->
-        Data = get_event_data(Event),
-        case maps:get(Field, Data, undefined) of
-            {sum, N} when is_number(N) -> Acc + N;
-            N when is_number(N) -> Acc + N;
-            _ -> Acc
-        end
-    end, 0, Events).
+    lists:foldl(fun(Event, Acc) -> sum_field_acc(Field, Event, Acc) end, 0, Events).
+
+%% @private
+sum_field_acc(Field, Event, Acc) ->
+    add_field_number(maps:get(Field, get_event_data(Event), undefined), Acc).
+
+%% @private
+add_field_number({sum, N}, Acc) when is_number(N) -> Acc + N;
+add_field_number(N, Acc) when is_number(N) -> Acc + N;
+add_field_number(_, Acc) -> Acc.
 
 %% @private
 -spec erlang_count_where([map()], atom() | binary(), term()) -> non_neg_integer().
 erlang_count_where(Events, Field, Expected) ->
-    lists:foldl(fun(Event, Acc) ->
-        Data = get_event_data(Event),
-        case maps:get(Field, Data, undefined) of
-            Expected -> Acc + 1;
-            _ -> Acc
-        end
-    end, 0, Events).
+    lists:foldl(fun(Event, Acc) -> count_where_acc(Field, Expected, Event, Acc) end, 0, Events).
+
+%% @private
+count_where_acc(Field, Expected, Event, Acc) ->
+    count_match(maps:get(Field, get_event_data(Event), undefined), Expected, Acc).
+
+%% @private
+count_match(V, V, Acc) -> Acc + 1;
+count_match(_, _, Acc) -> Acc.
 
 %% @private
 -spec erlang_merge_tagged_batch([{term(), term()}], map()) -> map().
@@ -300,23 +304,27 @@ erlang_finalize(TaggedMap) ->
 %% @private
 -spec erlang_aggregation_stats([map()]) -> map().
 erlang_aggregation_stats(Events) ->
-    {EventsWithData, Fields} = lists:foldl(fun(Event, {Count, FieldSet}) ->
-        Data = get_event_data(Event),
-        case map_size(Data) > 0 of
-            true ->
-                NewFields = maps:fold(fun(K, _, Acc) ->
-                    sets:add_element(K, Acc)
-                end, FieldSet, Data),
-                {Count + 1, NewFields};
-            false ->
-                {Count, FieldSet}
-        end
-    end, {0, sets:new()}, Events),
+    {EventsWithData, Fields} = lists:foldl(fun stats_acc/2, {0, sets:new()}, Events),
     #{
         total_events => length(Events),
         events_with_data => EventsWithData,
         unique_fields => sets:size(Fields)
     }.
+
+%% @private
+stats_acc(Event, {Count, FieldSet}) ->
+    Data = get_event_data(Event),
+    stats_add(map_size(Data) > 0, Data, Count, FieldSet).
+
+%% @private
+stats_add(true, Data, Count, FieldSet) ->
+    {Count + 1, collect_fields(Data, FieldSet)};
+stats_add(false, _Data, Count, FieldSet) ->
+    {Count, FieldSet}.
+
+%% @private
+collect_fields(Data, FieldSet) ->
+    maps:fold(fun(K, _, Acc) -> sets:add_element(K, Acc) end, FieldSet, Data).
 
 %%====================================================================
 %% Internal Functions
