@@ -16,12 +16,19 @@ reckon-db is an Erlang implementation of a distributed event store designed for:
 ## Features
 
 - Event stream operations (append, read, subscribe) with versioning and optimistic concurrency
-- **Dynamic Consistency Boundary (DCB)** — conditional append on a tag-filter context query (see [guides/dcb.md](guides/dcb.md))
+- **Structural aggregate-type namespace (Model C)** plus an opt-in **write-maintained secondary index** (by tag, event type, metadata key) for O(matches) cross-cutting reads (see [guides/storage_internals.md](guides/storage_internals.md), [guides/event_sourcing.md](guides/event_sourcing.md))
+- **Dynamic Consistency Boundary (DCB)**: conditional append on a tag-filter context query, with tag and `event_type` leaves and full boolean algebra (see [guides/dcb.md](guides/dcb.md), [guides/dcb_raft_design.md](guides/dcb_raft_design.md))
+- **Command Context Consistency (CCC)**: payload-indexed conditional append and reads via `{payload, Key}` / `{payload_hash, [Keys]}` index declarations and `{payload_match, ...}` / `{payload_hash_match, ...}` filters (see [guides/ccc.md](guides/ccc.md))
 - Persistent subscriptions (stream, event type, pattern, payload matching)
 - Snapshot management for aggregate state
+- Stream links and projections, system streams under the `$` namespace, and temporal (time-based) queries (see [guides/stream_links.md](guides/stream_links.md), [guides/system_streams.md](guides/system_streams.md), [guides/temporal_queries.md](guides/temporal_queries.md))
+- Event lifecycle management (scavenging, schema evolution / upcasting) (see [guides/scavenging.md](guides/scavenging.md), [guides/schema_evolution.md](guides/schema_evolution.md))
 - Emitter pools for high-throughput event delivery
-- UDP multicast and Kubernetes DNS discovery
+- Clustering with hardened UDP multicast discovery (HMAC-keyed gossip v2) and Kubernetes DNS discovery (see [guides/configuration.md](guides/configuration.md), [guides/cluster_consistency.md](guides/cluster_consistency.md))
+- Embedded Rust NIFs (crypto, hashing, compression, aggregation, filter matching) with pure-Erlang fallbacks when no toolchain is present
 - BEAM telemetry with optional OpenTelemetry exporters
+
+See the [guides index](guides/README.md) for the full documentation set.
 
 ## Installation
 
@@ -29,11 +36,27 @@ Add to your `rebar.config`:
 
 ```erlang
 {deps, [
-    {reckon_db, "2.1.0"}
+    {reckon_db, "~> 5.5"}
 ]}.
 ```
 
-Pure Erlang implementation - works everywhere, no native dependencies.
+The embedded Rust NIFs are optional: with a Cargo toolchain present at build
+time they are compiled for 3-15x acceleration; without one, reckon-db logs a
+warning and uses the pure-Erlang fallbacks, so it works everywhere.
+
+### Versions
+
+| Component | Version |
+|---|---|
+| `reckon_db` (this repo) | 5.5.1 |
+| `reckon_gater` (dep) | ~> 3.7 |
+| `khepri` (dep) | 0.17.2 |
+| `ra` (transitive, via khepri) | 2.16.x |
+| `telemetry` (dep) | 1.3.0 |
+| Erlang/OTP | 27+ |
+
+reckon-db depends on `reckon_gater`, `khepri`, and `ra` only. It does **not**
+depend on `evoq` or `reckon_evoq` (see [Reckon stack](#reckon-stack)).
 
 ## Quick Start
 
@@ -44,7 +67,7 @@ application:ensure_all_started(reckon_db).
 %% Append events to a stream
 Events = [
     #{
-        event_type => <<"user_created">>,
+        event_type => <<"user_registered_v1">>,
         data => #{name => <<"Alice">>, email => <<"alice@example.com">>},
         metadata => #{correlation_id => <<"req-123">>}
     }
@@ -328,10 +351,28 @@ ok = reckon_gater_api:record_snapshot(my_store, SourceUuid, StreamUuid, Version,
 
 See [reckon-gater](https://hex.pm/packages/reckon_gater) for complete API documentation.
 
-## Related Projects
+## Documentation
 
-- [reckon-gater](https://codeberg.org/reckon-db-org/reckon-gater) - Gateway for distributed access
-- [ex-esdb](https://github.com/beam-campus/ex-esdb) - Original Elixir implementation
+Full guide index with audience-grouped reading orders: **[guides/README.md](guides/README.md)**.
+
+## Reckon stack
+
+reckon-db is one library in the Reckon event-sourcing ecosystem. In dependency
+order (a library only knows about the ones above it):
+
+- **[reckon-proto](https://codeberg.org/reckon-db-org/reckon-proto)**: the wire-contract protobufs; source of truth for the gateway surface.
+- **[reckon-gater](https://codeberg.org/reckon-db-org/reckon-gater)**: shared types and protocols (event, snapshot, subscription, DCB/CCC tag_filter); no Reckon dependencies. The API reckon-db registers its store workers with.
+- **reckon-db (this repo)**: BEAM-native event store. Depends on `reckon_gater`, `khepri`, `ra`. Does not depend on `evoq` or `reckon_evoq`.
+- **[reckon-nifs](https://codeberg.org/reckon-db-org/reckon-nifs)**: standalone Rust NIF helpers; pure-Erlang fallbacks when no toolchain is present.
+- **[evoq](https://codeberg.org/reckon-db-org/evoq)**: standalone CQRS/event-sourcing framework (aggregates, projections, process managers); no Reckon dependencies.
+- **[reckon-evoq](https://codeberg.org/reckon-db-org/reckon-evoq)**: the adapter wiring evoq to a Reckon store. Depends on `evoq` and `reckon_gater`; **not** on `reckon_db` (it reaches the store through the gater API).
+- **[reckon-gateway](https://codeberg.org/reckon-db-org/reckon-gateway)**: gRPC + HTTP/JSON ingress. Consumes `reckon_gater`; can embed a local `reckon_db` store or federate remote clusters.
+- **[reckon-go](https://codeberg.org/reckon-db-org/reckon-go)**: the Go client; talks to reckon-gateway.
+- **reckon-portal**: docs and landing site for the ecosystem ([reckon-internal/reckon-portal](https://codeberg.org/reckon-internal/reckon-portal)).
+
+### Origin
+
+- [ex-esdb](https://github.com/beam-campus/ex-esdb): the original Elixir implementation reckon-db descends from.
 
 ## Contributing
 

@@ -441,7 +441,7 @@ Mount a volume for persistence:
 
 ```yaml
 volumes:
-  - esdb_data:/var/lib/reckon_db
+  - reckon_db_data:/var/lib/reckon_db
 ```
 
 ```erlang
