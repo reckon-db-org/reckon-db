@@ -204,8 +204,11 @@ event_types_with_events() ->
         #event{event_type = <<"user_registered_v1">>},
         #event{event_type = <<"user_archived_v1">>}
     ],
+    %% read_all/4 is (StoreId, StreamId, BatchSize, Direction) — BatchSize
+    %% before Direction. The mock previously encoded the swapped order, which
+    %% is exactly why the unit test passed while the real worker crashed.
     meck:expect(reckon_db_streams, read_all,
-        fun(?STORE, <<"s1">>, forward, _) -> {ok, Events} end),
+        fun(?STORE, <<"s1">>, _, forward) -> {ok, Events} end),
     {ok, Types} = reckon_db_store_inspector:event_type_summary(?STORE),
     ?assertEqual(2, length(Types)),
     %% Sorted by count descending
