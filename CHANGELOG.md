@@ -5,6 +5,25 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.3] - 2026-07-01
+
+### Fixed — emitter teardown crash and event-type-summary worker crash
+
+- `reckon_db_emitter_group:leave/3` matched only `pg:leave/3 -> ok`, but
+  `pg:leave/3` returns `not_joined` for a pid that was never a member (an
+  emitter terminating before it joined, or a double-leave on teardown). That
+  benign no-op became a `{badmatch, not_joined}` in the emitter's `terminate/2`
+  and a `shutdown_error` in the emitter-pool supervisor. Now tolerates both.
+- `reckon_db_store_inspector:count_types_in_stream/3` called
+  `reckon_db_streams:read_all/4` as `(StoreId, StreamId, forward, 10000)`, but
+  the arity is `(StoreId, StreamId, BatchSize, Direction)`. The swap fed
+  `calculate_versions/3` `Count = forward` / `Direction = 10000`, a
+  `function_clause` that crashed the gateway worker on every
+  `GetEventTypeSummary` and — via the gateway retry loop — timed out the gRPC
+  call. Arguments corrected to `(10000, forward)`.
+
+Both found via the reckon-dotnet E2E suite.
+
 ## [5.5.2] - 2026-07-01
 
 ### Fixed — snapshot record/read dropped metadata and did not round-trip data
