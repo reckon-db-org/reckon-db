@@ -491,7 +491,13 @@ handle_call(_Request, _From, State) ->
 %% Record snapshot
 handle_cast({record_snapshot, _StoreId, _SourceUuid, StreamUuid, Version, SnapshotRecord}, State) ->
     #state{store_id = StoreId} = State,
-    reckon_db_snapshots:save(StoreId, StreamUuid, Version, SnapshotRecord),
+    %% The gateway wraps the payload as #{data, metadata, version}. Unwrap it so
+    %% data and metadata land in their own snapshot fields (save/5) instead of
+    %% the whole envelope being stored as `data` with metadata dropped. The
+    %% fallback keeps older callers that pass a bare data term working.
+    Data = maps:get(data, SnapshotRecord, SnapshotRecord),
+    Metadata = maps:get(metadata, SnapshotRecord, #{}),
+    reckon_db_snapshots:save(StoreId, StreamUuid, Version, Data, Metadata),
     {noreply, State};
 
 %% Delete snapshot
