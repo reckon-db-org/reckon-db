@@ -5,6 +5,21 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.2] - 2026-07-01
+
+### Fixed — snapshot record/read dropped metadata and did not round-trip data
+
+`reckon_db_gateway_worker` forwarded the gateway's `#{data, metadata, version}`
+envelope straight into `reckon_db_snapshots:save/4` as the `Data` argument, so
+the whole envelope was persisted as `data` and the caller's `metadata` was
+dropped (`save/4` defaults metadata to `#{}`). A snapshot recorded with data
+`{"balance":100}` read back as `{"data":...,"metadata":...,"version":3}`.
+
+The worker now unwraps the envelope and uses `save/5`, so data and metadata land
+in their own snapshot fields; a bare term still falls through as `data` for
+older callers. Found via the reckon-dotnet snapshot E2E round-trip
+(`reckon-db` issue #2).
+
 ## [5.5.1] - 2026-06-24
 
 ### Fixed — CCC payload indexes silently empty for atom-keyed event data
