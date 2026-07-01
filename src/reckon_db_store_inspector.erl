@@ -194,7 +194,11 @@ format_pid(Other) -> list_to_binary(io_lib:format("~p", [Other])).
 %%====================================================================
 
 count_types_in_stream(StoreId, StreamId, Acc) ->
-    case reckon_db_streams:read_all(StoreId, StreamId, forward, 10000) of
+    %% read_all/4 is (StoreId, StreamId, BatchSize, Direction) — the batch size
+    %% comes before the direction. Passing (forward, 10000) swapped them, so
+    %% calculate_versions/3 got Count=forward / Direction=10000 and crashed the
+    %% worker with a function_clause on every event-type-summary call.
+    case reckon_db_streams:read_all(StoreId, StreamId, 10000, forward) of
         {ok, Events} -> lists:foldl(fun count_event_type/2, Acc, Events);
         _ -> Acc
     end.

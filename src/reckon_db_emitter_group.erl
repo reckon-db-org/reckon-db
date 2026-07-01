@@ -50,7 +50,11 @@ join(StoreId, SubscriptionId, PidOrPids) when is_atom(StoreId) ->
 -spec leave(store_id(), subscription_id(), pid() | [pid()]) -> ok.
 leave(StoreId, SubscriptionId, PidOrPids) when is_atom(StoreId) ->
     Group = group_key(StoreId, SubscriptionId),
-    ok = pg:leave(?RECKON_DB_PG_SCOPE, Group, PidOrPids),
+    %% pg:leave/3 returns `not_joined` when the pid was never a member (e.g. an
+    %% emitter terminating before it joined, or a double-leave on teardown).
+    %% That is a benign no-op, not a crash: matching only `ok` turned it into a
+    %% {badmatch, not_joined} in the emitter's terminate/2.
+    _ = pg:leave(?RECKON_DB_PG_SCOPE, Group, PidOrPids),
     ok.
 
 %% @doc Get all member processes in the emitter group
