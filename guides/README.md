@@ -35,6 +35,7 @@ follow one of the suggested orders below.
 | [Scavenging](scavenging.md) | Event lifecycle, deleting old events, and the snapshot/replay interaction. |
 | [Schema Evolution](schema_evolution.md) | Versioning event shapes and upcasting on read. |
 | [Store Inspector](store_inspector.md) | Inspecting a live store's contents and structure. |
+| [Telemetry](telemetry.md) | The full telemetry event catalogue and how to attach logger/metrics/tracing handlers. |
 
 ## Internals
 

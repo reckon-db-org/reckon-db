@@ -5,6 +5,21 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.4] - 2026-07-02
+
+### Added — Telemetry guide
+
+- New `guides/telemetry.md`: the full ReckonDB telemetry event catalogue
+  (stream, subscription, snapshot, store, cluster, emitter, temporal,
+  scavenge, causation, schema, memory-pressure, consistency, health, and
+  link events) organised by category with each event's Measurements/Metadata
+  contract, plus how to attach the built-in logger handler, custom handlers,
+  and metrics exporters (Prometheus / OpenTelemetry). Documents the
+  `[reckon_db, cluster, leader, elected]` event as the recommended
+  follow-the-leader hook, and notes that the facade's `all_events/0` covers
+  the core subset (attach directly to the extended events by name). Wired
+  into the hexdocs sidebar. Documentation only — no code change.
+
 ## [5.5.3] - 2026-07-01
 
 ### Fixed — emitter teardown crash and event-type-summary worker crash

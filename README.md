@@ -48,7 +48,7 @@ warning and uses the pure-Erlang fallbacks, so it works everywhere.
 
 | Component | Version |
 |---|---|
-| `reckon_db` (this repo) | 5.5.3 |
+| `reckon_db` (this repo) | 5.5.4 |
 | `reckon_gater` (dep) | ~> 3.7 |
 | `khepri` (dep) | 0.17.2 |
 | `ra` (transitive, via khepri) | 2.16.x |
