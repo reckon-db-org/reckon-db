@@ -31,6 +31,7 @@
     exists/2,
     has_events/1,
     list_streams/1,
+    global_event_count/1,
     delete/2
 ]).
 
@@ -594,6 +595,23 @@ list_streams(StoreId) ->
             Error
     end.
 
+%% @doc The store's monotonic total event count — an O(1) read of the
+%% counter that every append batch maintains (see bump_global_event_count/1).
+%% Absent counter (a store that predates the counter, or has never been
+%% appended to) reads as 0. This is the cheap source for ingest-rate
+%% dashboards, replacing a full-store scan.
+-spec global_event_count(atom()) -> {ok, non_neg_integer()}.
+global_event_count(StoreId) ->
+    %% Anything but a stored integer (absent counter on a fresh or
+    %% pre-counter store) reads as 0 — mirrors the DCB counter idiom. A
+    %% genuinely unreachable store surfaces as an rpc failure at the
+    %% dispatch layer before this runs.
+    Count = case khepri:get(StoreId, ?GLOBAL_EVENT_COUNT_PATH) of
+                {ok, V} when is_integer(V) -> V;
+                _                          -> 0
+            end,
+    {ok, Count}.
+
 %% @private True for the DCB pseudo-stream's 2-level nodes
 %% ([streams, _dcb, SeqKey]) — excluded from user-facing stream listings.
 -spec is_dcb_path([atom() | binary()]) -> boolean().
@@ -738,10 +756,25 @@ write_batch(StoreId, Writes, IndexEntries) ->
 write_batch_tx(Writes, IndexEntries) ->
     lists:foreach(fun put_tx_entry/1, Writes),
     lists:foreach(fun put_tx_entry/1, IndexEntries),
+    bump_global_event_count(length(Writes)),
     ok.
 
 put_tx_entry({P, Record}) ->
     ok = khepri_tx:put(P, Record).
+
+%% @private Increment the store's monotonic global event counter by the
+%% number of events in this batch, inside the append transaction. Same Ra
+%% command as the writes, so it is exact and adds no extra round-trip
+%% (mirrors the DCB sequence counter). Read back O(1) via
+%% global_event_count/1.
+bump_global_event_count(0) ->
+    ok;
+bump_global_event_count(N) ->
+    Cur = case khepri_tx:get(?GLOBAL_EVENT_COUNT_PATH) of
+              {ok, V} when is_integer(V) -> V;
+              _                          -> 0
+          end,
+    ok = khepri_tx:put(?GLOBAL_EVENT_COUNT_PATH, Cur + N).
 
 %% @private Tamper-resistance context for a single append batch.
 %%

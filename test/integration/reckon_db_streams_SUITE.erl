@@ -36,6 +36,7 @@
     append_wrong_expected_version/1,
     append_no_stream_to_existing/1,
     append_multiple_events/1,
+    global_event_count_tracks_appends/1,
 
     %% Read tests
     read_forward/1,
@@ -82,7 +83,8 @@ groups() ->
             append_with_any_version,
             append_wrong_expected_version,
             append_no_stream_to_existing,
-            append_multiple_events
+            append_multiple_events,
+            global_event_count_tracks_appends
         ]},
         {read_tests, [sequence], [
             read_forward,
@@ -257,6 +259,24 @@ append_multiple_events(Config) ->
 
     %% Version should be 4 (0-indexed, 5 events = versions 0-4)
     ?assertEqual(4, Version),
+    ok.
+
+%% @doc The monotonic global event counter increases by the number of
+%% events in each append batch, across streams. Uses deltas so it is
+%% robust to the shared per-group store.
+global_event_count_tracks_appends(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    {ok, Before} = reckon_db_streams:global_event_count(StoreId),
+
+    {ok, _} = reckon_db_streams:append(
+        StoreId, generate_stream_id(), ?NO_STREAM, generate_events(<<"cnt">>, 3)),
+    {ok, After1} = reckon_db_streams:global_event_count(StoreId),
+    ?assertEqual(Before + 3, After1),
+
+    {ok, _} = reckon_db_streams:append(
+        StoreId, generate_stream_id(), ?NO_STREAM, generate_events(<<"cnt">>, 2)),
+    {ok, After2} = reckon_db_streams:global_event_count(StoreId),
+    ?assertEqual(Before + 5, After2),
     ok.
 
 %%====================================================================

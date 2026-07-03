@@ -5,6 +5,22 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.6.0] - 2026-07-04
+
+### Added
+
+- `reckon_db_streams:global_event_count/1` — an O(1) read of a store's total
+  event count. A single monotonic counter node
+  (`[metadata, stats, global_event_count]`) is incremented by every append batch
+  inside the append's existing Khepri transaction (mirrors the DCB sequence
+  counter), so the count is exact and adds no extra Ra round-trip. This replaces
+  a full-store scan for ingest-rate/activity dashboards.
+  - Exposed to gateways via the `{global_event_count, StoreId}` gateway-worker
+    call.
+  - Note: the counter starts at 0 on stores that predate it; it counts appends
+    from that point on (a rate is correct immediately; a lifetime total is not
+    backfilled).
+
 ## [5.5.5] - 2026-07-03
 
 ### Fixed

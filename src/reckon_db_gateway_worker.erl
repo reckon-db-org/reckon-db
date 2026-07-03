@@ -94,6 +94,10 @@ handle_call({get_streams, _StoreId}, _From, #state{store_id = StoreId} = State) 
     Result = reckon_db_streams:list_streams(StoreId),
     {reply, Result, State};
 
+handle_call({global_event_count, _StoreId}, _From, #state{store_id = StoreId} = State) ->
+    Result = reckon_db_streams:global_event_count(StoreId),
+    {reply, Result, State};
+
 %% Delete stream
 handle_call({delete_stream, _StoreId, StreamId}, _From,
             #state{store_id = StoreId} = State) ->

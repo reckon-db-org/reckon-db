@@ -25,6 +25,11 @@
 -define(SUBSCRIPTIONS_PATH, [subscriptions]).
 -define(METADATA_PATH, [metadata]).
 
+%% Monotonic global event counter — a single node bumped by every append
+%% batch inside its Khepri transaction (mirrors ?DCB_SEQ_COUNTER_PATH), so
+%% the total event count is an O(1) read instead of a full store scan.
+-define(GLOBAL_EVENT_COUNT_PATH, [metadata, stats, global_event_count]).
+
 %% DCB (Dynamic Consistency Boundary) paths — Phase 3, 2.4.0+.
 %% DCB events live under one pseudo-stream `_dcb` AT THE SAME PATH
 %% PREFIX as regular streams, so all existing read paths

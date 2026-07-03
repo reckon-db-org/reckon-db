@@ -6,7 +6,7 @@
                   "hashing, compression, aggregation, filter matching, and graph "
                   "algorithms — with pure-Erlang fallbacks when the toolchain "
                   "isn't available."},
-    {vsn, "5.5.5"},
+    {vsn, "5.6.0"},
     {registered, []},
     {mod, {reckon_db_app, []}},
     {applications, [
