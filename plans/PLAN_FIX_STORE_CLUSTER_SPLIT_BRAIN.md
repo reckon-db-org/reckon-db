@@ -1,8 +1,27 @@
 # PLAN: Fix store-cluster split-brain at simultaneous boot
 
-Status: Open (filed 2026-07-03)
+Status: Implemented (reckon-db 5.5.5, 2026-07-03)
 Severity: High (recurring on the parksim beam fleet)
 Area: `reckon_db_store_coordinator`
+
+## Implemented (5.5.5)
+
+The actual root cause was narrower and worse than first filed: the election in
+`handle_no_existing_clusters` ran over ALL connected nodes, so on a shared dist
+mesh of single-store nodes the globally-lowest node NAME (which may not run the
+store) was elected coordinator and every join for the store failed forever.
+Fix landed:
+
+- Election now runs only over nodes that actually run the store
+  (`store_runner_nodes/2`), via a pure `elect_coordinator/2` (unit-tested).
+- A self-elected coordinator keeps reconciling in cluster mode until it is
+  genuinely multi-member (`join_status = coordinating`, `retry_join` stops on
+  `is_multi_member/1`) rather than stopping at `coordinator` — the
+  persistent-reconcile behaviour ex-esdb had. Combined with the existing
+  nodeup-driven rejoin, a boot-race self-election now self-heals.
+
+The external `converge-parksim.sh` mitigation remains as a belt-and-suspenders
+live-repair tool but is no longer required once the fleet runs 5.5.5.
 
 ## Symptom
 

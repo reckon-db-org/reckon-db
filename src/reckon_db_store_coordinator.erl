@@ -27,6 +27,10 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
+-ifdef(TEST).
+-export([elect_coordinator/2]).
+-endif.
+
 -define(JOIN_TIMEOUT, 30000).
 -define(RPC_TIMEOUT, 5000).
 %% khepri_cluster:join/2 defaults to khepri's `default_timeout' which
@@ -46,7 +50,7 @@
     store_id :: atom(),
     config :: store_config(),
     current_leader :: node() | undefined,
-    join_status :: idle | joining | joined
+    join_status :: idle | joining | joined | coordinating
 }).
 
 %%====================================================================
@@ -114,15 +118,7 @@ init(#store_config{store_id = StoreId} = Config) ->
 
 handle_call({join_cluster, StoreId}, _From, State) ->
     Result = do_join_cluster(StoreId),
-    NewState = case Result of
-        ok          -> State#state{join_status = joined};
-        coordinator -> State#state{join_status = joined};
-        waiting     -> schedule_retry(State);
-        no_nodes    -> schedule_retry(State);
-        failed      -> schedule_retry(State);
-        _           -> State
-    end,
-    {reply, Result, NewState};
+    {reply, Result, post_join_result(Result, State)};
 
 handle_call({join_cluster_node, StoreId, TargetNode}, _From, State) ->
     Result = join_existing_cluster(StoreId, TargetNode),
@@ -142,24 +138,51 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({retry_join, StoreId}, #state{join_status = joined} = State) ->
-    %% Already joined while we were waiting — drop the retry.
-    logger:debug("retry_join: already joined (store: ~p)", [StoreId]),
-    {noreply, State};
 handle_info({retry_join, StoreId}, State) ->
-    logger:info("retry_join: re-attempting cluster join (store: ~p)", [StoreId]),
-    Result = do_join_cluster(StoreId),
-    NewState = case Result of
-        ok          -> State#state{join_status = joined};
-        coordinator -> State#state{join_status = joined};
-        waiting     -> schedule_retry(State);
-        no_nodes    -> schedule_retry(State);
-        failed      -> schedule_retry(State);
-        _           -> State
-    end,
-    {noreply, NewState};
+    %% Stop only when we are ACTUALLY part of a multi-member cluster — not
+    %% merely because we once returned `coordinator'. A self-elected
+    %% coordinator (a cluster of one) keeps reconciling so a peer that
+    %% self-elected on a partial boot view, or a lower store-runner that
+    %% connects late, still converges to a single cluster.
+    case is_multi_member(StoreId) of
+        true ->
+            logger:debug("retry_join: converged to multi-member cluster (store: ~p)", [StoreId]),
+            {noreply, State#state{join_status = joined}};
+        false ->
+            logger:info("retry_join: re-attempting cluster join/reconcile (store: ~p)", [StoreId]),
+            Result = do_join_cluster(StoreId),
+            {noreply, post_join_result(Result, State)}
+    end;
 handle_info(_Info, State) ->
     {noreply, State}.
+
+%% @private Fold a join outcome into the next state. `ok' means we joined
+%% an existing cluster (done). `coordinator' means we are a cluster of one:
+%% in cluster mode keep reconciling until multi-member (see retry_join);
+%% in single mode we are done. Everything else retries.
+-spec post_join_result(ok | coordinator | no_nodes | waiting | failed | term(),
+                       #state{}) -> #state{}.
+post_join_result(ok, State)          -> State#state{join_status = joined};
+post_join_result(coordinator, State) -> reconcile_or_done(State);
+post_join_result(waiting, State)     -> schedule_retry(State);
+post_join_result(no_nodes, State)    -> schedule_retry(State);
+post_join_result(failed, State)      -> schedule_retry(State);
+post_join_result(_, State)           -> State.
+
+%% @private A cluster-mode coordinator keeps reconciling (it is only a
+%% cluster of one until joiners arrive); a single-mode store is done.
+reconcile_or_done(#state{config = #store_config{mode = cluster}} = State) ->
+    schedule_retry(State#state{join_status = coordinating});
+reconcile_or_done(State) ->
+    State#state{join_status = joined}.
+
+%% @private True when this node's store is a joined, multi-member cluster.
+-spec is_multi_member(atom()) -> boolean().
+is_multi_member(StoreId) ->
+    case khepri_cluster:members(StoreId) of
+        {ok, Members} when length(Members) > 1 -> true;
+        _                                      -> false
+    end.
 
 %% @private Schedule a single retry of the cluster-join sequence.
 %% Uses rand jitter so simultaneous boots don't keep colliding on the
@@ -220,21 +243,53 @@ handle_cluster_nodes(StoreId, [TargetNode | _], _ConnectedNodes) ->
 %% acted on the election to actually grow the cluster.
 -spec handle_no_existing_clusters(atom(), [node()]) -> ok | coordinator | waiting | failed.
 handle_no_existing_clusters(StoreId, ConnectedNodes) ->
-    AllNodes = lists:sort([node() | ConnectedNodes]),
-    case AllNodes of
-        [Coordinator | _] when Coordinator =:= node() ->
-            logger:info("Elected as cluster coordinator (store: ~p)", [StoreId]),
+    %% Elect among the nodes that actually RUN this store, NOT every
+    %% connected node. On a dist mesh that runs many single-store nodes
+    %% (e.g. parksim: 12 nodes, one tenant store each), electing over all
+    %% connected nodes picked the globally-lowest node NAME — which may not
+    %% run this store — so every join for this store failed forever and the
+    %% replicas stayed split. Restricting the candidate set to store-runners
+    %% makes the election converge on the right coordinator.
+    StoreRunners = store_runner_nodes(StoreId, ConnectedNodes),
+    case elect_coordinator(node(), StoreRunners) of
+        coordinator ->
+            logger:info("Elected coordinator among store-runners ~p (store: ~p)",
+                        [StoreRunners, StoreId]),
             telemetry:execute(
                 ?CLUSTER_LEADER_ELECTED,
                 #{system_time => erlang:system_time(millisecond)},
                 #{store_id => StoreId, leader => node(), member_count => 1}
             ),
             coordinator;
-        [Coordinator | _] ->
+        {join, Coordinator} ->
             logger:info(
                 "Joining cold-start cluster via coordinator ~p (store: ~p)",
                 [Coordinator, StoreId]),
             join_existing_cluster(StoreId, Coordinator)
+    end.
+
+%% @private Deterministic coordinator election. The lowest node name among
+%% self + the store-running peers is the coordinator; everyone else joins
+%% it. Pure so it can be unit-tested without a cluster.
+-spec elect_coordinator(node(), [node()]) -> coordinator | {join, node()}.
+elect_coordinator(Self, StoreRunners) ->
+    case lists:sort([Self | lists:delete(Self, StoreRunners)]) of
+        [Self | _]   -> coordinator;
+        [Lowest | _] -> {join, Lowest}
+    end.
+
+%% @private The connected nodes that run this store (have a local Khepri
+%% cluster for it, even a standalone 1-member one), as distinct from
+%% sibling nodes in a shared dist mesh that run other stores.
+-spec store_runner_nodes(atom(), [node()]) -> [node()].
+store_runner_nodes(StoreId, Nodes) ->
+    [N || N <- Nodes, runs_store(N, StoreId)].
+
+-spec runs_store(node(), atom()) -> boolean().
+runs_store(Node, StoreId) ->
+    case rpc:call(Node, khepri_cluster, members, [StoreId], ?RPC_TIMEOUT) of
+        {ok, _Members} -> true;
+        _              -> false
     end.
 
 %% @private Join an existing cluster

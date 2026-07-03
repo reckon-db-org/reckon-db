@@ -5,6 +5,24 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.5] - 2026-07-03
+
+### Fixed
+
+- Store-cluster split-brain on simultaneous cold boot. `reckon_db_store_coordinator`
+  elected its coordinator over ALL connected nodes, so on a dist mesh that runs
+  many single-store nodes (e.g. 12 nodes, one tenant store each) the
+  globally-lowest node NAME — which may not run the store — was elected and every
+  join for the store failed forever, leaving the replicas as separate 1-member
+  clusters. The election now runs only over nodes that actually run the store
+  (`store_runner_nodes/2` + a pure, unit-tested `elect_coordinator/2`). In
+  addition, a self-elected coordinator now keeps reconciling (in cluster mode)
+  until it is genuinely multi-member instead of stopping the moment it returns
+  `coordinator`, so a peer that self-elected on a partial boot view, or a lower
+  store-runner that connects late, still converges to one cluster. Restores the
+  persistent-reconcile behaviour of the ex-esdb predecessor. See
+  `plans/PLAN_FIX_STORE_CLUSTER_SPLIT_BRAIN.md`.
+
 ## [5.5.4] - 2026-07-02
 
 ### Added — Telemetry guide
