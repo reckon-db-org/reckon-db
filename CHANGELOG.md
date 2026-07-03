@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     from that point on (a rate is correct immediately; a lifetime total is not
     backfilled).
 
+### Changed
+
+- Requires **reckon-gater `~> 3.9`** (`3.9.0` routes `global_event_count` so the
+  new counter is reachable through the gateway on the same node).
+
 ## [5.5.5] - 2026-07-03
 
 ### Fixed
