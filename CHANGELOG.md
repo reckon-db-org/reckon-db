@@ -5,6 +5,18 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.1] - 2026-07-04
+
+### Fixed
+
+- **Healer now heals the healthy-looking singleton** — the exact split it
+  exists to fix. A replica that split into its own 1-node cluster is LOCALLY
+  healthy (quorum 1/1, leader = self), so the 5.8.0 `classify/2` short-circuited
+  on `self_status = healthy` and never acted. Orphan detection is now driven by
+  the majority-exclusion signal (a leader-having >= 2 cluster exists that this
+  replica is neither the leader of nor a member of) independent of local
+  self-health. New regression test `classify_healthy_singleton_is_orphaned`.
+
 ## [5.8.0] - 2026-07-04
 
 ### Added

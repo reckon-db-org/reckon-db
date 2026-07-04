@@ -150,11 +150,20 @@ run_audit(#state{store_id = StoreId} = State) ->
     NewState.
 
 %% @private Turn the self health status + majority view into a verdict.
-%% `healthy' needs no action. Anything else, when a majority we are not part
-%% of exists, is an orphan we can heal; otherwise it is an unhealed drift.
+%%
+%% Orphan detection is driven by the MAJORITY-EXCLUSION signal, not local
+%% self-health: a replica that split into its own singleton is LOCALLY a
+%% healthy 1-node cluster (quorum 1/1, leader = self), so keying on
+%% `self_status' would never heal the exact split we are here to fix. If a
+%% real majority (a leader-having >= 2 cluster) exists that we are neither
+%% the leader of nor a member of, we are an orphan — regardless of how
+%% healthy we look to ourselves. Only when no such majority exists do we
+%% fall back to self-health (healthy -> nothing; otherwise -> unhealed drift).
 -spec classify(atom(), map()) -> healthy | orphaned | drift.
+classify(_SelfStatus, #{majority_present := true,
+                        self_is_leader := false,
+                        self_in_majority := false}) -> orphaned;
 classify(healthy, _Facts) -> healthy;
-classify(_Unhealthy, #{majority_present := true, self_in_majority := false}) -> orphaned;
 classify(_Unhealthy, _Facts) -> drift.
 
 -spec act_on(healthy | orphaned | drift, map(), #state{}) -> #state{}.

@@ -44,26 +44,41 @@ unsafe_when_self_in_majority_test() ->
 %% classify/2 — verdict from self-health + majority view
 %%====================================================================
 
+%% No majority signal + locally healthy -> healthy (nothing to do).
 classify_healthy_is_healthy_test() ->
-    ?assertEqual(healthy, ?M:classify(healthy, #{})).
+    ?assertEqual(healthy, ?M:classify(healthy, #{majority_present => false,
+                                                 self_is_leader => false,
+                                                 self_in_majority => false})).
 
-%% Unhealthy locally AND a majority exists without us -> orphaned (actionable).
+%% A majority exists without us -> orphaned, whatever our local self-status.
 classify_orphaned_test() ->
-    Facts = #{majority_present => true, self_in_majority => false},
+    Facts = #{majority_present => true, self_is_leader => false,
+              self_in_majority => false},
     ?assertEqual(orphaned, ?M:classify(no_quorum, Facts)),
     ?assertEqual(orphaned, ?M:classify(degraded, Facts)),
     ?assertEqual(orphaned, ?M:classify(unreachable, Facts)).
+
+%% THE split we exist to fix: a replica that split into its own singleton is
+%% LOCALLY healthy (quorum 1/1, leader = self). It must still be orphaned,
+%% because a leader-having majority exists that it is not part of.
+classify_healthy_singleton_is_orphaned_test() ->
+    ?assertEqual(orphaned, ?M:classify(healthy,
+                                       #{majority_present => true,
+                                         self_is_leader => false,
+                                         self_in_majority => false})).
 
 %% Unhealthy but no safe majority (genuine quorum loss) -> drift (alarm only).
 classify_drift_when_no_majority_test() ->
     ?assertEqual(drift, ?M:classify(no_quorum,
                                     #{majority_present => false,
+                                      self_is_leader => false,
                                       self_in_majority => false})).
 
-%% Unhealthy but we ARE in the majority set -> drift, not a reset candidate.
+%% We ARE in the majority set -> not an orphan; local unhealth is drift.
 classify_drift_when_self_in_majority_test() ->
     ?assertEqual(drift, ?M:classify(degraded,
                                     #{majority_present => true,
+                                      self_is_leader => false,
                                       self_in_majority => true})).
 
 %%====================================================================
