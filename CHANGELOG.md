@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{integrity_status, StoreId}` gateway-worker call instead of guessing from
   its own local state.
 
+### Changed
+
+- Requires **reckon-gater `~> 3.10`** (`3.10.0` routes `integrity_status` so
+  the new worker call is reachable through the gateway on the same node).
+
 ## [5.6.1] - 2026-07-04
 
 ### Fixed
