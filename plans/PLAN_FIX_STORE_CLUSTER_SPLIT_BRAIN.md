@@ -1,8 +1,35 @@
 # PLAN: Fix store-cluster split-brain at simultaneous boot
 
-Status: Implemented (reckon-db 5.5.5, 2026-07-03)
+Status: Implemented (reckon-db 5.5.5, 2026-07-03) + join-reset recovery (5.6.1, 2026-07-04)
 Severity: High (recurring on the parksim beam fleet)
-Area: `reckon_db_store_coordinator`
+Area: `reckon_db_store_coordinator`, `reckon_db_store`
+
+## Implemented (5.6.1) — join-reset recovery
+
+A second, distinct failure mode was observed live on the parksim fleet after
+5.5.5: a replica that correctly elected to JOIN (not self-coordinate) got stuck
+forever with `"Local Ra server for store ... is not registered"`, retry-looping
+and never converging — even after a clean wipe + redeploy.
+
+Root cause: `khepri_cluster:join/2` RESETS the local store as part of joining
+(it leaves any existing cluster and drops local data, then re-clusters). The
+coordinator wraps the join in a timeout guard that `exit(Joiner, kill)`s on
+timeout. A join killed mid-reset leaves the local Ra server torn down
+(`whereis(StoreId) =:= undefined`), and the old `join_existing_cluster/2`
+merely logged "not registered" and returned `failed` → the retry loop only ever
+tried to JOIN again (which needs a local server) and never RE-STARTED the local
+store. Permanent stuck 2-of-3.
+
+Fix:
+- `reckon_db_store:ensure_khepri_started/1` — idempotently (re)starts the
+  store's local Khepri/Ra server via the surviving store worker (which is
+  registered under `store_worker_name/1`, separate from the Ra server under
+  `StoreId`, so it survives the reset).
+- `reckon_db_store_coordinator:join_existing_cluster/2` now self-heals: when the
+  local Ra server is missing it restarts the local store before joining, so the
+  retry loop recovers instead of looping forever.
+- Regression: `reckon_db_store_heal_SUITE` (tear down the Ra server, assert the
+  worker survives and ensure_khepri_started re-registers a working store).
 
 ## Implemented (5.5.5)
 

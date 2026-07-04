@@ -5,6 +5,23 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.6.1] - 2026-07-04
+
+### Fixed
+
+- Store-cluster join-reset race: a replica that elected to JOIN could get stuck
+  forever on `"Local Ra server ... is not registered"`, never converging (seen
+  live as a permanent 2-of-3 store, surviving even a clean wipe + redeploy).
+  `khepri_cluster:join` resets the local store as part of joining; a join
+  interrupted mid-reset (the coordinator's timeout guard kills it) left the
+  local Ra server torn down, and the retry loop only ever re-tried the join
+  (which needs a local server) without restarting the store.
+  - `reckon_db_store:ensure_khepri_started/1` idempotently (re)starts the local
+    Khepri/Ra server via the surviving store worker.
+  - `reckon_db_store_coordinator` now self-heals the local store before
+    retrying a join, so a torn-down replica recovers instead of looping.
+  - Regression suite `reckon_db_store_heal_SUITE`.
+
 ## [5.6.0] - 2026-07-04
 
 ### Added

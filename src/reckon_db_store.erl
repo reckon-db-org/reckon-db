@@ -15,7 +15,7 @@
 
 %% API
 -export([start_link/1]).
--export([get_store/1, is_ready/1, get_leader/1]).
+-export([get_store/1, is_ready/1, get_leader/1, ensure_khepri_started/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -25,6 +25,10 @@
     config :: store_config(),
     started_at :: integer()
 }).
+
+%% Upper bound for the synchronous ensure_khepri_started/1 call — must
+%% exceed the internal khepri:start + await_store_ready work.
+-define(ENSURE_STARTED_TIMEOUT, 30000).
 
 %%====================================================================
 %% API
@@ -51,6 +55,21 @@ is_ready(StoreId) ->
         khepri:exists(StoreId, [])
     catch
         _:_ -> false
+    end.
+
+%% @doc Idempotently (re)start this store's local Khepri/Ra server.
+%%
+%% The cluster coordinator calls this to self-heal a local store that was
+%% torn down by a reset-during-join: `khepri_cluster:join' resets the local
+%% store as part of joining, so a join interrupted mid-reset (e.g. the
+%% coordinator's timeout guard killed it) can leave the local Ra server
+%% gone — with the coordinator then looping forever on "not registered".
+%% A no-op when the server is already registered.
+-spec ensure_khepri_started(atom()) -> ok | {error, term()}.
+ensure_khepri_started(StoreId) ->
+    WorkerName = reckon_db_naming:store_worker_name(StoreId),
+    try gen_server:call(WorkerName, ensure_khepri_started, ?ENSURE_STARTED_TIMEOUT)
+    catch exit:Reason -> {error, {store_worker_unavailable, Reason}}
     end.
 
 %% @doc Get the current leader node for the store
@@ -144,6 +163,12 @@ do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime) ->
 handle_call(get_state, _From, State) ->
     {reply, State, State};
 
+handle_call(ensure_khepri_started, _From,
+            #state{config = #store_config{store_id = StoreId,
+                                          data_dir  = DataDir,
+                                          mode      = Mode}} = State) ->
+    {reply, restart_local_khepri(StoreId, DataDir, Mode), State};
+
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_request}, State}.
 
@@ -187,6 +212,28 @@ terminate(Reason, #state{store_id = StoreId, started_at = StartedAt}) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+%% @private Re-run the local khepri:start for a store whose Ra server has
+%% gone (torn down by an interrupted join reset). Idempotent: a no-op when
+%% the server is already registered. Re-inits the base paths so a freshly
+%% reset 1-member store is ready to be joined again.
+-spec restart_local_khepri(atom(), string(), single | cluster) -> ok | {error, term()}.
+restart_local_khepri(StoreId, DataDir, Mode) ->
+    case erlang:whereis(StoreId) of
+        undefined ->
+            logger:warning("Restarting torn-down local Khepri store ~p", [StoreId]),
+            case start_khepri_store(StoreId, DataDir, Mode) of
+                ok ->
+                    catch init_store_paths(StoreId),
+                    ok;
+                {error, _} = Error ->
+                    logger:error("Failed to restart local Khepri store ~p: ~p",
+                                 [StoreId, Error]),
+                    Error
+            end;
+        _Pid ->
+            ok
+    end.
 
 %% @private
 -spec start_khepri_store(atom(), string(), single | cluster) -> ok | {error, term()}.

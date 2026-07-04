@@ -296,22 +296,45 @@ runs_store(Node, StoreId) ->
 -spec join_existing_cluster(atom(), node()) -> ok | failed.
 join_existing_cluster(StoreId, TargetNode) ->
     logger:info("Joining cluster via ~p (store: ~p)", [TargetNode, StoreId]),
-    %% Verify the local Ra server is registered before attempting
-    %% join. If not, khepri_cluster:join will block waiting on
-    %% infrastructure that never arrives. Explicit fail-fast lets
-    %% the operator run wipe-and-rejoin instead of waiting on a
-    %% silent hang.
+    %% The local Ra server must be registered before khepri_cluster:join
+    %% can merge it into the target. `khepri_cluster:join' RESETS the local
+    %% store as part of joining, so a join interrupted mid-reset (the
+    %% timeout guard kills the joiner) can leave the local Ra server gone.
+    %% Self-heal by restarting the local store, so the retry loop recovers
+    %% instead of looping forever on "not registered".
+    case ensure_local_ra_server(StoreId) of
+        ok     -> do_join_with_timeout(StoreId, TargetNode);
+        failed -> failed
+    end.
+
+%% @private Ensure the local Ra server for the store is registered, healing
+%% a torn-down store via the store worker. Returns `failed' (→ retry) if it
+%% still cannot be brought up this attempt.
+-spec ensure_local_ra_server(atom()) -> ok | failed.
+ensure_local_ra_server(StoreId) ->
     case erlang:whereis(StoreId) of
         undefined ->
-            logger:error(
-                "Local Ra server for store ~p is not registered. "
-                "This typically means the local data dir has stale "
-                "membership state from a previous cluster generation. "
-                "Recover with reckon-cluster-compose/scripts/wipe-and-rejoin.sh.",
-                [StoreId]),
-            failed;
+            logger:warning(
+                "Local Ra server for store ~p is not registered "
+                "(likely an interrupted join reset); restarting the local "
+                "store before joining.", [StoreId]),
+            heal_local_store(StoreId);
         _Pid ->
-            do_join_with_timeout(StoreId, TargetNode)
+            ok
+    end.
+
+-spec heal_local_store(atom()) -> ok | failed.
+heal_local_store(StoreId) ->
+    case reckon_db_store:ensure_khepri_started(StoreId) of
+        ok ->
+            case erlang:whereis(StoreId) of
+                undefined -> failed;   %% still down — retry on the next tick
+                _Pid      -> ok
+            end;
+        {error, Reason} ->
+            logger:error("Could not restart local store ~p for join: ~p",
+                         [StoreId, Reason]),
+            failed
     end.
 
 do_join_with_timeout(StoreId, TargetNode) ->
