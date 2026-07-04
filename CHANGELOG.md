@@ -5,6 +5,22 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.9.0] - 2026-07-04
+
+### Added
+
+- **Liveness watchdog for a hung local ra server (Tier-2 resilience).** A hung
+  `gen_statem` never crashes, so OTP supervision never restarts it — a wedge
+  could linger. The healer now tracks consecutive unresponsive audits and, when
+  the local server is unresponsive with NO majority to rejoin from (a majority
+  triggers the orphan force-delete+rejoin path instead), force-recycles it after
+  `?UNRESPONSIVE_RECYCLE_STREAK` audits with a **preserve-data restart**
+  (`ra:stop_server` + `ra:restart_server`, timeout-guarded), which replays the
+  durable log and un-wedges a hung-but-intact server. It never wipes here —
+  with no majority there is nothing to re-replicate from — so a preserve-data
+  restart is the correct, non-destructive remedy. New `wedged_local` verdict;
+  telemetry via the existing heal events; `last_action => recycled`.
+
 ## [5.8.3] - 2026-07-04
 
 ### Fixed

@@ -82,6 +82,19 @@ classify_drift_when_no_majority_test() ->
 classify_drift_when_partitioned_test() ->
     ?assertEqual(drift, ?M:classify(no_leader, base())).
 
+%% Local server wedged with NO majority to rejoin -> wedged_local (the
+%% watchdog preserve-data restarts it; a hung gen_statem never crashes).
+classify_wedged_local_when_no_majority_test() ->
+    Facts = (base())#{majority_present => false, local_responsive => false},
+    ?assertEqual(wedged_local, ?M:classify(no_leader, Facts)),
+    ?assertEqual(wedged_local, ?M:classify(healthy, Facts)).
+
+%% Wedged BUT a majority exists -> orphaned (force-delete+rejoin), not
+%% wedged_local: rejoining from the majority beats a bare local restart.
+classify_orphaned_beats_wedged_when_majority_test() ->
+    Facts = (base())#{self_clustered_with_leader => false, local_responsive => false},
+    ?assertEqual(orphaned, ?M:classify(healthy, Facts)).
+
 %%====================================================================
 %% majority_view/1 — pick the authoritative view among peer responses
 %%====================================================================

@@ -68,11 +68,17 @@
 %% guard it in a killable side process (same pattern the coordinator uses
 %% for join).
 -define(RESET_TIMEOUT, 20000).
+%% A hung gen_statem never crashes, so OTP supervision never restarts it. The
+%% watchdog force-recycles the local ra server after this many CONSECUTIVE
+%% unresponsive audits when there is no majority to rejoin from (with a
+%% majority, the orphan path force-deletes + rejoins immediately instead).
+-define(UNRESPONSIVE_RECYCLE_STREAK, 2).
 
 -record(state, {
     store_id :: atom(),
     mode :: auto | alarm_only,
     heal_count = 0 :: non_neg_integer(),
+    unresponsive_streak = 0 :: non_neg_integer(),
     last_heal_at :: integer() | undefined,
     last_action :: atom() | undefined,
     last_verdict :: atom() | undefined
@@ -157,15 +163,25 @@ run_audit(#state{store_id = StoreId} = State) ->
     publish_status(NewState),
     NewState.
 
-%% @private Turn self-health + majority view into a verdict. `orphaned' (the
-%% actionable verdict) is exactly `is_orphan/1'; otherwise healthy self-status
-%% is `healthy' and anything else is unhealed `drift' (alarm, no reset).
--spec classify(atom(), map()) -> healthy | orphaned | drift.
+%% @private Turn self-health + majority view into a verdict.
+%%   orphaned    - a majority exists we can rejoin: force-delete + rejoin.
+%%   wedged_local - our local ra server is unresponsive but there is NO majority
+%%                  to rejoin from: the watchdog force-recycles the hung server
+%%                  (preserve-data restart), since a hung gen_statem never
+%%                  crashes and OTP will not restart it.
+%%   healthy     - nothing to do.
+%%   drift       - unhealthy but responsive and no majority (e.g. genuine quorum
+%%                 loss): alarm only, never destructive.
+-spec classify(atom(), map()) -> healthy | orphaned | wedged_local | drift.
 classify(SelfStatus, Facts) ->
     case is_orphan(Facts) of
-        true                          -> orphaned;
-        false when SelfStatus =:= healthy -> healthy;
-        false                         -> drift
+        true  -> orphaned;
+        false ->
+            case {maps:get(local_responsive, Facts, true), SelfStatus} of
+                {false, _}     -> wedged_local;
+                {true, healthy} -> healthy;
+                {true, _}       -> drift
+            end
     end.
 
 %% @private The single orphan predicate, shared by classify/2 and
@@ -185,18 +201,22 @@ is_orphan(#{majority_present := true,
 is_orphan(_) ->
     false.
 
--spec act_on(healthy | orphaned | drift, map(), #state{}) -> #state{}.
+-spec act_on(healthy | orphaned | wedged_local | drift, map(), #state{}) -> #state{}.
 act_on(healthy, _Facts, State) ->
-    State#state{last_action = none};
+    State#state{last_action = none, unresponsive_streak = 0};
 act_on(drift, Facts, #state{store_id = StoreId} = State) ->
-    %% Unhealthy, but no safe majority to rejoin (e.g. genuine quorum loss,
-    %% or we ARE the authoritative side). Alarm, take no destructive action.
+    %% Unhealthy, but responsive and no safe majority to rejoin (e.g. genuine
+    %% quorum loss, or we ARE the authoritative side). Alarm, no destructive
+    %% action.
     emit(?CLUSTER_DRIFT_DETECTED, StoreId, #{verdict => maps:get(self_status, Facts)}),
     emit(?CLUSTER_HEAL_BLOCKED, StoreId, #{reason => no_safe_majority}),
-    State#state{last_action = alarmed};
+    State#state{last_action = alarmed, unresponsive_streak = 0};
 act_on(orphaned, Facts, #state{store_id = StoreId, mode = Mode} = State) ->
     emit(?CLUSTER_DRIFT_DETECTED, StoreId, #{verdict => orphaned}),
-    heal_if_safe(Mode, safe_to_reset(Facts), Facts, State).
+    heal_if_safe(Mode, safe_to_reset(Facts), Facts,
+                 State#state{unresponsive_streak = 0});
+act_on(wedged_local, _Facts, State) ->
+    watchdog(State).
 
 -spec heal_if_safe(auto | alarm_only, boolean(), map(), #state{}) -> #state{}.
 heal_if_safe(alarm_only, _Safe, _Facts, #state{store_id = StoreId} = State) ->
@@ -208,6 +228,56 @@ heal_if_safe(auto, false, Facts, #state{store_id = StoreId} = State) ->
     State#state{last_action = blocked};
 heal_if_safe(auto, true, Facts, State) ->
     do_heal(Facts, State).
+
+%% @private Watchdog for a hung LOCAL ra server with no majority to rejoin from.
+%% A hung gen_statem never crashes, so OTP supervision never restarts it — the
+%% healer must. Count consecutive unresponsive audits; after the streak, force-
+%% recycle with a PRESERVE-DATA restart (ra:stop_server + ra:restart_server),
+%% which replays the durable log and un-wedges a hung-but-intact server. We do
+%% NOT wipe here: with no majority there is nothing to re-replicate from, so a
+%% wipe would lose data. If the log itself is poison the restart crash-loops,
+%% which is the separate poison-pill recovery's job.
+-spec watchdog(#state{}) -> #state{}.
+watchdog(#state{mode = alarm_only, store_id = StoreId,
+                unresponsive_streak = S} = State) ->
+    emit(?CLUSTER_HEAL_BLOCKED, StoreId, #{reason => alarm_only_mode,
+                                           verdict => wedged_local}),
+    State#state{last_action = alarmed, unresponsive_streak = S + 1};
+watchdog(#state{store_id = StoreId, unresponsive_streak = S} = State) ->
+    Streak = S + 1,
+    emit(?CLUSTER_DRIFT_DETECTED, StoreId, #{verdict => wedged_local, streak => Streak}),
+    case Streak >= ?UNRESPONSIVE_RECYCLE_STREAK of
+        false ->
+            logger:warning("Healer: local ra server unresponsive (store: ~p, "
+                           "streak ~p) — watching", [StoreId, Streak]),
+            State#state{last_action = watching, unresponsive_streak = Streak};
+        true ->
+            recycle(StoreId, State#state{unresponsive_streak = Streak})
+    end.
+
+-spec recycle(atom(), #state{}) -> #state{}.
+recycle(StoreId, State) ->
+    logger:notice("Healer: local ra server wedged (store: ~p) — force-recycling "
+                  "(preserve-data restart)", [StoreId]),
+    emit(?CLUSTER_HEAL_STARTED, StoreId, #{action => recycle}),
+    case recycle_local(StoreId) of
+        ok ->
+            Count = State#state.heal_count + 1,
+            emit(?CLUSTER_RESET_PERFORMED, StoreId, #{action => recycle}),
+            telemetry:execute(?CLUSTER_HEAL_SUCCEEDED,
+                              #{system_time => erlang:system_time(millisecond),
+                                heal_count => Count},
+                              #{store_id => StoreId, node => node()}),
+            logger:notice("Healer: local ra server recycled (store: ~p)", [StoreId]),
+            State#state{heal_count = Count, unresponsive_streak = 0,
+                        last_heal_at = erlang:system_time(millisecond),
+                        last_action = recycled};
+        {error, Reason} ->
+            emit(?CLUSTER_HEAL_FAILED, StoreId, #{action => recycle, reason => Reason}),
+            logger:warning("Healer: recycle failed (store: ~p): ~p — will retry",
+                           [StoreId, Reason]),
+            State#state{last_action = recycle_failed}
+    end.
 
 %%====================================================================
 %% Healing
@@ -309,6 +379,47 @@ verify_rejoined(StoreId, LeaderNode) ->
     case lists:member(LeaderNode, leaderboard_member_nodes(StoreId)) of
         true  -> ok;
         false -> {error, still_not_clustered_with_leader}
+    end.
+
+%% @private PRESERVE-DATA recycle of a hung local ra server: stop it (forceful)
+%% then restart it, replaying the durable log. Both calls are timeout-guarded
+%% (ra ops can inherit `infinity' and the server is hung). Never wipes.
+-spec recycle_local(atom()) -> ok | {error, term()}.
+recycle_local(StoreId) ->
+    System = reckon_db_store:ra_system_name(StoreId),
+    Server = {StoreId, node()},
+    _ = bounded(fun() -> catch ra:stop_server(System, Server) end),
+    case bounded(fun() -> catch ra:restart_server(System, Server) end) of
+        {ok, ok}         -> verify_responsive(StoreId);
+        {ok, {error, R}} -> {error, R};
+        {ok, Other}      -> {error, {restart_failed, Other}};
+        {error, _} = E   -> E
+    end.
+
+-spec verify_responsive(atom()) -> ok | {error, still_unresponsive}.
+verify_responsive(StoreId) ->
+    case local_responsive(StoreId) of
+        true  -> ok;
+        false -> {error, still_unresponsive}
+    end.
+
+%% @private Run Fun in a killable side process bounded by RESET_TIMEOUT (ra /
+%% khepri ops otherwise inherit `infinity', and a hung server never replies).
+-spec bounded(fun(() -> term())) -> {ok, term()} | {error, term()}.
+bounded(Fun) ->
+    Parent = self(),
+    Ref = make_ref(),
+    Pid = spawn(fun() -> Parent ! {Ref, Fun()} end),
+    MRef = erlang:monitor(process, Pid),
+    receive
+        {Ref, R} ->
+            erlang:demonitor(MRef, [flush]), {ok, R};
+        {'DOWN', MRef, process, Pid, Reason} ->
+            {error, {crashed, Reason}}
+    after ?RESET_TIMEOUT ->
+        exit(Pid, kill),
+        receive {'DOWN', MRef, _, _, _} -> ok after 100 -> ok end,
+        {error, timeout}
     end.
 
 %%====================================================================
