@@ -31,6 +31,7 @@
     leader_tracker_name/1,
     discovery_name/1,
     coordinator_name/1,
+    healer_name/1,
     node_monitor_name/1,
     gateway_worker_name/1,
     health_monitor_name/1,
@@ -150,6 +151,11 @@ discovery_name(StoreId) ->
 -spec coordinator_name(atom()) -> atom().
 coordinator_name(StoreId) ->
     make_name("reckon_db_coordinator_", StoreId).
+
+%% @doc Store healer name for a store (continuous audit + split-brain self-heal)
+-spec healer_name(atom()) -> atom().
+healer_name(StoreId) ->
+    make_name("reckon_db_healer_", StoreId).
 
 %% @doc Node monitor worker name
 -spec node_monitor_name(atom()) -> atom().

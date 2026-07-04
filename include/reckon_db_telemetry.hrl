@@ -90,6 +90,42 @@
 %% Metadata: store_id, leader_node, previous_leader
 -define(CLUSTER_LEADER_ELECTED, [reckon_db, cluster, leader, elected]).
 
+%% Emitted when the healer's audit detects this replica has drifted out of
+%% its store's quorum-holding cluster (orphaned / split / no leader).
+%% Measurements: system_time
+%% Metadata: store_id, node, verdict
+-define(CLUSTER_DRIFT_DETECTED, [reckon_db, cluster, drift, detected]).
+
+%% Emitted when the healer begins a self-heal (reset + rejoin) of this
+%% replica after the data-safety gate passed.
+%% Measurements: system_time
+%% Metadata: store_id, node, target_leader
+-define(CLUSTER_HEAL_STARTED, [reckon_db, cluster, heal, started]).
+
+%% Emitted when a self-heal completes and the replica is back in the
+%% quorum-holding cluster.
+%% Measurements: system_time, heal_count
+%% Metadata: store_id, node
+-define(CLUSTER_HEAL_SUCCEEDED, [reckon_db, cluster, heal, succeeded]).
+
+%% Emitted when a self-heal attempt failed (will retry on the next tick).
+%% Measurements: system_time
+%% Metadata: store_id, node, reason
+-define(CLUSTER_HEAL_FAILED, [reckon_db, cluster, heal, failed]).
+
+%% Emitted when the data-safety gate BLOCKED a reset (drift seen but no
+%% safe majority to rejoin, or this node holds authoritative data). No
+%% destructive action taken.
+%% Measurements: system_time
+%% Metadata: store_id, node, reason
+-define(CLUSTER_HEAL_BLOCKED, [reckon_db, cluster, heal, blocked]).
+
+%% Emitted when the healer reset the local diverged Ra/Khepri state as part
+%% of a self-heal (the destructive step, gated by safe_to_reset/1).
+%% Measurements: system_time
+%% Metadata: store_id, node
+-define(CLUSTER_RESET_PERFORMED, [reckon_db, cluster, reset, performed]).
+
 %%====================================================================
 %% Store Telemetry Events
 %%====================================================================

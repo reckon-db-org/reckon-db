@@ -41,7 +41,8 @@ health_check(StoreId) ->
         {ok, #{has_quorum := HasQuorum} = Quorum} ->
             LeaderStatus = leader_status(ra_leaderboard:lookup_leader(StoreId)),
             Status = classify_health(HasQuorum, LeaderStatus),
-            {ok, Quorum#{status => Status, leader => LeaderStatus}};
+            {ok, Quorum#{status => Status, leader => LeaderStatus,
+                         self_healing => reckon_db_store_healer:status(StoreId)}};
         {error, Reason} ->
             {error, Reason}
     end.

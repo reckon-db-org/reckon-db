@@ -5,6 +5,38 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.0] - 2026-07-04
+
+### Added
+
+- **Continuous cluster self-healing.** A new per-store `reckon_db_store_healer`
+  closes the detect→heal loop: it runs an always-armed periodic audit and, when
+  this replica has drifted out of its store's quorum-holding cluster (the
+  classic deploy join-race that left a replica an orphaned singleton), it
+  automatically resets the local diverged Ra/Khepri state and rejoins the
+  majority — no operator `wipe-and-rejoin` script needed.
+  - **Data-safety gate** (`safe_to_reset/1`): a destructive reset is permitted
+    ONLY for a replica the majority has never accepted — never the leader, never
+    a member of the majority, and only when a real (leader-having) majority
+    exists to rejoin. Transient partitions of a real member are left to Ra.
+  - **`self_heal => auto | alarm_only`** store-config `options` knob (default
+    `auto`) for operators who prefer detect-and-alarm without destructive action.
+  - **Observability:** new telemetry events `[reckon_db, cluster, drift,
+    detected]`, `[reckon_db, cluster, heal, started|succeeded|failed|blocked]`,
+    `[reckon_db, cluster, reset, performed]`; `reckon_db_cluster:health_check/1`
+    now returns a `self_healing` section (`mode`, `heal_count`, `last_heal_at`,
+    `last_action`, `last_verdict`) for admin dashboards.
+
+### Fixed
+
+- **Coordinator no longer latches "joined" on a false-positive local view.**
+  `khepri_cluster:members/1` returns the CONFIGURED member set (still 3 even when
+  this node is isolated in a minority), so the old `length(Members) > 1` health
+  test declared a partitioned replica healthy and stopped reconciling forever.
+  Health is now judged authoritatively via `reckon_db_cluster:health_check/1`
+  (reachability-based quorum + an elected leader), so an isolated/split replica
+  keeps reconciling and reacts to peers reappearing.
+
 ## [5.7.0] - 2026-07-04
 
 ### Added

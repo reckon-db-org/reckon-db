@@ -176,12 +176,28 @@ reconcile_or_done(#state{config = #store_config{mode = cluster}} = State) ->
 reconcile_or_done(State) ->
     State#state{join_status = joined}.
 
-%% @private True when this node's store is a joined, multi-member cluster.
+%% @private True when this node's store is a joined, HEALTHY multi-member
+%% cluster. `khepri_cluster:members' returns the CONFIGURED member set, which
+%% stays at 3 even when this node is isolated in a minority — so a naive
+%% `length > 1' latches "joined" forever on a partitioned node. Gate the
+%% multi-member fast-path on the authoritative, reachability-based verdict
+%% (quorum + a leader) from the cluster facade, so an isolated/split replica
+%% keeps reconciling instead of declaring victory.
 -spec is_multi_member(atom()) -> boolean().
 is_multi_member(StoreId) ->
     case khepri_cluster:members(StoreId) of
-        {ok, Members} when length(Members) > 1 -> true;
+        {ok, Members} when length(Members) > 1 -> is_healthy_cluster(StoreId);
         _                                      -> false
+    end.
+
+%% @private Authoritative health: does this store have quorum AND a leader
+%% reachable from this node right now? Delegates to the cluster facade
+%% (reachability-based), NOT the static configured-member list.
+-spec is_healthy_cluster(atom()) -> boolean().
+is_healthy_cluster(StoreId) ->
+    case reckon_db_cluster:health_check(StoreId) of
+        {ok, #{status := healthy}} -> true;
+        _                          -> false
     end.
 
 %% @private Schedule a single retry of the cluster-join sequence.
@@ -434,12 +450,8 @@ has_active_cluster(Node, StoreId) ->
 %% @private Check if should handle nodeup events
 -spec should_handle_nodeup_internal(atom()) -> boolean().
 should_handle_nodeup_internal(StoreId) ->
-    %% Check if we're already part of a multi-node cluster
-    case khepri_cluster:members(StoreId) of
-        {ok, Members} when length(Members) > 1 ->
-            %% Already in a cluster, no need to handle nodeup
-            false;
-        _ ->
-            %% Not in a cluster or only have ourselves, should handle nodeup
-            true
-    end.
+    %% Handle nodeup unless we are already in a HEALTHY multi-member cluster.
+    %% Using authoritative health (quorum + leader) rather than the configured
+    %% member count means an isolated-but-configured replica still reacts to a
+    %% peer reappearing and attempts to rejoin, instead of ignoring it.
+    not is_multi_member(StoreId).

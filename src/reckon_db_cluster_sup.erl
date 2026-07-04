@@ -44,7 +44,8 @@ init(#store_config{store_id = StoreId} = Config) ->
 
     Children = [
         discovery_spec(Config),
-        coordinator_spec(Config)
+        coordinator_spec(Config),
+        healer_spec(Config)
     ],
 
     logger:debug("Starting cluster supervisor for store ~p", [StoreId]),
@@ -77,5 +78,17 @@ coordinator_spec(#store_config{store_id = StoreId} = Config) ->
         shutdown => 5000,
         type => worker,
         modules => [reckon_db_store_coordinator]
+    }.
+
+%% @private Continuous audit + split-brain self-heal (one per store).
+-spec healer_spec(store_config()) -> supervisor:child_spec().
+healer_spec(#store_config{store_id = StoreId} = Config) ->
+    #{
+        id => reckon_db_naming:healer_name(StoreId),
+        start => {reckon_db_store_healer, start_link, [Config]},
+        restart => permanent,
+        shutdown => 5000,
+        type => worker,
+        modules => [reckon_db_store_healer]
     }.
 
