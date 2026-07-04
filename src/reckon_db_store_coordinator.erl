@@ -177,28 +177,16 @@ reconcile_or_done(State) ->
     State#state{join_status = joined}.
 
 %% @private True when this node's store is a joined, HEALTHY multi-member
-%% cluster. `khepri_cluster:members' returns the CONFIGURED member set, which
-%% stays at 3 even when this node is isolated in a minority — so a naive
-%% `length > 1' latches "joined" forever on a partitioned node. Gate the
-%% multi-member fast-path on the authoritative, reachability-based verdict
-%% (quorum + a leader) from the cluster facade, so an isolated/split replica
-%% keeps reconciling instead of declaring victory.
+%% cluster. Both the old `khepri_cluster:members' (configured set, stays at 3
+%% even when isolated) and `reckon_db_cluster:health_check' (get_quorum_status)
+%% do an UNBOUNDED `statem_call' into the local ra server — so when that server
+%% wedged, this reconcile froze forever (the live bug: coordinator + healer
+%% both stuck on `do_query_members'). Use the wedge-proof predicate instead:
+%% lock-free `ra_leaderboard' ETS + a bounded liveness probe. An isolated,
+%% split, or wedged replica reads as unhealthy and keeps reconciling.
 -spec is_multi_member(atom()) -> boolean().
 is_multi_member(StoreId) ->
-    case khepri_cluster:members(StoreId) of
-        {ok, Members} when length(Members) > 1 -> is_healthy_cluster(StoreId);
-        _                                      -> false
-    end.
-
-%% @private Authoritative health: does this store have quorum AND a leader
-%% reachable from this node right now? Delegates to the cluster facade
-%% (reachability-based), NOT the static configured-member list.
--spec is_healthy_cluster(atom()) -> boolean().
-is_healthy_cluster(StoreId) ->
-    case reckon_db_cluster:health_check(StoreId) of
-        {ok, #{status := healthy}} -> true;
-        _                          -> false
-    end.
+    reckon_db_cluster:local_healthy(StoreId).
 
 %% @private Schedule a single retry of the cluster-join sequence.
 %% Uses rand jitter so simultaneous boots don't keep colliding on the

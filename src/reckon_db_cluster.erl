@@ -22,10 +22,13 @@
 
 -export([
     health_check/1,
+    local_healthy/1,
     verify_consistency/1,
     verify_membership/1,
     check_log_consistency/1
 ]).
+
+-define(LOCAL_PROBE_TIMEOUT, 2000).
 
 %% @doc Quick health check — does the store have quorum and a leader?
 %%
@@ -49,6 +52,39 @@ health_check(StoreId) ->
 
 leader_status(undefined) -> no_leader;
 leader_status(_Leader) -> has_leader.
+
+%% @doc Wedge-proof LOCAL health predicate.
+%%
+%% True when there is an elected leader that THIS node is locally clustered
+%% with (>1 members), and the local ra server answers a members query within a
+%% hard bound. Uses ONLY the lock-free `ra_leaderboard' ETS table plus a
+%% bounded `ra:members/2' liveness probe — it never calls
+%% `khepri_cluster:members' / `get_quorum_status', which do an unbounded
+%% `statem_call' into a possibly-wedged local ra server. Callers that poll
+%% health in a hot loop (the coordinator's reconcile, the healer) MUST use this
+%% rather than `health_check/1', or they inherit the wedge of the very store
+%% they are trying to fix.
+-spec local_healthy(atom()) -> boolean().
+local_healthy(StoreId) ->
+    case ra_leaderboard:lookup_leader(StoreId) of
+        undefined ->
+            false;
+        Leader ->
+            Members = ra_leaderboard:lookup_members(StoreId),
+            is_list(Members)
+                andalso length(Members) > 1
+                andalso lists:member(Leader, Members)
+                andalso local_responsive(StoreId)
+    end.
+
+%% @private Does the local ra server answer a members query within a hard
+%% bound? A wedged server yields `false' fast rather than blocking the caller.
+-spec local_responsive(atom()) -> boolean().
+local_responsive(StoreId) ->
+    case catch ra:members({StoreId, node()}, ?LOCAL_PROBE_TIMEOUT) of
+        {ok, _Members, _Leader} -> true;
+        _                       -> false
+    end.
 
 %% @doc Full cluster consistency check.
 %%

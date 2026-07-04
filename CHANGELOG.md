@@ -5,6 +5,27 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.3] - 2026-07-04
+
+### Fixed
+
+- **The coordinator can no longer wedge either.** 5.8.2 made the healer
+  wedge-proof; the coordinator's `is_multi_member/1' still judged health via
+  `khepri_cluster:members' + `reckon_db_cluster:health_check' — both an
+  unbounded `statem_call' into the local ra server. That is why the coordinator
+  itself froze on the wedged store (and needed the healer, or a human, to
+  recover). It now uses the new `reckon_db_cluster:local_healthy/1', a
+  wedge-proof predicate built on the lock-free `ra_leaderboard' ETS table plus
+  a bounded `ra:members/2' liveness probe. A wedged/isolated/split replica
+  reads as unhealthy and keeps reconciling instead of blocking forever, so the
+  whole "stuck orphan needs manual recovery" class is closed at the source.
+
+### Added
+
+- `reckon_db_cluster:local_healthy/1` — wedge-proof local health predicate
+  (leader present + locally clustered with it + local server responsive within
+  a hard bound), for hot-loop health polling by the coordinator and healer.
+
 ## [5.8.2] - 2026-07-04
 
 ### Fixed
