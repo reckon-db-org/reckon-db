@@ -20,12 +20,15 @@
 %% `safe_to_reset/1' permits it ONLY when ALL hold:
 %%   1. a majority cluster with an elected leader exists among the peers,
 %%   2. this node is NOT that leader, and
-%%   3. this node is NOT a member of that majority cluster.
+%%   3. this node is NOT locally clustered with that leader (the majority's
+%%      leader is absent from OUR OWN local member set).
 %%
-%% (3) is the key invariant: we only ever reset a replica the majority has
-%% never accepted (the never-joined singleton) — never a member of the
-%% authoritative cluster, and never the majority itself. A transient
-%% network partition of a real member is left to Ra to heal on its own.
+%% (3) is the key invariant, and it keys on our LOCAL view, not the
+%% majority's: a node that reset into its own singleton has local members
+%% = [self] (leader absent) and is healed; a node merely partitioned from a
+%% cluster it is still configured in keeps the full local member set (leader
+%% present) and is left to Ra. We never reset the majority itself, and never
+%% a node still locally clustered with the authoritative leader.
 %%
 %% Set `self_heal => alarm_only' in the store config `options' to detect
 %% and emit telemetry without ever taking destructive action.
@@ -162,7 +165,7 @@ run_audit(#state{store_id = StoreId} = State) ->
 -spec classify(atom(), map()) -> healthy | orphaned | drift.
 classify(_SelfStatus, #{majority_present := true,
                         self_is_leader := false,
-                        self_in_majority := false}) -> orphaned;
+                        self_clustered_with_leader := false}) -> orphaned;
 classify(healthy, _Facts) -> healthy;
 classify(_Unhealthy, _Facts) -> drift.
 
@@ -277,6 +280,7 @@ verify_rejoined(StoreId) ->
 -spec gather_facts(atom()) -> map().
 gather_facts(StoreId) ->
     SelfStatus = self_status(StoreId),
+    SelfLocalMembers = local_member_nodes(StoreId),
     MajView = majority_view(peer_memberships(StoreId)),
     MajMembers = maps:get(members, MajView, []),
     MajLeader = maps:get(leader, MajView, undefined),
@@ -289,7 +293,24 @@ gather_facts(StoreId) ->
       %% majority without needing to know the configured size.
       majority_present => MajLeader =/= undefined andalso length(MajMembers) >= 2,
       self_is_leader => MajLeader =:= node(),
-      self_in_majority => lists:member(node(), MajMembers)}.
+      %% Orphan detection keys on OUR LOCAL view: is the majority's leader in
+      %% the cluster WE are locally part of? A node that reset into its own
+      %% singleton has local members = [self] (leader absent) -> orphan. A
+      %% transient-partition member still has the full configured set locally
+      %% (leader present) -> NOT an orphan, left to Ra to reconcile. Using the
+      %% majority's member list here would wrongly count the orphan as present
+      %% (the majority still lists it as a configured-but-lagging member).
+      self_clustered_with_leader =>
+          MajLeader =/= undefined andalso lists:member(MajLeader, SelfLocalMembers)}.
+
+%% @private This node's LOCAL Ra membership view (which cluster WE think we
+%% are in), as node names. Empty if the local store is unreachable.
+-spec local_member_nodes(atom()) -> [node()].
+local_member_nodes(StoreId) ->
+    case ra:members({StoreId, node()}) of
+        {ok, Members, _Leader} -> [node_of(M) || M <- Members];
+        _                      -> []
+    end.
 
 %% @private This replica's own authoritative health, computed directly from
 %% the pure primitives (NOT via reckon_db_cluster:health_check/1, which now
@@ -342,13 +363,14 @@ majority_view(Peers) ->
 %% The data-safety gate (pure — unit-tested)
 %%====================================================================
 
-%% @doc Permit a destructive reset ONLY for a replica the majority has never
-%% accepted. Never resets the leader, never resets a member of the majority,
-%% and requires a real majority (leader-having) cluster to rejoin.
+%% @doc Permit a destructive reset ONLY for a replica that has diverged into
+%% its own cluster (the majority's leader is absent from our local member
+%% set). Never resets the leader, never resets a node still locally clustered
+%% with the leader, and requires a real majority (leader-having) to rejoin.
 -spec safe_to_reset(map()) -> boolean().
 safe_to_reset(#{majority_present := true,
                 self_is_leader := false,
-                self_in_majority := false}) -> true;
+                self_clustered_with_leader := false}) -> true;
 safe_to_reset(_) -> false.
 
 %%====================================================================
@@ -382,7 +404,7 @@ publish_status(State) ->
 
 redact(Facts) ->
     maps:with([self_status, majority_leader, majority_present,
-               self_is_leader, self_in_majority], Facts).
+               self_is_leader, self_clustered_with_leader], Facts).
 
 emit(Event, StoreId, Meta) ->
     telemetry:execute(Event,

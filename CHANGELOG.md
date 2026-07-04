@@ -9,13 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Healer now heals the healthy-looking singleton** — the exact split it
-  exists to fix. A replica that split into its own 1-node cluster is LOCALLY
-  healthy (quorum 1/1, leader = self), so the 5.8.0 `classify/2` short-circuited
-  on `self_status = healthy` and never acted. Orphan detection is now driven by
-  the majority-exclusion signal (a leader-having >= 2 cluster exists that this
-  replica is neither the leader of nor a member of) independent of local
-  self-health. New regression test `classify_healthy_singleton_is_orphaned`.
+- **Healer now correctly heals the diverged singleton** — the exact split it
+  exists to fix. Two bugs in the 5.8.0 orphan detection:
+  1. It short-circuited on `self_status = healthy`, but a replica that split
+     into its own 1-node cluster is LOCALLY healthy (quorum 1/1, leader = self),
+     so it never acted. Orphan detection no longer keys on local self-health.
+  2. It then keyed on whether we appear in the MAJORITY's member list — but the
+     majority still lists a diverged node as a configured-but-lagging member, so
+     it counted the orphan as present and did nothing.
+  Orphan detection now keys on our OWN LOCAL view: is the majority's elected
+  leader absent from the cluster we are locally part of? A reset singleton has
+  local members = [self] (leader absent -> orphan, healed); a node merely
+  partitioned from a cluster it is still configured in keeps the full local set
+  (leader present -> left to Ra). Regression tests
+  `classify_healthy_singleton_is_orphaned` + `ghent_partition_is_not_reset`.
 
 ## [5.8.0] - 2026-07-04
 
