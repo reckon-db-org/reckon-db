@@ -16,6 +16,7 @@
 %% API
 -export([start_link/1]).
 -export([get_store/1, is_ready/1, get_leader/1, ensure_khepri_started/1]).
+-export([ra_system_name/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).

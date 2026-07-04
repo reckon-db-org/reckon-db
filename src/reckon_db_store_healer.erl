@@ -17,18 +17,20 @@
 %% == Data-safety gate ==
 %%
 %% A reset is destructive (it discards the local Ra/Khepri state), so
-%% `safe_to_reset/1' permits it ONLY when ALL hold:
+%% `safe_to_reset/1' (== `is_orphan/1') permits it ONLY when:
 %%   1. a majority cluster with an elected leader exists among the peers,
 %%   2. this node is NOT that leader, and
-%%   3. this node is NOT locally clustered with that leader (the majority's
-%%      leader is absent from OUR OWN local member set).
+%%   3. EITHER this node is not locally clustered with that leader (diverged
+%%      into its own cluster) OR its local ra server is wedged
+%%      (`local_responsive => false').
 %%
-%% (3) is the key invariant, and it keys on our LOCAL view, not the
-%% majority's: a node that reset into its own singleton has local members
-%% = [self] (leader absent) and is healed; a node merely partitioned from a
-%% cluster it is still configured in keeps the full local member set (leader
-%% present) and is left to Ra. We never reset the majority itself, and never
-%% a node still locally clustered with the authoritative leader.
+%% All probes are lock-free (ra_leaderboard ETS) or hard timeout-bounded; the
+%% audit must NEVER call `khepri_cluster:members' / `get_quorum_status', which
+%% do an unbounded `statem_call' into the local ra server — the very server
+%% that is wedged in the case we most need to heal. A monitor that calls the
+%% monitored server's synchronous API inherits its wedge. A node still
+%% clustered with the leader AND responsive is a transient partition, left to
+%% Ra; we never reset the majority itself.
 %%
 %% Set `self_heal => alarm_only' in the store config `options' to detect
 %% and emit telemetry without ever taking destructive action.
@@ -59,6 +61,9 @@
 -define(AUDIT_INTERVAL_MS, 30000).
 -define(AUDIT_JITTER_MS, 10000).
 -define(RPC_TIMEOUT, 5000).
+%% Hard bound on the LOCAL ra members liveness probe. Short: a healthy server
+%% answers in ms; a wedged one must fail fast, not stall the audit.
+-define(LOCAL_PROBE_TIMEOUT, 2000).
 %% khepri_cluster:reset/1 inherits khepri's default `infinity' timeout, so
 %% guard it in a killable side process (same pattern the coordinator uses
 %% for join).
@@ -152,22 +157,33 @@ run_audit(#state{store_id = StoreId} = State) ->
     publish_status(NewState),
     NewState.
 
-%% @private Turn the self health status + majority view into a verdict.
-%%
-%% Orphan detection is driven by the MAJORITY-EXCLUSION signal, not local
-%% self-health: a replica that split into its own singleton is LOCALLY a
-%% healthy 1-node cluster (quorum 1/1, leader = self), so keying on
-%% `self_status' would never heal the exact split we are here to fix. If a
-%% real majority (a leader-having >= 2 cluster) exists that we are neither
-%% the leader of nor a member of, we are an orphan — regardless of how
-%% healthy we look to ourselves. Only when no such majority exists do we
-%% fall back to self-health (healthy -> nothing; otherwise -> unhealed drift).
+%% @private Turn self-health + majority view into a verdict. `orphaned' (the
+%% actionable verdict) is exactly `is_orphan/1'; otherwise healthy self-status
+%% is `healthy' and anything else is unhealed `drift' (alarm, no reset).
 -spec classify(atom(), map()) -> healthy | orphaned | drift.
-classify(_SelfStatus, #{majority_present := true,
-                        self_is_leader := false,
-                        self_clustered_with_leader := false}) -> orphaned;
-classify(healthy, _Facts) -> healthy;
-classify(_Unhealthy, _Facts) -> drift.
+classify(SelfStatus, Facts) ->
+    case is_orphan(Facts) of
+        true                          -> orphaned;
+        false when SelfStatus =:= healthy -> healthy;
+        false                         -> drift
+    end.
+
+%% @private The single orphan predicate, shared by classify/2 and
+%% safe_to_reset/1. We are an orphan the majority can safely re-absorb when a
+%% real (leader-having) majority exists, we are not its leader, and EITHER we
+%% are not locally clustered with that leader (diverged into our own cluster)
+%% OR our local ra server is wedged (cannot answer within the bound). Both are
+%% faults the majority holds authoritative data for, so reset+rejoin is safe.
+%% A node still locally clustered with the leader AND responsive is a transient
+%% partition -> left to Ra, never reset.
+-spec is_orphan(map()) -> boolean().
+is_orphan(#{majority_present := true,
+            self_is_leader := false,
+            self_clustered_with_leader := Clustered,
+            local_responsive := Responsive}) ->
+    (not Clustered) orelse (not Responsive);
+is_orphan(_) ->
+    false.
 
 -spec act_on(healthy | orphaned | drift, map(), #state{}) -> #state{}.
 act_on(healthy, _Facts, State) ->
@@ -222,22 +238,45 @@ do_heal(#{majority_leader := LeaderNode}, #state{store_id = StoreId} = State) ->
             State#state{last_action = heal_failed}
     end.
 
-%% @private Reset the diverged local state, then rejoin the majority via the
-%% coordinator's existing join primitive. reset/1 is the Raft-correct "forget
-%% my local state" op; it is safe here precisely because the safety gate
-%% proved the majority never accepted this replica.
+%% @private Clear the diverged/wedged local state, then rejoin the majority.
+%%
+%% Escalates: the graceful `khepri_cluster:reset` is a `statem_call` into the
+%% LOCAL ra server, which is exactly the thing that is wedged in the case we
+%% most need to heal (an unresponsive server never replies, so a bounded reset
+%% just times out). So on reset failure we escalate to `ra:force_delete_server`,
+%% which tears the server + its data down WITHOUT the server's cooperation, then
+%% restart it fresh and rejoin. A monitor's remedy must never require the sick
+%% component to cooperate.
 -spec reset_and_rejoin(atom(), node()) -> ok | {error, term()}.
 reset_and_rejoin(StoreId, LeaderNode) ->
+    ok = clear_local_state(StoreId),
+    _ = reckon_db_store:ensure_khepri_started(StoreId),
+    case reckon_db_store_coordinator:join_cluster(StoreId, LeaderNode) of
+        ok  -> verify_rejoined(StoreId, LeaderNode);
+        Err -> {error, {join_failed, Err}}
+    end.
+
+%% @private Try a graceful reset first; if it does not cleanly succeed (a
+%% wedged server never answers), force-delete the local server + its data.
+-spec clear_local_state(atom()) -> ok.
+clear_local_state(StoreId) ->
     case reset_local(StoreId) of
         ok ->
-            _ = reckon_db_store:ensure_khepri_started(StoreId),
-            case reckon_db_store_coordinator:join_cluster(StoreId, LeaderNode) of
-                ok  -> verify_rejoined(StoreId);
-                Err -> {error, {join_failed, Err}}
-            end;
-        {error, _} = E ->
-            E
+            ok;
+        {error, Reason} ->
+            logger:warning("Healer: graceful reset failed (~p); force-deleting "
+                           "the wedged local server (store: ~p)", [Reason, StoreId]),
+            force_delete_local(StoreId),
+            ok
     end.
+
+%% @private Nuke the local ra server + its on-disk data without needing it to
+%% respond. `ra:force_delete_server/2' works on a wedged server.
+-spec force_delete_local(atom()) -> ok.
+force_delete_local(StoreId) ->
+    System = reckon_db_store:ra_system_name(StoreId),
+    _ = catch ra:force_delete_server(System, {StoreId, node()}),
+    ok.
 
 %% @private khepri_cluster:reset/1 with a killable timeout guard (it
 %% otherwise inherits khepri's default `infinity').
@@ -262,81 +301,94 @@ reset_local(StoreId) ->
         {error, reset_timeout}
     end.
 
--spec verify_rejoined(atom()) -> ok | {error, term()}.
-verify_rejoined(StoreId) ->
-    case reckon_db_cluster:health_check(StoreId) of
-        {ok, #{status := healthy}} -> ok;
-        {ok, #{status := Other}}   -> {error, {still_unhealthy, Other}};
-        {error, Reason}            -> {error, Reason}
+%% @private Confirm the rejoin took, WITHOUT the wedging health facade
+%% (which does a statem member query). Lock-free ETS: are we now locally
+%% clustered with the leader?
+-spec verify_rejoined(atom(), node()) -> ok | {error, term()}.
+verify_rejoined(StoreId, LeaderNode) ->
+    case lists:member(LeaderNode, leaderboard_member_nodes(StoreId)) of
+        true  -> ok;
+        false -> {error, still_not_clustered_with_leader}
     end.
 
 %%====================================================================
 %% Fact gathering
 %%====================================================================
 
-%% @private Gather the facts the verdict + safety gate need. `self_status'
-%% is the authoritative local verdict; the majority view is derived by
-%% asking each connected store-runner peer for its Ra membership.
+%% @private Gather the facts the verdict + safety gate need.
+%%
+%% CRITICAL: every probe here is lock-free (ra_leaderboard ETS reads) or hard
+%% timeout-bounded. It must NEVER route through `khepri_cluster:members' /
+%% `get_quorum_status', which do an unbounded `statem_call' into the local ra
+%% server — the very server that is wedged in the case we most need to heal.
+%% A monitor that calls the monitored server's synchronous API inherits its
+%% wedge (the bug this fixes: coordinator + healer both froze on that call).
 -spec gather_facts(atom()) -> map().
 gather_facts(StoreId) ->
-    SelfStatus = self_status(StoreId),
-    SelfLocalMembers = local_member_nodes(StoreId),
+    SelfLocalMembers = leaderboard_member_nodes(StoreId),
+    LocalResponsive = local_responsive(StoreId),
     MajView = majority_view(peer_memberships(StoreId)),
     MajMembers = maps:get(members, MajView, []),
     MajLeader = maps:get(leader, MajView, undefined),
-    #{store_id => StoreId,
-      self_status => SelfStatus,
-      majority_leader => MajLeader,
-      majority_members => MajMembers,
-      %% A cluster that has ELECTED a leader necessarily holds quorum (Raft),
-      %% so "leader present AND >= 2 members" identifies the authoritative
-      %% majority without needing to know the configured size.
-      majority_present => MajLeader =/= undefined andalso length(MajMembers) >= 2,
-      self_is_leader => MajLeader =:= node(),
-      %% Orphan detection keys on OUR LOCAL view: is the majority's leader in
-      %% the cluster WE are locally part of? A node that reset into its own
-      %% singleton has local members = [self] (leader absent) -> orphan. A
-      %% transient-partition member still has the full configured set locally
-      %% (leader present) -> NOT an orphan, left to Ra to reconcile. Using the
-      %% majority's member list here would wrongly count the orphan as present
-      %% (the majority still lists it as a configured-but-lagging member).
-      self_clustered_with_leader =>
-          MajLeader =/= undefined andalso lists:member(MajLeader, SelfLocalMembers)}.
+    Facts = #{store_id => StoreId,
+              majority_leader => MajLeader,
+              majority_members => MajMembers,
+              %% A cluster that ELECTED a leader necessarily holds quorum (Raft),
+              %% so "leader present AND >= 2 members" identifies the authoritative
+              %% majority without needing the configured size.
+              majority_present => MajLeader =/= undefined andalso length(MajMembers) >= 2,
+              self_is_leader => MajLeader =:= node(),
+              %% Is the majority's leader in the cluster WE are locally part of?
+              %% (leaderboard ETS view). A diverged singleton has [self] (leader
+              %% absent); a transient-partition member still has the full set.
+              self_clustered_with_leader =>
+                  MajLeader =/= undefined andalso lists:member(MajLeader, SelfLocalMembers),
+              %% Does our LOCAL ra server answer a membership query within a hard
+              %% bound? `false' = wedged (the exact fault we saw): a fault to heal
+              %% when a majority exists, even if our config still looks correct.
+              local_responsive => LocalResponsive},
+    Facts#{self_status => self_status(Facts)}.
 
-%% @private This node's LOCAL Ra membership view (which cluster WE think we
-%% are in), as node names. Empty if the local store is unreachable.
--spec local_member_nodes(atom()) -> [node()].
-local_member_nodes(StoreId) ->
-    case ra:members({StoreId, node()}) of
-        {ok, Members, _Leader} -> [node_of(M) || M <- Members];
-        _                      -> []
+%% @private This node's LOCAL member view from the ra_leaderboard ETS table
+%% (lock-free, wedge-proof), as node names. `[]' if unknown.
+-spec leaderboard_member_nodes(atom()) -> [node()].
+leaderboard_member_nodes(StoreId) ->
+    case ra_leaderboard:lookup_members(StoreId) of
+        Members when is_list(Members) -> [node_of(M) || M <- Members];
+        _                             -> []
     end.
 
-%% @private This replica's own authoritative health, computed directly from
-%% the pure primitives (NOT via reckon_db_cluster:health_check/1, which now
-%% folds in the healer's own status and would recurse). Mirrors
-%% reckon_db_cluster:classify_health/2.
--spec self_status(atom()) -> healthy | degraded | no_quorum | unreachable.
-self_status(StoreId) ->
-    case reckon_db_consistency_checker:get_quorum_status(StoreId) of
-        {ok, #{has_quorum := true}} ->
-            case ra_leaderboard:lookup_leader(StoreId) of
-                undefined -> degraded;
-                _Leader   -> healthy
-            end;
-        {ok, #{has_quorum := false}} -> no_quorum;
-        {error, _}                   -> unreachable
+%% @private Liveness probe: does the local ra server answer a members query
+%% within a hard bound? Uses ra:members/2 (bounded), so a wedged server
+%% yields `false' fast instead of blocking the whole audit forever.
+-spec local_responsive(atom()) -> boolean().
+local_responsive(StoreId) ->
+    case catch ra:members({StoreId, node()}, ?LOCAL_PROBE_TIMEOUT) of
+        {ok, _Members, _Leader} -> true;
+        _                       -> false
     end.
 
-%% @private Ask every connected node that runs this store for its Ra
-%% membership view: `{Node, LeaderNode | undefined, [MemberNode]}'.
+%% @private This replica's own health, derived purely from the lock-free
+%% leaderboard (NOT get_quorum_status, which wedges). Present leader -> healthy.
+-spec self_status(map()) -> healthy | no_leader.
+self_status(#{store_id := StoreId}) ->
+    case ra_leaderboard:lookup_leader(StoreId) of
+        undefined -> no_leader;
+        _Leader   -> healthy
+    end.
+
+%% @private Ask every connected node that runs this store for its Ra membership
+%% view via the lock-free ra_leaderboard ETS table (wedge-proof on the peer
+%% side too), bounded by the rpc timeout: `{Node, LeaderNode, [MemberNode]}'.
 -spec peer_memberships(atom()) -> [{node(), node() | undefined, [node()]}].
 peer_memberships(StoreId) ->
     lists:filtermap(
         fun(N) ->
-            case rpc:call(N, ra, members, [{StoreId, N}], ?RPC_TIMEOUT) of
-                {ok, Members, Leader} ->
-                    {true, {N, node_of(Leader), [node_of(M) || M <- Members]}};
+            Leader = rpc:call(N, ra_leaderboard, lookup_leader, [StoreId], ?RPC_TIMEOUT),
+            Members = rpc:call(N, ra_leaderboard, lookup_members, [StoreId], ?RPC_TIMEOUT),
+            case Members of
+                Ms when is_list(Ms) ->
+                    {true, {N, leader_node(Leader), [node_of(M) || M <- Ms]}};
                 _ ->
                     false
             end
@@ -363,24 +415,30 @@ majority_view(Peers) ->
 %% The data-safety gate (pure — unit-tested)
 %%====================================================================
 
-%% @doc Permit a destructive reset ONLY for a replica that has diverged into
-%% its own cluster (the majority's leader is absent from our local member
-%% set). Never resets the leader, never resets a node still locally clustered
-%% with the leader, and requires a real majority (leader-having) to rejoin.
+%% @doc The data-safety gate == the orphan predicate. Permits a destructive
+%% reset ONLY for a replica that has diverged into its own cluster OR whose
+%% local ra server is wedged, while a real (leader-having) majority exists to
+%% rejoin. Never the leader, never a responsive node still clustered with it.
 -spec safe_to_reset(map()) -> boolean().
-safe_to_reset(#{majority_present := true,
-                self_is_leader := false,
-                self_clustered_with_leader := false}) -> true;
-safe_to_reset(_) -> false.
+safe_to_reset(Facts) -> is_orphan(Facts).
 
 %%====================================================================
 %% Helpers
 %%====================================================================
 
 -spec node_of(term()) -> node() | undefined.
-node_of({_Name, Node}) -> Node;
+node_of({_Name, Node}) when is_atom(Node) -> Node;
 node_of(Node) when is_atom(Node) -> Node;
 node_of(_) -> undefined.
+
+%% @private Extract the leader node from ra_leaderboard:lookup_leader/1, which
+%% over rpc may also come back as `undefined' or `{badrpc, _}'. `{badrpc, R}'
+%% must NOT be read as a `{Name, Node}' server id.
+-spec leader_node(term()) -> node() | undefined.
+leader_node({badrpc, _}) -> undefined;
+leader_node(undefined)   -> undefined;
+leader_node({_Name, Node}) when is_atom(Node) -> Node;
+leader_node(_) -> undefined.
 
 schedule_audit(DelayMs) ->
     erlang:send_after(DelayMs, self(), audit).
@@ -403,8 +461,8 @@ publish_status(State) ->
     persistent_term:put({?MODULE, State#state.store_id}, status_map(State)).
 
 redact(Facts) ->
-    maps:with([self_status, majority_leader, majority_present,
-               self_is_leader, self_clustered_with_leader], Facts).
+    maps:with([self_status, majority_leader, majority_present, self_is_leader,
+               self_clustered_with_leader, local_responsive], Facts).
 
 emit(Event, StoreId, Meta) ->
     telemetry:execute(Event,

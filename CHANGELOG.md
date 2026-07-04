@@ -5,6 +5,35 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.8.2] - 2026-07-04
+
+### Fixed
+
+- **The healer no longer wedges on the very server it heals.** Live diagnosis
+  of a stuck replica (run queue 1 — idle, NOT CPU-bound) showed both the
+  coordinator and the healer frozen in `khepri_cluster:do_query_members ->
+  ra_server_proc:statem_call`: an unbounded synchronous call into the local ra
+  server, which was itself wedged (member queries accepted, never answered). A
+  monitor that calls the monitored server's synchronous API inherits its wedge,
+  so the healer never completed a single audit (`heal_count` stuck at 0).
+  - Fact-gathering is now entirely **lock-free / hard-bounded**: local + peer
+    membership come from the `ra_leaderboard` ETS table; a `ra:members/2`
+    liveness probe (2s bound) tells us whether the local server is *responsive*.
+    The audit never calls `khepri_cluster:members` / `get_quorum_status`.
+  - **A wedged local server is now itself a healable fault**: new
+    `local_responsive` signal — if the local ra server can't answer within the
+    bound while a majority exists, reset+rejoin (previously only a diverged
+    member set triggered healing).
+  - **Corrective action no longer needs the sick server's cooperation**: the
+    graceful `khepri_cluster:reset` (a statem call that hangs on a wedged
+    server) escalates to `ra:force_delete_server/2`, which tears the server +
+    data down unilaterally, then restarts fresh and rejoins.
+  - `reckon_db_store:ra_system_name/1` exported for the force-delete.
+
+### Added
+
+- `ra_system_name/1` to `reckon_db_store`'s public API.
+
 ## [5.8.1] - 2026-07-04
 
 ### Fixed
