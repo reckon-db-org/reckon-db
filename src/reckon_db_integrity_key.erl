@@ -48,8 +48,16 @@
     load/1,
     get/1,
     is_enabled/1,
+    status/1,
     clear/1
 ]).
+
+%% Public integrity advertisement — the algorithm identifier and key id
+%% surfaced to clients/dashboards. reckon-db owns this (a store's integrity
+%% is a property of the store, not of whatever reads it). key_id is a fixed
+%% 1 until key rotation lands.
+-define(INTEGRITY_ALGO, <<"sha256-deterministic-etf-v1">>).
+-define(INTEGRITY_KEY_ID, 1).
 
 -export_type([load_error/0]).
 
@@ -118,6 +126,20 @@ get(StoreId) ->
 -spec is_enabled(StoreId :: atom()) -> boolean().
 is_enabled(StoreId) ->
     persistent_term:get({reckon_db, integrity_enabled, StoreId}, false).
+
+%% @doc Public integrity advertisement for a store: whether integrity is
+%% enabled, and (when enabled) the algorithm id + key id. Never exposes the
+%% key bytes. This is the store-owned source of truth a remote gateway can
+%% dispatch for, instead of guessing from its own (empty) local state.
+-spec status(StoreId :: atom()) ->
+    #{enabled := boolean(), algo := binary(), key_id := non_neg_integer()}.
+status(StoreId) ->
+    advert(is_enabled(StoreId)).
+
+advert(true) ->
+    #{enabled => true, algo => ?INTEGRITY_ALGO, key_id => ?INTEGRITY_KEY_ID};
+advert(false) ->
+    #{enabled => false, algo => <<>>, key_id => 0}.
 
 %% @doc Remove all integrity state for a store from persistent_term.
 %%

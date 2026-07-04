@@ -5,6 +5,17 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.7.0] - 2026-07-04
+
+### Added
+
+- `reckon_db_integrity_key:status/1` — the store's public integrity
+  advertisement (`#{enabled, algo, key_id}`; never the key bytes). reckon-db
+  now owns the algorithm id + key id (previously hardcoded in the gateway), so
+  a remote gateway can dispatch for a store's integrity status via the
+  `{integrity_status, StoreId}` gateway-worker call instead of guessing from
+  its own local state.
+
 ## [5.6.1] - 2026-07-04
 
 ### Fixed

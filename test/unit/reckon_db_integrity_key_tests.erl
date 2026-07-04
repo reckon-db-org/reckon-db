@@ -37,6 +37,41 @@ disabled_load_clears_prior_state_test() ->
     cleanup(StoreId).
 
 %%====================================================================
+%% status/1 — the public advertisement (source of truth for gateways)
+%%====================================================================
+
+status_enabled_reports_algo_and_key_id_test() ->
+    StoreId = unique_store_id(),
+    EnvName = unique_env(),
+    os:putenv(binary_to_list(EnvName), base64_encode(crypto:strong_rand_bytes(32))),
+    ?assertEqual(ok, reckon_db_integrity_key:load(base_cfg(StoreId, enabled_env(EnvName)))),
+    ?assertEqual(#{enabled => true,
+                   algo    => <<"sha256-deterministic-etf-v1">>,
+                   key_id  => 1},
+                 reckon_db_integrity_key:status(StoreId)),
+    os:unsetenv(binary_to_list(EnvName)),
+    cleanup(StoreId).
+
+status_disabled_reports_off_test() ->
+    StoreId = unique_store_id(),
+    ?assertEqual(ok, reckon_db_integrity_key:load(base_cfg(StoreId, disabled))),
+    ?assertEqual(#{enabled => false, algo => <<>>, key_id => 0},
+                 reckon_db_integrity_key:status(StoreId)),
+    cleanup(StoreId).
+
+status_never_leaks_key_bytes_test() ->
+    StoreId = unique_store_id(),
+    Key = <<"SUPER-SECRET-32-byte-key-MARKER!">>,
+    32 = byte_size(Key),
+    EnvName = unique_env(),
+    os:putenv(binary_to_list(EnvName), base64_encode(Key)),
+    ?assertEqual(ok, reckon_db_integrity_key:load(base_cfg(StoreId, enabled_env(EnvName)))),
+    S = reckon_db_integrity_key:status(StoreId),
+    ?assertEqual(nomatch, binary:match(term_to_binary(S), Key)),
+    os:unsetenv(binary_to_list(EnvName)),
+    cleanup(StoreId).
+
+%%====================================================================
 %% Env-var source
 %%====================================================================
 

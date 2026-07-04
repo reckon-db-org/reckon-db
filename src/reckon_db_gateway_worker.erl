@@ -98,6 +98,9 @@ handle_call({global_event_count, _StoreId}, _From, #state{store_id = StoreId} = 
     Result = reckon_db_streams:global_event_count(StoreId),
     {reply, Result, State};
 
+handle_call({integrity_status, _StoreId}, _From, #state{store_id = StoreId} = State) ->
+    {reply, {ok, reckon_db_integrity_key:status(StoreId)}, State};
+
 %% Delete stream
 handle_call({delete_stream, _StoreId, StreamId}, _From,
             #state{store_id = StoreId} = State) ->
