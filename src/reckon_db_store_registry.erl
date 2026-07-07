@@ -179,14 +179,15 @@ handle_call({unannounce_store, StoreId}, _From,
             {reply, ok, State#{stores => remove_store_entry(Stores, StoreId, node())}}
     end;
 
-%% Handle list stores request
+%% Handle list stores request. Reports only live entries (see live_entries/1)
+%% so a stale replica for a departed node can never inflate the reported set.
 handle_call(list_stores, _From, #{stores := Stores} = State) ->
-    StoreList = [store_entry_to_map(E) || E <- Stores],
+    StoreList = [store_entry_to_map(E) || E <- live_entries(Stores)],
     {reply, {ok, StoreList}, State};
 
 %% Handle get store info request
 handle_call({get_store_info, StoreId}, _From, #{stores := Stores} = State) ->
-    case lists:keyfind(StoreId, #store_entry.store_id, Stores) of
+    case lists:keyfind(StoreId, #store_entry.store_id, live_entries(Stores)) of
         false ->
             {reply, {error, not_found}, State};
         Entry ->
@@ -195,7 +196,8 @@ handle_call({get_store_info, StoreId}, _From, #{stores := Stores} = State) ->
 
 %% Handle list stores on node request
 handle_call({list_stores_on_node, Node}, _From, #{stores := Stores} = State) ->
-    NodeStores = [store_entry_to_map(E) || E <- Stores, E#store_entry.node =:= Node],
+    NodeStores = [store_entry_to_map(E)
+                  || E <- live_entries(Stores), E#store_entry.node =:= Node],
     {reply, {ok, NodeStores}, State};
 
 %% Watcher subscribe/unsubscribe for the WatchStores RPC.
@@ -343,6 +345,19 @@ remove_store_entry(Stores, StoreId, Node) ->
         end,
         Stores
     ).
+
+%% @private Keep only entries whose node is currently reachable — a connected
+%% peer, or ourselves. A store instance is only live if its node is in the
+%% cluster; an entry for a disconnected node is stale. Such entries linger when
+%% a node departs without every registry observing the pg `leave' (a gossip
+%% race, e.g. a node removed while a peer registry was momentarily down and then
+%% re-synced the dead entry). Filtering reads against live connectivity makes the
+%% registry self-authoritative: a phantom replica can never inflate the reported
+%% node set / replica_count, regardless of how it slipped past the prune.
+-spec live_entries([store_entry()]) -> [store_entry()].
+live_entries(Stores) ->
+    Live = [node() | nodes()],
+    [E || #store_entry{node = N} = E <- Stores, lists:member(N, Live)].
 
 %% @private Convert store entry to map for external API
 -spec store_entry_to_map(store_entry()) -> map().

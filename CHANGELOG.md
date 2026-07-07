@@ -5,6 +5,26 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.9.1] - 2026-07-08
+
+### Fixed
+
+- **Store registry no longer reports phantom replicas.** `reckon_db_store_registry`
+  tracks store instances via `pg` and prunes a node's entries on the pg `leave`
+  event. If a node departed while a peer registry was momentarily down (and that
+  peer later re-synced the dead entry from another peer), the `leave` could be
+  missed and a stale `{store_id, node}` entry would linger — surfacing to the
+  gateway catalogue as an extra "replica" with an inflated `replica_count`
+  (e.g. a store showing 4 replicas / "1 ORPHAN" when its Raft quorum was a
+  correct 3). The actual cluster membership was always correct; only the
+  registry's reported set was stale.
+- `list_stores/0`, `list_stores_on_node/1`, and `get_store_info/1` now filter
+  through `live_entries/1`, which keeps only entries whose node is currently
+  connected (a live peer, or ourselves). This makes every read authoritative:
+  a phantom entry for a departed node can never be reported, regardless of how
+  it slipped past the pg-leave prune. Real replicas are always dist-connected,
+  so they are unaffected.
+
 ## [5.9.0] - 2026-07-04
 
 ### Added

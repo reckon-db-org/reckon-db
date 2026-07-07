@@ -55,7 +55,8 @@ store_registry_test_() ->
          fun test_list_stores_on_node/1,
          fun test_announce_duplicate_replaces/1,
          fun test_remote_announce/1,
-         fun test_remote_unannounce/1
+         fun test_remote_unannounce/1,
+         fun test_local_store_always_live/1
      ]}.
 
 %%====================================================================
@@ -159,43 +160,54 @@ test_announce_duplicate_replaces(_RegistryPid) ->
 %% Remote Announcement Tests (via gen_server:cast)
 %%====================================================================
 
+%% A remote announcement is recorded, but list_stores only surfaces entries
+%% whose node is currently connected (live_entries/1). 'remote@host' is a
+%% disconnected fake node, so it is filtered — this is the phantom guard: a
+%% stale entry for a departed node can never inflate the reported replica set.
+%% (Real peers are always dist-connected when they announce; multi-node
+%% visibility is covered by reckon_db_pg_scope_SUITE.)
 test_remote_announce(_RegistryPid) ->
     fun() ->
         Config = test_store_config(remote_store_1),
-        RemoteNode = 'remote@host',
-
-        %% Simulate receiving a remote announcement
         gen_server:cast(reckon_db_store_registry,
-                        {remote_announce, remote_store_1, Config, RemoteNode}),
-
-        %% Give it a moment to process
+                        {remote_announce, remote_store_1, Config, 'remote@host'}),
         timer:sleep(50),
 
+        %% Not a connected node -> not surfaced.
         {ok, Stores} = reckon_db_store_registry:list_stores(),
-        ?assertEqual(1, length(Stores)),
-
-        {ok, Info} = reckon_db_store_registry:get_store_info(remote_store_1),
-        ?assertEqual(RemoteNode, maps:get(node, Info))
+        ?assertEqual([], Stores),
+        ?assertEqual({error, not_found},
+                     reckon_db_store_registry:get_store_info(remote_store_1))
     end.
 
+%% Unannouncing a remote entry must be a clean no-op on the reported set (the
+%% disconnected fake node is filtered either way) and must not crash.
 test_remote_unannounce(_RegistryPid) ->
     fun() ->
         Config = test_store_config(remote_store_2),
         RemoteNode = 'remote2@host',
 
-        %% Add a remote store first
         gen_server:cast(reckon_db_store_registry,
                         {remote_announce, remote_store_2, Config, RemoteNode}),
         timer:sleep(50),
 
-        {ok, [_]} = reckon_db_store_registry:list_stores(),
-
-        %% Now unannounce it
         gen_server:cast(reckon_db_store_registry,
                         {remote_unannounce, remote_store_2, RemoteNode}),
         timer:sleep(50),
 
         {ok, []} = reckon_db_store_registry:list_stores()
+    end.
+
+%% A local store (node() is always live) is always surfaced — the liveness
+%% filter must never drop the current node's own entries.
+test_local_store_always_live(_RegistryPid) ->
+    fun() ->
+        Config = test_store_config(local_live_store),
+        ok = reckon_db_store_registry:announce_store(local_live_store, Config),
+        {ok, Stores} = reckon_db_store_registry:list_stores(),
+        ?assertEqual([node()], [maps:get(node, S) || S <- Stores]),
+        {ok, OnNode} = reckon_db_store_registry:list_stores_on_node(node()),
+        ?assertEqual(1, length(OnNode))
     end.
 
 %%====================================================================
