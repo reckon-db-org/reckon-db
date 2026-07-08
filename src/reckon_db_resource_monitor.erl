@@ -176,29 +176,73 @@ emit_cpu(#{busy_percent := Busy, load1 := L1, load5 := L5,
 
 %% --- Disk ---
 
+%% Disk usage per mount. Primary source is `df' — it works in containers, where
+%% disksup returns [] because it skips overlay/virtual filesystems (the only
+%% root a container overlay has). Falls back to disksup on the rare host without
+%% a `df' (df is POSIX and present on essentially every Unix).
 sample_disk(DataDir) ->
+    case parse_df(os:cmd("df -kP 2>/dev/null")) of
+        []   -> disksup_disk(DataDir);
+        Rows -> flag_data_dir(DataDir, Rows)
+    end.
+
+%% Bare-metal fallback: disksup gives {MountId, TotalKb, UsedPct}.
+disksup_disk(DataDir) ->
     case (catch disksup:get_disk_data()) of
         Data when is_list(Data), Data =/= [] ->
-            Mount = data_dir_mount(DataDir, Data),
-            [disk_entry(Id, TotalKb, UsedPct, Id =:= Mount)
-             || {Id, TotalKb, UsedPct} <- Data, is_integer(TotalKb)];
+            Rows = [#{mount => to_bin(Id), total_kb => T, used_percent => U,
+                      available_kb => round(T * (100 - U) / 100)}
+                    || {Id, T, U} <- Data, is_integer(T)],
+            flag_data_dir(DataDir, Rows);
         _ -> []
     end.
 
-disk_entry(Id, TotalKb, UsedPct, IsDataDir) ->
-    Avail = round(TotalKb * (100 - UsedPct) / 100),
-    #{mount => unicode:characters_to_binary(Id),
-      total_kb => TotalKb, used_percent => UsedPct,
-      available_kb => Avail, data_dir_mount => IsDataDir}.
+%% Parse `df -kP' (POSIX format = 6 columns, one line per mount, no wrapping):
+%% Filesystem 1024-blocks Used Available Capacity Mounted-on
+parse_df(Output) ->
+    case string:split(Output, "\n", all) of
+        [_Header | Lines] -> lists:filtermap(fun parse_df_line/1, Lines);
+        _ -> []
+    end.
 
-%% The store's mount = the longest disksup mount id that prefixes the data dir.
-data_dir_mount(undefined, _Data) -> undefined;
-data_dir_mount(DataDir, Data) ->
-    Prefixes = [Id || {Id, _, _} <- Data, lists:prefix(Id, DataDir)],
+parse_df_line(Line) ->
+    case string:lexemes(Line, " ") of
+        [_Fs, Blocks, _Used, Avail, Cap | MountParts] when MountParts =/= [] ->
+            Mount = lists:flatten(lists:join(" ", MountParts)),
+            case {to_int(Blocks), to_int(Avail),
+                  to_int(string:trim(Cap, trailing, "%"))} of
+                {T, A, P} when is_integer(T), is_integer(A), is_integer(P) ->
+                    {true, #{mount => list_to_binary(Mount), total_kb => T,
+                             available_kb => A, used_percent => P}};
+                _ -> false
+            end;
+        _ -> false
+    end.
+
+%% Flag the row whose mount is the longest prefix of the store's data dir.
+flag_data_dir(DataDir, Rows) ->
+    Paths  = [binary_to_list(maps:get(mount, R)) || R <- Rows],
+    DDBin  = case data_dir_mount(DataDir, Paths) of
+                 undefined -> undefined;
+                 Best      -> list_to_binary(Best)
+             end,
+    [R#{data_dir_mount => maps:get(mount, R) =:= DDBin} || R <- Rows].
+
+data_dir_mount(undefined, _Paths) -> undefined;
+data_dir_mount(DataDir, Paths) ->
+    Prefixes = [P || P <- Paths, lists:prefix(P, DataDir)],
     case lists:sort(fun(A, B) -> length(A) >= length(B) end, Prefixes) of
         [Best | _] -> Best;
         []         -> undefined
     end.
+
+to_int(S) ->
+    case string:to_integer(S) of
+        {N, _} when is_integer(N) -> N;
+        _ -> undefined
+    end.
+
+to_bin(X) -> unicode:characters_to_binary(X).
 
 emit_disk(Entries) ->
     lists:foreach(
