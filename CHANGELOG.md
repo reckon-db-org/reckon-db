@@ -5,6 +5,16 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.10.4] - 2026-07-08
+
+### Fixed
+
+- Resolve the data dir from the store **registry** (the store actually running
+  on this node), not the app-env `stores` list. Consumers commonly start stores
+  dynamically (e.g. via `reckon_db_sup:start_store/1`), leaving the env empty —
+  so 5.10.3's data-dir flagging never fired on those deployments. Now the
+  event-store disk is correctly identified and flagged `data_dir_mount`.
+
 ## [5.10.3] - 2026-07-08
 
 ### Fixed

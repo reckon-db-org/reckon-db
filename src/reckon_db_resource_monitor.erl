@@ -123,13 +123,20 @@ resolve_data_dir(Config) ->
         Dir       -> Dir
     end.
 
-%% @private Best-effort: the first configured store's data_dir, so we can flag
-%% which mount actually holds event data.
+%% @private The local node's store data dir, so we can flag which mount holds
+%% event data. Read from the store REGISTRY (the running store on this node),
+%% not the app env — consumers commonly start stores dynamically, leaving the
+%% `stores' env empty. Resolved lazily (see do_sample), so it's found once the
+%% store has registered.
 data_dir_from_stores() ->
-    try reckon_db_config:get_all_store_configs() of
-        [#store_config{data_dir = D} | _] when is_list(D), D =/= [] -> D;
-        _ -> undefined
+    try reckon_db_store_registry:list_stores_on_node(node()) of
+        {ok, [S | _]} -> normalize_dir(maps:get(data_dir, S, undefined));
+        _             -> undefined
     catch _:_ -> undefined end.
+
+normalize_dir(D) when is_list(D), D =/= []     -> D;
+normalize_dir(D) when is_binary(D), D =/= <<>> -> binary_to_list(D);
+normalize_dir(_)                               -> undefined.
 
 -spec do_sample(#state{}) -> #state{}.
 do_sample(#state{data_dir = DD0} = State) ->
