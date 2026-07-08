@@ -207,17 +207,30 @@ parse_df(Output) ->
 
 parse_df_line(Line) ->
     case string:lexemes(Line, " ") of
-        [_Fs, Blocks, _Used, Avail, Cap | MountParts] when MountParts =/= [] ->
+        [Fs, Blocks, _Used, Avail, Cap | MountParts] when MountParts =/= [] ->
             Mount = lists:flatten(lists:join(" ", MountParts)),
-            case {to_int(Blocks), to_int(Avail),
-                  to_int(string:trim(Cap, trailing, "%"))} of
-                {T, A, P} when is_integer(T), is_integer(A), is_integer(P) ->
+            case real_fs(Fs) andalso parse_cols(Blocks, Avail, Cap) of
+                {T, A, P} ->
                     {true, #{mount => list_to_binary(Mount), total_kb => T,
                              available_kb => A, used_percent => P}};
                 _ -> false
             end;
         _ -> false
     end.
+
+parse_cols(Blocks, Avail, Cap) ->
+    case {to_int(Blocks), to_int(Avail), to_int(string:trim(Cap, trailing, "%"))} of
+        {T, A, P} when is_integer(T), T > 0, is_integer(A), is_integer(P) -> {T, A, P};
+        _ -> false
+    end.
+
+%% Keep only real filesystems, dropping the pseudo mounts df lists inside a
+%% container (tmpfs, proc, sysfs, cgroup, mqueue, shm, devtmpfs, none, ...).
+%% A real filesystem's device is either a path (`/dev/sda1', `/dev/mapper/...')
+%% or the container root `overlay'; pseudo devices are bare names.
+real_fs("overlay") -> true;
+real_fs([$/ | _])  -> true;
+real_fs(_)         -> false.
 
 %% Flag the row whose mount is the longest prefix of the store's data dir.
 flag_data_dir(DataDir, Rows) ->
