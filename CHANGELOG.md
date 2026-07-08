@@ -5,6 +5,28 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.0] - 2026-07-08
+
+### Fixed
+
+- **Restarting cluster members now rejoin natively instead of re-forming (no
+  more roll-time split-brain).** The coordinator re-ran its form-or-join
+  election on *every* boot. When a whole store rolled at once (e.g. a watchtower
+  image update restarting all replicas together), none momentarily saw a leader,
+  so each re-elected — the lowest as a standalone 1-node cluster, the others via
+  `khepri_cluster:join`, which RESETS local data — racing into split singletons
+  or wedged replicas. `khepri:start` already restarts each member with its
+  PERSISTED Ra config, so the members rejoin their existing cluster natively
+  (the behaviour ex-esdb had via libcluster + Ra's persisted membership).
+
+  `do_join_cluster/1` now short-circuits when the node already holds a
+  persisted multi-member config (`already_clustered_locally/1` — checks the
+  CONFIGURED member set, which survives a restart even before a leader is
+  re-elected, unlike `is_multi_member/1`). Only a genuinely fresh replica
+  (single-member config) runs the form/join election. This eliminates the
+  boot-race at its source; the seed-gate/converge/self-healer remain only as
+  safety nets for genuine orphans and divergence.
+
 ## [5.10.4] - 2026-07-08
 
 ### Fixed

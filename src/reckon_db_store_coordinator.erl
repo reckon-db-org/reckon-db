@@ -28,7 +28,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
--export([elect_coordinator/2]).
+-export([elect_coordinator/2, has_persisted_cluster/1]).
 -endif.
 
 -define(JOIN_TIMEOUT, 30000).
@@ -205,9 +205,45 @@ terminate(Reason, #state{store_id = StoreId}) ->
 %% Internal functions
 %%====================================================================
 
-%% @private Join cluster via connected nodes
+%% @private Join cluster via connected nodes.
+%%
+%% First guard: if this node ALREADY holds a persisted multi-member Ra config,
+%% it was a member before this restart — `khepri:start' has restarted its server
+%% and it rejoins the existing cluster natively (the ex-esdb / native-Ra
+%% behaviour), so there is nothing to do here. Re-running the form/join election
+%% would `khepri_cluster:join' (which RESETS local data); when the whole cluster
+%% rolls at once and no leader is momentarily visible, that split it into
+%% singletons. Trust the persisted membership + native rejoin; the self-healer
+%% covers genuine orphans/divergence. Only a fresh replica (single-member config)
+%% actually forms or joins.
 -spec do_join_cluster(atom()) -> ok | coordinator | no_nodes | waiting | failed.
 do_join_cluster(StoreId) ->
+    case already_clustered_locally(StoreId) of
+        true ->
+            logger:info("Already a configured cluster member; relying on native "
+                        "Ra rejoin, skipping re-formation (store: ~p)", [StoreId]),
+            ok;
+        false ->
+            do_form_or_join(StoreId)
+    end.
+
+%% @private Persisted-membership guard. Distinct from is_multi_member/1, which
+%% checks CURRENT health (a live leader) and is false mid-roll: this checks the
+%% CONFIGURED member set, which survives a restart intact even before a leader
+%% is re-elected. `khepri_cluster:members' returns the configured set.
+already_clustered_locally(StoreId) ->
+    try khepri_cluster:members(StoreId) of
+        {ok, M}           -> has_persisted_cluster(M);
+        M when is_list(M) -> has_persisted_cluster(M);
+        _                 -> false
+    catch _:_ -> false end.
+
+%% @private True when the configured member set names more than this node.
+-spec has_persisted_cluster(term()) -> boolean().
+has_persisted_cluster(Members) when is_list(Members) -> length(Members) > 1;
+has_persisted_cluster(_) -> false.
+
+do_form_or_join(StoreId) ->
     ConnectedNodes = nodes(),
     case ConnectedNodes of
         [] ->

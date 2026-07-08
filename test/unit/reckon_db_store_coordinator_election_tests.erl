@@ -45,3 +45,16 @@ excludes_non_store_runner_test() ->
                  ?M:elect_coordinator('parksim_leuven@10', LeuvenRunners)),
     ?assertEqual({join, 'parksim_leuven@10'},
                  ?M:elect_coordinator('parksim_leuven@11', LeuvenRunners)).
+
+%% Persisted-membership guard: a restarting member whose configured set names
+%% >1 member skips re-formation (relies on native Ra rejoin), preventing the
+%% roll-time split. A fresh replica (empty/single-member config) does not.
+persisted_multi_member_skips_reformation_test() ->
+    Three = [{s, 'a@h'}, {s, 'b@h'}, {s, 'c@h'}],
+    ?assert(?M:has_persisted_cluster(Three)),
+    ?assert(?M:has_persisted_cluster([{s, 'a@h'}, {s, 'b@h'}])).
+
+fresh_or_single_member_reforms_test() ->
+    ?assertNot(?M:has_persisted_cluster([{s, 'a@h'}])),  %% single-member config
+    ?assertNot(?M:has_persisted_cluster([])),            %% no config
+    ?assertNot(?M:has_persisted_cluster(not_a_list)).    %% unreadable
