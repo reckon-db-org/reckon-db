@@ -132,12 +132,16 @@ data_dir_from_stores() ->
     catch _:_ -> undefined end.
 
 -spec do_sample(#state{}) -> #state{}.
-do_sample(#state{data_dir = DataDir} = State) ->
+do_sample(#state{data_dir = DD0} = State) ->
+    %% Resolve the data dir lazily: at init the consuming app may not have
+    %% configured its stores yet, so keep retrying until we can identify the
+    %% mount that actually holds event data.
+    DataDir = case DD0 of undefined -> resolve_data_dir(#{}); _ -> DD0 end,
     Cpu  = sample_cpu(),
     Disk = sample_disk(DataDir),
     emit_cpu(Cpu),
     emit_disk(Disk),
-    State#state{cpu = Cpu, disk = Disk, last_sample = now_ms()}.
+    State#state{data_dir = DataDir, cpu = Cpu, disk = Disk, last_sample = now_ms()}.
 
 %% --- CPU ---
 
@@ -181,19 +185,19 @@ emit_cpu(#{busy_percent := Busy, load1 := L1, load5 := L5,
 %% root a container overlay has). Falls back to disksup on the rare host without
 %% a `df' (df is POSIX and present on essentially every Unix).
 sample_disk(DataDir) ->
-    case parse_df(os:cmd("df -kP 2>/dev/null")) of
-        []   -> disksup_disk(DataDir);
-        Rows -> flag_data_dir(DataDir, Rows)
-    end.
+    Rows = case parse_df(os:cmd("df -kP 2>/dev/null")) of
+               []   -> disksup_rows();
+               Real -> Real
+           end,
+    with_data_dir(DataDir, Rows).
 
 %% Bare-metal fallback: disksup gives {MountId, TotalKb, UsedPct}.
-disksup_disk(DataDir) ->
+disksup_rows() ->
     case (catch disksup:get_disk_data()) of
         Data when is_list(Data), Data =/= [] ->
-            Rows = [#{mount => to_bin(Id), total_kb => T, used_percent => U,
-                      available_kb => round(T * (100 - U) / 100)}
-                    || {Id, T, U} <- Data, is_integer(T)],
-            flag_data_dir(DataDir, Rows);
+            [#{mount => to_bin(Id), total_kb => T, used_percent => U,
+               available_kb => round(T * (100 - U) / 100)}
+             || {Id, T, U} <- Data, is_integer(T), T > 0];
         _ -> []
     end.
 
@@ -232,21 +236,33 @@ real_fs("overlay") -> true;
 real_fs([$/ | _])  -> true;
 real_fs(_)         -> false.
 
-%% Flag the row whose mount is the longest prefix of the store's data dir.
-flag_data_dir(DataDir, Rows) ->
-    Paths  = [binary_to_list(maps:get(mount, R)) || R <- Rows],
-    DDBin  = case data_dir_mount(DataDir, Paths) of
-                 undefined -> undefined;
-                 Best      -> list_to_binary(Best)
-             end,
-    [R#{data_dir_mount => maps:get(mount, R) =:= DDBin} || R <- Rows].
+%% Add the data-dir mount as a distinct, flagged entry. Prefix-matching the
+%% general `df' mounts is unreliable inside containers (busybox mislabels bind
+%% mounts), so we `df' the data dir directly for its true usage, label it with
+%% the data dir path, and drop any general row that is the SAME filesystem
+%% (same total + available) to avoid a duplicate under the garbled label.
+with_data_dir(undefined, Rows) ->
+    [R#{data_dir_mount => false} || R <- Rows];
+with_data_dir(DataDir, Rows) ->
+    case df_path(DataDir) of
+        undefined ->
+            [R#{data_dir_mount => false} || R <- Rows];
+        DEntry ->
+            DT = maps:get(total_kb, DEntry),
+            DA = maps:get(available_kb, DEntry),
+            Same = fun(R) -> maps:get(total_kb, R) =:= DT
+                             andalso maps:get(available_kb, R) =:= DA end,
+            Others = [R#{data_dir_mount => false} || R <- Rows, not Same(R)],
+            [DEntry#{data_dir_mount => true} | Others]
+    end.
 
-data_dir_mount(undefined, _Paths) -> undefined;
-data_dir_mount(DataDir, Paths) ->
-    Prefixes = [P || P <- Paths, lists:prefix(P, DataDir)],
-    case lists:sort(fun(A, B) -> length(A) >= length(B) end, Prefixes) of
-        [Best | _] -> Best;
-        []         -> undefined
+%% `df' one path -> the filesystem containing it. The usage IS the data disk's;
+%% label it with the data dir path (df's mount-point column is unreliable for
+%% bind mounts in containers).
+df_path(DataDir) ->
+    case parse_df(os:cmd("df -kP '" ++ DataDir ++ "' 2>/dev/null")) of
+        [Row | _] -> Row#{mount => list_to_binary(DataDir)};
+        _         -> undefined
     end.
 
 to_int(S) ->
