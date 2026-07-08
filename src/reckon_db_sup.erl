@@ -96,6 +96,9 @@ init([]) ->
         modules => [reckon_db_store_registry]
     },
 
+    %% Node-wide CPU + disk sampler (opt-out via {resource_monitoring, false}).
+    ResourceChildren = resource_monitor_children(),
+
     %% Get configured stores from application environment
     StoreConfigs = reckon_db_config:get_all_store_configs(),
 
@@ -107,10 +110,25 @@ init([]) ->
         StoreConfigs
     ),
 
-    %% pg scope first, then registry, then stores
-    Children = [PgScopeChild, RegistryChild | StoreChildren],
+    %% pg scope first, then registry, then the resource monitor, then stores
+    Children = [PgScopeChild, RegistryChild] ++ ResourceChildren ++ StoreChildren,
 
     {ok, {SupFlags, Children}}.
+
+%% @private CPU/disk monitor child spec, unless disabled in config.
+-spec resource_monitor_children() -> [supervisor:child_spec()].
+resource_monitor_children() ->
+    case application:get_env(reckon_db, resource_monitoring, true) of
+        false -> [];
+        _ ->
+            Interval = application:get_env(reckon_db, resource_sample_interval, 10000),
+            [#{id => reckon_db_resource_monitor,
+               start => {reckon_db_resource_monitor, start_link, [#{interval => Interval}]},
+               restart => permanent,
+               shutdown => 5000,
+               type => worker,
+               modules => [reckon_db_resource_monitor]}]
+    end.
 
 %%====================================================================
 %% Internal functions

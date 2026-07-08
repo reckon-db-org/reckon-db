@@ -229,6 +229,24 @@
 -define(MEMORY_PRESSURE_CHANGED, [reckon_db, memory, pressure_changed]).
 
 %%====================================================================
+%% Resource Sampling Telemetry Events (CPU + disk)
+%%====================================================================
+%% Emitted by reckon_db_resource_monitor on each sample tick (a gauge,
+%% unlike the level-change memory event). Requires os_mon (cpu_sup/disksup);
+%% when unavailable the monitor degrades and emits nothing.
+
+%% Emitted on each CPU sample.
+%% Measurements: busy_percent (0-100), load1, load5, load15 (normalised /cores)
+%% Metadata: cores
+-define(CPU_SAMPLE, [reckon_db, cpu, sample]).
+
+%% Emitted on each disk sample, once per monitored mount (the store's data-dir
+%% mount, plus any others disksup reports).
+%% Measurements: used_percent (0-100), total_kb, available_kb
+%% Metadata: mount, data_dir_mount (boolean)
+-define(DISK_SAMPLE, [reckon_db, disk, sample]).
+
+%%====================================================================
 %% Consistency Checker Telemetry Events
 %%====================================================================
 

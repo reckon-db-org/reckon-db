@@ -5,6 +5,29 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.10.0] - 2026-07-08
+
+### Added
+
+- **CPU + disk sampling telemetry.** New `reckon_db_resource_monitor` — a
+  node-wide singleton that samples host CPU and disk usage on a fixed interval
+  (default 10s) and emits telemetry gauges:
+  - `[reckon_db, cpu, sample]` — measurements `busy_percent`, `load1`, `load5`,
+    `load15`; metadata `cores`.
+  - `[reckon_db, disk, sample]` — one per mount; measurements `used_percent`,
+    `total_kb`, `available_kb`; metadata `mount`, `data_dir_mount` (flags the
+    mount that actually holds the store's data).
+  Unlike `[reckon_db, memory, pressure_changed]` (fires on level change only),
+  these emit a fresh sample every tick so consumers can graph a live series.
+  Latest snapshot is queryable via `reckon_db_resource_monitor:get_stats/0` and,
+  from the gateway, `reckon_db_gateway_worker`'s `get_resource_stats` op.
+- `os_mon` is now an application dependency (needed for `cpu_sup`/`disksup`;
+  `memsup` was already used by `reckon_db_memory`). The monitor degrades
+  gracefully if os_mon can't start (`get_stats` reports `os_mon => false`, no
+  CPU/disk telemetry — there is no pure-BEAM fallback for host CPU%/disk usage).
+- Config: `{resource_monitoring, true|false}` (default true) and
+  `{resource_sample_interval, Ms}` (default 10000) in the `reckon_db` app env.
+
 ## [5.9.1] - 2026-07-08
 
 ### Fixed

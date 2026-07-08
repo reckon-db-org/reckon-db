@@ -368,6 +368,15 @@ handle_call({get_memory_stats, _StoreId}, _From, State) ->
     end,
     {reply, {ok, Result}, State};
 
+%% Get CPU + disk resource stats (node-wide; see reckon_db_resource_monitor)
+handle_call({get_resource_stats, _StoreId}, _From, State) ->
+    Result = try
+        reckon_db_resource_monitor:get_stats()
+    catch
+        exit:{noproc, _} -> #{os_mon => false, cpu => undefined, disk => []}
+    end,
+    {reply, {ok, Result}, State};
+
 %%====================================================================
 %% Link Operations (handle_call)
 %%====================================================================

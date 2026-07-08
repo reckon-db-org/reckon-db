@@ -6,7 +6,7 @@
                   "hashing, compression, aggregation, filter matching, and graph "
                   "algorithms — with pure-Erlang fallbacks when the toolchain "
                   "isn't available."},
-    {vsn, "5.9.1"},
+    {vsn, "5.10.0"},
     {registered, []},
     {mod, {reckon_db_app, []}},
     {applications, [
@@ -14,6 +14,7 @@
         stdlib,
         crypto,
         sasl,
+        os_mon,
         khepri,
         ra,
         telemetry,
@@ -24,7 +25,11 @@
         {default_timeout, 5000},
         {writer_pool_size, 10},
         {reader_pool_size, 10},
-        {telemetry_handlers, [logger]}
+        {telemetry_handlers, [logger]},
+        %% Node-wide CPU + disk sampling (reckon_db_resource_monitor).
+        %% Set to false to disable (e.g. embedded/test hosts without os_mon).
+        {resource_monitoring, true},
+        {resource_sample_interval, 10000}
     ]},
     {modules, []},
     {licenses, ["Apache-2.0"]},
