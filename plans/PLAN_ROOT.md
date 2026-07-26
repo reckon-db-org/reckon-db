@@ -46,4 +46,4 @@ Plans owned by other repos in the ReckonDB ecosystem, referenced here for visibi
 
 ## Master cross-ecosystem index
 
-Plans relevant to downstream Macula and Hecate consumers should also be referenced from `/home/rl/work/codeberg.org/macula-internal/macula-architecture/plans/PLAN_MACULA_ROOT.md` so cross-repo work has a single point of visibility.
+Plans relevant to downstream Macula and Hecate consumers should also be referenced from `/home/rl/work/github.com/macula-io/macula-architecture/plans/PLAN_MACULA_ROOT.md` so cross-repo work has a single point of visibility.

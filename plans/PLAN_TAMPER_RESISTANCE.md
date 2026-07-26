@@ -629,4 +629,4 @@ For a passion-project cadence (evenings/weekends), realistic shipping window is 
 
 ## Cross-repo plan visibility
 
-This plan should be linked from the master plan index at `/home/rl/work/codeberg.org/macula-internal/macula-architecture/plans/PLAN_MACULA_ROOT.md` so downstream Macula and Hecate work is aware of the upcoming reckon-db 2.1.0 release.
+This plan should be linked from the master plan index at `/home/rl/work/github.com/macula-io/macula-architecture/plans/PLAN_MACULA_ROOT.md` so downstream Macula and Hecate work is aware of the upcoming reckon-db 2.1.0 release.

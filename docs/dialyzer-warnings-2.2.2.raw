@@ -1,11 +1,11 @@
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_app.erl:24:2: The specification for reckon_db_app:start/0 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_app.erl:24:2: The specification for reckon_db_app:start/0 states that the function might also return 
           {'ok', pid()} but the inferred return is 
           {'error', {atom(), _}} | {'ok', [atom()]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_app.erl:87:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_app.erl:87:5: Expression produces a value of type 
           'ok' | {'error', 'already_exists'}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_archive_backend.erl:67:2: Type specification reckon_db_archive_backend:parse_key
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_archive_backend.erl:67:2: Type specification reckon_db_archive_backend:parse_key
           (binary()) -> {'ok', map()} | {'error', 'invalid_key'} is a supertype of the success typing: reckon_db_archive_backend:parse_key
           (binary()) ->
              {'error', 'invalid_key'} |
@@ -15,31 +15,31 @@
                 'stream_id' := binary(),
                 'to_version' := integer()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_archive_file.erl:44:2: Type specification reckon_db_archive_file:init
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_archive_file.erl:44:2: Type specification reckon_db_archive_file:init
           (map()) -> {'ok', #state{}} | {'error', term()} is a supertype of the success typing: reckon_db_archive_file:init
           (map()) ->
              {'error', {'failed_to_create_dir', atom()}} |
              {'ok', #state{base_dir :: string()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_archive_file.erl:118:2: Type specification reckon_db_archive_file:delete
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_archive_file.erl:118:2: Type specification reckon_db_archive_file:delete
           (#state{}, binary()) -> {'ok', #state{}} | {'error', term()} is a supertype of the success typing: reckon_db_archive_file:delete
           (#state{base_dir :: string()}, binary()) ->
              {'error', {'delete_failed', atom()}} |
              {'ok', #state{base_dir :: string()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_archive_file.erl:147:2: Type specification reckon_db_archive_file:path_to_key
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_archive_file.erl:147:2: Type specification reckon_db_archive_file:path_to_key
           (atom(), binary(), string()) -> binary() is a supertype of the success typing: reckon_db_archive_file:path_to_key
           (atom(), binary(), [byte()]) -> binary()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:149:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:149:9: The pattern 
           'infinity' can never match the type 
           non_neg_integer()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:159:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:159:9: The pattern 
           'infinity' can never match the type 
           non_neg_integer()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:201:1: Matching of pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:201:1: Matching of pattern 
           {'bp_queue', _, _, _, _, _, 'infinity', _, _, _} tagged with a record name violates the declared type of 
           #bp_queue{queue :: queue:queue(_),
                     max_size :: pos_integer(),
@@ -53,11 +53,11 @@
                     store_id :: atom(),
                     subscription_key :: binary()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:207:2: The specification for reckon_db_backpressure:get_demand/1 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_backpressure.erl:207:2: The specification for reckon_db_backpressure:get_demand/1 states that the function might also return 
           'infinity' but the inferred return is 
           non_neg_integer()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:108:2: Type specification reckon_db_capability_verifier:check_permission
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:108:2: Type specification reckon_db_capability_verifier:check_permission
           (capability(), binary(), binary()) ->
              'ok' | {'error', capability_error()} is a supertype of the success typing: reckon_db_capability_verifier:check_permission
           (#capability{alg :: binary(),
@@ -76,11 +76,11 @@
           binary()) ->
              'ok' | {'error', {'insufficient_permissions', binary()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:125:2: The specification for reckon_db_capability_verifier:is_revoked/1 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:125:2: The specification for reckon_db_capability_verifier:is_revoked/1 states that the function might also return 
           'true' but the inferred return is 
           'false'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:197:2: Type specification reckon_db_capability_verifier:verify_signature
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:197:2: Type specification reckon_db_capability_verifier:verify_signature
           (capability()) -> 'ok' | {'error', capability_error()} is a supertype of the success typing: reckon_db_capability_verifier:verify_signature
           (#capability{alg :: binary(),
                       typ :: binary(),
@@ -96,7 +96,7 @@
                       sig :: 'undefined' | binary()}) ->
              'ok' | {'error', {'invalid_signature', binary()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:243:2: The specification for reckon_db_capability_verifier:maybe_check_revocation/2 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:243:2: The specification for reckon_db_capability_verifier:maybe_check_revocation/2 states that the function might also return 
           {'error',
            {'expired' | 'insufficient_permissions' | 'invalid_action' |
             'invalid_delegation' | 'invalid_resource' |
@@ -105,11 +105,11 @@
             _}} but the inferred return is 
           'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:251:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_capability_verifier.erl:251:9: The pattern 
           'true' can never match the type 
           'false'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_causation.erl:378:2: Type specification reckon_db_causation:emit_telemetry
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_causation.erl:378:2: Type specification reckon_db_causation:emit_telemetry
           (atom(), binary(), atom(), integer(), term()) -> 'ok' is a supertype of the success typing: reckon_db_causation:emit_telemetry
           (atom(),
           binary(),
@@ -135,7 +135,7 @@
                   signature :: 'undefined' | binary()}}) ->
              'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:38:2: Type specification reckon_db_cluster:health_check
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:38:2: Type specification reckon_db_cluster:health_check
           (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_cluster:health_check
           (atom()) ->
              {'error', _} |
@@ -149,7 +149,7 @@
                 'status' := 'degraded' | 'healthy' | 'no_quorum',
                 'total_nodes' := non_neg_integer()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:60:2: Type specification reckon_db_cluster:verify_consistency
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:60:2: Type specification reckon_db_cluster:verify_consistency
           (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_cluster:verify_consistency
           (atom()) ->
              {'error', _} |
@@ -206,7 +206,7 @@
                 'required_quorum' => pos_integer(),
                 'total_nodes' => non_neg_integer()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:84:2: Type specification reckon_db_cluster:verify_membership
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:84:2: Type specification reckon_db_cluster:verify_membership
           (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_cluster:verify_membership
           (atom()) ->
              {'error', _} |
@@ -228,7 +228,7 @@
                 'terms_consistent' => boolean(),
                 'views' => map()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:93:2: Type specification reckon_db_cluster:check_log_consistency
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_cluster.erl:93:2: Type specification reckon_db_cluster:check_log_consistency
           (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_cluster:check_log_consistency
           (atom()) ->
              {'error', _} |
@@ -250,7 +250,7 @@
                 'terms_consistent' => boolean(),
                 'views' => map()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:114:2: Type specification reckon_db_consistency_checker:verify_membership_consensus
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:114:2: Type specification reckon_db_consistency_checker:verify_membership_consensus
           (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_consistency_checker:verify_membership_consensus
           (atom()) ->
              {'error', _} |
@@ -264,7 +264,7 @@
                 'message' => <<_:144>>,
                 'views' => map()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:126:2: Type specification reckon_db_consistency_checker:verify_leader_consensus
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:126:2: Type specification reckon_db_consistency_checker:verify_leader_consensus
           (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_consistency_checker:verify_leader_consensus
           (atom()) ->
              {'error', _} |
@@ -276,7 +276,7 @@
                 'leaders_reported' => [any()],
                 'views' => map()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:141:2: Type specification reckon_db_consistency_checker:verify_raft_consistency
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:141:2: Type specification reckon_db_consistency_checker:verify_raft_consistency
           (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_consistency_checker:verify_raft_consistency
           (atom()) ->
              {'error', _} |
@@ -291,7 +291,7 @@
                 'terms' => [any()],
                 'terms_consistent' => boolean()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:156:2: Type specification reckon_db_consistency_checker:get_quorum_status
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:156:2: Type specification reckon_db_consistency_checker:get_quorum_status
           (atom()) -> {'ok', map()} | {'error', term()} is a supertype of the success typing: reckon_db_consistency_checker:get_quorum_status
           (atom()) ->
              {'error', _} |
@@ -303,10 +303,10 @@
                 'required_quorum' := pos_integer(),
                 'total_nodes' := non_neg_integer()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:213:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:213:5: Expression produces a value of type 
           'ok' | reference(), but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:338:2: Type specification reckon_db_consistency_checker:determine_overall_status
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:338:2: Type specification reckon_db_consistency_checker:determine_overall_status
           (#{atom() => check_detail()}) -> consistency_status() is a supertype of the success typing: reckon_db_consistency_checker:determine_overall_status
           (#{'leader' :=
                 #{'data' := map(),
@@ -326,7 +326,7 @@
                   'status' := 'error' | 'ok' | 'warning'}}) ->
              'degraded' | 'healthy' | 'no_quorum' | 'split_brain'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:382:2: Type specification reckon_db_consistency_checker:analyze_membership_consensus
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:382:2: Type specification reckon_db_consistency_checker:analyze_membership_consensus
           (#{node() => term()}, [term()]) -> {'ok', map()} is a supertype of the success typing: reckon_db_consistency_checker:analyze_membership_consensus
           (#{atom() => {'error', _} | {'ok', [any()]}},
           [{atom(), atom()}, ...]) ->
@@ -340,7 +340,7 @@
                 'message' => <<_:144>>,
                 'views' => map()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:440:2: Type specification reckon_db_consistency_checker:analyze_leader_consensus
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:440:2: Type specification reckon_db_consistency_checker:analyze_leader_consensus
           (#{node() => term()}) -> {'ok', map()} is a supertype of the success typing: reckon_db_consistency_checker:analyze_leader_consensus
           (#{atom() => _}) ->
              {'ok',
@@ -351,7 +351,7 @@
                 'leaders_reported' => [any()],
                 'views' => map()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:494:13: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:494:13: The pattern 
           #{'commit_index' := CommitIdx,
             'current_term' := Term,
             'last_applied' := LastApplied,
@@ -360,7 +360,7 @@
           {'timeout', {atom(), atom()}} |
           {'ok', map(), {atom(), atom()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:511:2: Type specification reckon_db_consistency_checker:analyze_raft_consistency
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:511:2: Type specification reckon_db_consistency_checker:analyze_raft_consistency
           (#{node() => term()}, term()) -> {'ok', map()} is a supertype of the success typing: reckon_db_consistency_checker:analyze_raft_consistency
           (#{atom() => _}, {atom(), atom()}) ->
              {'ok',
@@ -374,11 +374,11 @@
                 'terms' => [any()],
                 'terms_consistent' => boolean()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:547:2: Type specification reckon_db_consistency_checker:count_available_nodes
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:547:2: Type specification reckon_db_consistency_checker:count_available_nodes
           (atom(), [term()]) -> non_neg_integer() is a supertype of the success typing: reckon_db_consistency_checker:count_available_nodes
           (atom(), [{atom(), atom()}, ...]) -> non_neg_integer()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:592:2: Type specification reckon_db_consistency_checker:notify_callbacks
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_consistency_checker.erl:592:2: Type specification reckon_db_consistency_checker:notify_callbacks
           (#{reference() => fun()}, consistency_status()) -> 'ok' is a supertype of the success typing: reckon_db_consistency_checker:notify_callbacks
           (#{reference() =>
                 fun(('degraded' | 'healthy' | 'no_quorum' |
@@ -387,7 +387,7 @@
           'degraded' | 'healthy' | 'no_quorum' | 'split_brain') ->
              'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_discovery.erl:75:18: Record construction 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_discovery.erl:75:18: Record construction 
           #state{store_id :: atom(),
                  config ::
                      #store_config{store_id :: atom(),
@@ -414,22 +414,22 @@
           binary() and broadcast_interval ::
           non_neg_integer()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_discovery.erl:156:2: Type specification reckon_db_discovery:open_multicast_socket
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_discovery.erl:156:2: Type specification reckon_db_discovery:open_multicast_socket
           (non_neg_integer(), inet:ip4_address()) ->
              {'ok', gen_udp:socket()} | {'error', term()} is a supertype of the success typing: reckon_db_discovery:open_multicast_socket
           (char(), {byte(), byte(), byte(), byte()}) ->
              {'error', atom()} | {'ok', port() | {'$inet', atom(), _}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_discovery.erl:266:2: Type specification reckon_db_discovery:get_config_value
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_discovery.erl:266:2: Type specification reckon_db_discovery:get_config_value
           (atom(), term()) -> term() is a supertype of the success typing: reckon_db_discovery:get_config_value
           ('broadcast_interval' | 'discovery_port' | 'multicast_addr',
           5000 | 45892 | {239, 255, 0, 1}) ->
              any()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_emitter.erl:118:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_emitter.erl:118:5: Expression produces a value of type 
           'ok' | {'events', maybe_improper_list()}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_emitter_pool.erl:55:2: Type specification reckon_db_emitter_pool:stop_emitter
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_emitter_pool.erl:55:2: Type specification reckon_db_emitter_pool:stop_emitter
           (atom(), subscription()) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_emitter_pool:stop_emitter
           (atom(),
           #subscription{id :: binary(),
@@ -450,7 +450,7 @@
               'not_found' | 'restarting' | 'running' |
               'simple_one_for_one'}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_emitter_pool.erl:82:2: Type specification reckon_db_emitter_pool:stop
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_emitter_pool.erl:82:2: Type specification reckon_db_emitter_pool:stop
           (atom(), binary()) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_emitter_pool:stop
           (atom(), binary()) ->
              'ok' |
@@ -458,7 +458,7 @@
               'not_found' | 'restarting' | 'running' |
               'simple_one_for_one'}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_emitter_sup.erl:38:2: Type specification reckon_db_emitter_sup:stop_emitter_pool
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_emitter_sup.erl:38:2: Type specification reckon_db_emitter_sup:stop_emitter_pool
           (atom(), binary()) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_emitter_sup:stop_emitter_pool
           (atom(), binary()) ->
              'ok' |
@@ -466,31 +466,31 @@
               'not_found' | 'restarting' | 'running' |
               'simple_one_for_one'}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filter_nif.erl:284:9: Guard test is_list
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_filter_nif.erl:284:9: Guard test is_list
          (Result :: binary()) can never succeed
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:59:2: Invalid type specification for function reckon_db_filters:by_event_type/1.
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_filters.erl:59:2: Invalid type specification for function reckon_db_filters:by_event_type/1.
  The success typing is reckon_db_filters:by_event_type
           (_) -> none()
  But the spec is reckon_db_filters:by_event_type
           (binary()) -> khepri_evf:tree_event_filter()
  The return types do not overlap
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:60:1: Function by_event_type/1 has no local return
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_filters.erl:60:1: Function by_event_type/1 has no local return
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:62:9: Cons will produce an improper list since its 2nd argument is 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_filters.erl:62:9: Cons will produce an improper list since its 2nd argument is 
           none()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:63:10: Cons will produce an improper list since its 2nd argument is 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_filters.erl:63:10: Cons will produce an improper list since its 2nd argument is 
           none()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:64:31: Cons will produce an improper list since its 2nd argument is 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_filters.erl:64:31: Cons will produce an improper list since its 2nd argument is 
           none()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:66:14: Cons will produce an improper list since its 2nd argument is 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_filters.erl:66:14: Cons will produce an improper list since its 2nd argument is 
           none()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_filters.erl:67:76: Record construction 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_filters.erl:67:76: Record construction 
           #event{event_id :: '_',
                  event_type :: binary(),
                  stream_id :: '_',
@@ -519,37 +519,37 @@
           'undefined' | {non_neg_integer(), binary()} and signature ::
           'undefined' | binary()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:405:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:405:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:428:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:428:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:438:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:438:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:444:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:444:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:454:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:454:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:460:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:460:5: Expression produces a value of type 
           {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:470:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:470:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:476:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:476:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:482:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:482:5: Expression produces a value of type 
           {'error', 'not_found'}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:508:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:508:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:540:2: Type specification reckon_db_gateway_worker:subscription_to_map
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:540:2: Type specification reckon_db_gateway_worker:subscription_to_map
           (subscription() | map()) -> map() is a supertype of the success typing: reckon_db_gateway_worker:subscription_to_map
           (#subscription{id :: binary(),
                         type ::
@@ -577,7 +577,7 @@
                    'event_pattern' | 'event_payload' | 'event_type' |
                    'stream' | 'tags'}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:552:1: The variable Map can never match since previous clauses completely covered the type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_gateway_worker.erl:552:1: The variable Map can never match since previous clauses completely covered the type 
           #subscription{id :: binary(),
                         type ::
                             'by_event_pattern' | 'by_event_payload' |
@@ -592,7 +592,7 @@
                         checkpoint :: 'undefined' | non_neg_integer(),
                         options :: map()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_graph_nif.erl:435:2: Type specification reckon_db_graph_nif:erlang_graph_stats
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_graph_nif.erl:435:2: Type specification reckon_db_graph_nif:erlang_graph_stats
           ([binary()], [{binary(), binary()}]) -> map() is a supertype of the success typing: reckon_db_graph_nif:erlang_graph_stats
           ([binary()], [{binary(), binary()}]) ->
              #{'edge_count' := non_neg_integer(),
@@ -601,13 +601,13 @@
                'node_count' := non_neg_integer(),
                'root_count' := non_neg_integer()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:175:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:175:5: Expression produces a value of type 
           'ok' | reference(), but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:275:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:275:5: Expression produces a value of type 
           'error' | 'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:398:2: Type specification reckon_db_health_prober:handle_probe_result
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:398:2: Type specification reckon_db_health_prober:handle_probe_result
           (#node_state{},
           'ok' | {'error', term()},
           non_neg_integer(),
@@ -639,25 +639,25 @@
               0 | 1,
               0 | 1}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:478:2: Type specification reckon_db_health_prober:notify_failed_callbacks
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:478:2: Type specification reckon_db_health_prober:notify_failed_callbacks
           (#{reference() => fun()}, node()) -> 'ok' is a supertype of the success typing: reckon_db_health_prober:notify_failed_callbacks
           (#{reference() => fun((atom()) -> any())}, atom()) -> 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:494:2: Type specification reckon_db_health_prober:notify_recovered_callbacks
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_health_prober.erl:494:2: Type specification reckon_db_health_prober:notify_recovered_callbacks
           (#{reference() => fun()}, node()) -> 'ok' is a supertype of the success typing: reckon_db_health_prober:notify_recovered_callbacks
           (#{reference() => fun((atom()) -> any())}, atom()) -> 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader.erl:43:2: Type specification reckon_db_leader:activate
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_leader.erl:43:2: Type specification reckon_db_leader:activate
           (atom()) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_leader:activate
           (atom()) -> 'ok' | {'error', 'not_started'}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader.erl:89:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_leader.erl:89:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader.erl:100:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_leader.erl:100:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader_tracker.erl:176:2: Type specification reckon_db_leader_tracker:format_subscription_data
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_leader_tracker.erl:176:2: Type specification reckon_db_leader_tracker:format_subscription_data
           (map() | subscription()) -> subscription() is a supertype of the success typing: reckon_db_leader_tracker:format_subscription_data
           (#subscription{id :: binary(),
                         type ::
@@ -687,11 +687,11 @@
                            checkpoint :: 'undefined' | non_neg_integer(),
                            options :: map()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader_tracker.erl:180:5: Record construction 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_leader_tracker.erl:180:5: Record construction 
           #subscription{options :: 'undefined'} violates the declared type of field options ::
           map()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_leader_tracker.erl:192:5: Record construction 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_leader_tracker.erl:192:5: Record construction 
           #subscription{id :: 'undefined',
                         type :: 'by_stream',
                         selector :: <<_:56>>,
@@ -703,15 +703,15 @@
           integer() and options ::
           map()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:184:2: The specification for reckon_db_links:start/2 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:184:2: The specification for reckon_db_links:start/2 states that the function might also return 
           'ok' but the inferred return is 
           {'error', 'not_found'}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:203:2: The specification for reckon_db_links:stop/2 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:203:2: The specification for reckon_db_links:stop/2 states that the function might also return 
           {'error', _} but the inferred return is 
           'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:215:2: Type specification reckon_db_links:info
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:215:2: Type specification reckon_db_links:info
           (atom(), binary()) -> {'ok', map()} | {'error', 'not_found'} is a supertype of the success typing: reckon_db_links:info
           (atom(), binary()) ->
              {'error', 'not_found'} |
@@ -728,18 +728,18 @@
                       'stream_id' => binary()},
                 'status' := 'error' | 'running' | 'stopped'}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:269:2: Type specification reckon_db_links:update_status
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:269:2: Type specification reckon_db_links:update_status
           (atom(), binary(), 'running' | 'stopped' | 'error') -> 'ok' is a supertype of the success typing: reckon_db_links:update_status
           (atom(), binary(), 'running' | 'stopped') -> 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:274:13: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:274:13: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:340:2: Type specification reckon_db_links:wildcard_to_regex
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:340:2: Type specification reckon_db_links:wildcard_to_regex
           (binary()) -> binary() is a supertype of the success typing: reckon_db_links:wildcard_to_regex
           (binary()) -> <<_:16, _:_*8>>
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:405:2: Type specification reckon_db_links:event_to_map
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:405:2: Type specification reckon_db_links:event_to_map
           (event()) -> map() is a supertype of the success typing: reckon_db_links:event_to_map
           (#event{event_id :: binary(),
                  event_type :: binary(),
@@ -763,19 +763,19 @@
                      'source_version' := non_neg_integer(),
                      _ => _}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:423:13: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:423:13: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:432:2: Invalid type specification for function reckon_db_links:start_link_subscription/2.
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:432:2: Invalid type specification for function reckon_db_links:start_link_subscription/2.
  The success typing is reckon_db_links:start_link_subscription
           (_, _) -> none()
  But the spec is reckon_db_links:start_link_subscription
           (atom(), #link{}) -> 'ok'
  The return types do not overlap
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:433:1: Function start_link_subscription/2 has no local return
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:433:1: Function start_link_subscription/2 has no local return
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:441:17: The call reckon_db_subscriptions:subscribe
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:441:17: The call reckon_db_subscriptions:subscribe
          (StoreId :: atom(),
           'stream',
           StreamId :: binary(),
@@ -788,7 +788,7 @@
           subscribe_opts()) ->
              {'ok', binary()} | {'error', term()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:448:17: The call reckon_db_subscriptions:subscribe
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:448:17: The call reckon_db_subscriptions:subscribe
          (StoreId :: atom(),
           'event_pattern',
           Pattern :: binary(),
@@ -801,7 +801,7 @@
           subscribe_opts()) ->
              {'ok', binary()} | {'error', term()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:454:26: The call reckon_db_subscriptions:subscribe
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:454:26: The call reckon_db_subscriptions:subscribe
          (StoreId :: atom(),
           'all',
           <<42>>,
@@ -822,50 +822,50 @@
           subscribe_opts()) ->
              {'ok', binary()} | {'error', term()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:466:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:466:5: Expression produces a value of type 
           'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_links.erl:470:2: Type specification reckon_db_links:emit_telemetry
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_links.erl:470:2: Type specification reckon_db_links:emit_telemetry
           (atom(), binary(), atom()) -> 'ok' is a supertype of the success typing: reckon_db_links:emit_telemetry
           (atom(), binary(), 'created' | 'deleted' | 'stopped') -> 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_memory.erl:294:15: Unknown function memsup:get_system_memory_data/0
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_memory.erl:294:15: Unknown function memsup:get_system_memory_data/0
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_memory.erl:348:22: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_memory.erl:348:22: Expression produces a value of type 
           'false' | non_neg_integer(), but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_naming.erl:213:2: Type specification reckon_db_naming:make_name
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_naming.erl:213:2: Type specification reckon_db_naming:make_name
           (string(), atom()) -> atom() is a supertype of the success typing: reckon_db_naming:make_name
           ([1..255, ...], atom()) -> atom()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:48:2: Type specification reckon_db_node_monitor:get_members
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:48:2: Type specification reckon_db_node_monitor:get_members
           (atom()) -> {'ok', [term()]} | {'error', term()} is a supertype of the success typing: reckon_db_node_monitor:get_members
           (atom()) -> {'error', _} | {'ok', [{atom(), atom()}, ...]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:134:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:134:5: Expression produces a value of type 
           'ok' | reference(), but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:149:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:149:5: Expression produces a value of type 
           'ok' | reference(), but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:160:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:160:5: Expression produces a value of type 
           'error' | 'ok' | {'error', _}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:268:2: Type specification reckon_db_node_monitor:schedule_leader_check
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:268:2: Type specification reckon_db_node_monitor:schedule_leader_check
           (non_neg_integer()) -> reference() is a supertype of the success typing: reckon_db_node_monitor:schedule_leader_check
           (1000 | 5000) -> reference()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:273:2: Type specification reckon_db_node_monitor:schedule_membership_check
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_node_monitor.erl:273:2: Type specification reckon_db_node_monitor:schedule_membership_check
           (non_neg_integer()) -> reference() is a supertype of the success typing: reckon_db_node_monitor:schedule_membership_check
           (10000) -> reference()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:198:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:198:5: Expression produces a value of type 
           'false' | 'ok' | non_neg_integer(), but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:204:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:204:5: Expression produces a value of type 
           'ok' | {'error', {'partial_success', _, _}}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:227:1: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:227:1: The pattern 
           {'store_config', _, _, _, _, _, _, _, _, _} can never match since previous clauses completely covered the type 
           #store_config{store_id :: atom(),
                         data_dir :: string(),
@@ -880,29 +880,29 @@
                             #{'enabled' := 'true',
                               'key_source' := {_, _}}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:231:2: Type specification reckon_db_persistence_worker:persist_pending_stores
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:231:2: Type specification reckon_db_persistence_worker:persist_pending_stores
           (sets:set(atom())) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_persistence_worker:persist_pending_stores
           (sets:set(_)) -> 'ok' | {'error', {'partial_success', _, _}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:252:2: The specification for reckon_db_persistence_worker:persist_store/1 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:252:2: The specification for reckon_db_persistence_worker:persist_store/1 states that the function might also return 
           {'error', _} but the inferred return is 
           'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:258:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:258:9: The pattern 
           Error = {error, Reason} can never match the type 
           'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:273:2: The specification for reckon_db_persistence_worker:flush_async/1 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_persistence_worker.erl:273:2: The specification for reckon_db_persistence_worker:flush_async/1 states that the function might also return 
           {'error', _} but the inferred return is 
           'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_revocation.erl:121:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_revocation.erl:121:5: Expression produces a value of type 
           atom() | ets:tid(), but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_revocation.erl:128:5: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_revocation.erl:128:5: Expression produces a value of type 
           atom() | ets:tid(), but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:79:2: Type specification reckon_db_scavenge:scavenge
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:79:2: Type specification reckon_db_scavenge:scavenge
           (atom(), binary(), scavenge_opts()) ->
              {'ok', scavenge_result()} | {'error', term()} is a supertype of the success typing: reckon_db_scavenge:scavenge
           (atom(),
@@ -921,7 +921,7 @@
                 'stream_id' := binary(),
                 'archive_key' => binary()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:131:52: The call reckon_db_scavenge:do_scavenge
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:131:52: The call reckon_db_scavenge:do_scavenge
          (StoreId :: atom(),
           StreamId :: binary(),
           ScavengeOpts ::
@@ -934,12 +934,12 @@
           (atom(), binary(), scavenge_opts()) ->
              {'ok', scavenge_result()} | {'error', term()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:263:2: Type specification reckon_db_scavenge:delete_event_versions
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:263:2: Type specification reckon_db_scavenge:delete_event_versions
           (atom(), binary(), non_neg_integer(), non_neg_integer()) ->
              'ok' is a supertype of the success typing: reckon_db_scavenge:delete_event_versions
           (atom(), binary(), 0, non_neg_integer()) -> 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:299:2: Type specification reckon_db_scavenge:emit_telemetry
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_scavenge.erl:299:2: Type specification reckon_db_scavenge:emit_telemetry
           (atom(), binary(), term(), integer()) -> 'ok' is a supertype of the success typing: reckon_db_scavenge:emit_telemetry
           (atom(),
           binary(),
@@ -954,11 +954,11 @@
           integer()) ->
              'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_schema.erl:113:2: The specification for reckon_db_schema:unregister/2 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_schema.erl:113:2: The specification for reckon_db_schema:unregister/2 states that the function might also return 
           'ok' but the inferred return is 
           {'error', _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_schema.erl:118:62: The call reckon_db_schema:emit_telemetry
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_schema.erl:118:62: The call reckon_db_schema:emit_telemetry
          (StoreId ::
               atom() |
               binary() |
@@ -1007,7 +1007,7 @@
           0) breaks the contract 
           (atom(), binary(), atom(), version()) -> 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:101:2: Type specification reckon_db_snapshots:load
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:101:2: Type specification reckon_db_snapshots:load
           (atom(), binary()) ->
              {'ok', snapshot()} |
              {'error', 'not_found'} |
@@ -1038,7 +1038,7 @@
                         mac ::
                             'undefined' | {non_neg_integer(), binary()}}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:134:2: Type specification reckon_db_snapshots:load_at
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:134:2: Type specification reckon_db_snapshots:load_at
           (atom(), binary(), non_neg_integer()) ->
              {'ok', snapshot()} |
              {'error', 'not_found'} |
@@ -1069,14 +1069,14 @@
                         mac ::
                             'undefined' | {non_neg_integer(), binary()}}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:174:2: Type specification reckon_db_snapshots:estimate_size
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:174:2: Type specification reckon_db_snapshots:estimate_size
           (term()) -> non_neg_integer() is a supertype of the success typing: reckon_db_snapshots:estimate_size
           (binary() | map()) -> non_neg_integer()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:180:1: The variable Data can never match since previous clauses completely covered the type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:180:1: The variable Data can never match since previous clauses completely covered the type 
           binary() | map()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:220:2: Type specification reckon_db_snapshots:apply_snapshot_integrity
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_snapshots.erl:220:2: Type specification reckon_db_snapshots:apply_snapshot_integrity
           (atom(), binary(), non_neg_integer(), snapshot()) ->
              {'ok', snapshot()} | {'error', term()} is a supertype of the success typing: reckon_db_snapshots:apply_snapshot_integrity
           (atom(),
@@ -1101,46 +1101,46 @@
                         anchor_hash :: 'undefined' | binary(),
                         mac :: 'undefined' | {1, binary()}}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_snapshots_store.erl:111:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_snapshots_store.erl:111:9: The pattern 
           {'ok', _} can never match the type 
           {'error', _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store.erl:71:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store.erl:71:9: The pattern 
           {'ok', _, _} can never match the type 
           {'error', _} | {'timeout', {atom(), atom()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store.erl:276:2: Type specification reckon_db_store:await_store_ready
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store.erl:276:2: Type specification reckon_db_store:await_store_ready
           (atom(), non_neg_integer()) -> 'ok' | {'error', 'timeout'} is a supertype of the success typing: reckon_db_store:await_store_ready
           (atom(), 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10) ->
              'ok' | {'error', 'timeout'}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:120:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:120:9: The pattern 
           'waiting' can never match the type 
           'failed' | 'no_nodes'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:123:9: The variable _ can never match since previous clauses completely covered the type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:123:9: The variable _ can never match since previous clauses completely covered the type 
           'coordinator' | 'failed' | 'no_nodes' | 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:155:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:155:9: The pattern 
           'waiting' can never match the type 
           'failed' | 'no_nodes'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:158:9: The variable _ can never match since previous clauses completely covered the type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:158:9: The variable _ can never match since previous clauses completely covered the type 
           'coordinator' | 'failed' | 'no_nodes' | 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:182:2: The specification for reckon_db_store_coordinator:do_join_cluster/1 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:182:2: The specification for reckon_db_store_coordinator:do_join_cluster/1 states that the function might also return 
           'waiting' but the inferred return is 
           'coordinator' | 'failed' | 'no_nodes' | 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:198:2: The specification for reckon_db_store_coordinator:handle_cluster_nodes/3 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:198:2: The specification for reckon_db_store_coordinator:handle_cluster_nodes/3 states that the function might also return 
           'waiting' but the inferred return is 
           'coordinator' | 'failed' | 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:221:2: The specification for reckon_db_store_coordinator:handle_no_existing_clusters/2 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_coordinator.erl:221:2: The specification for reckon_db_store_coordinator:handle_no_existing_clusters/2 states that the function might also return 
           'waiting' but the inferred return is 
           'coordinator' | 'failed' | 'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:25:2: The specification for reckon_db_store_inspector:store_stats/1 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:25:2: The specification for reckon_db_store_inspector:store_stats/1 states that the function might also return 
           {'error', _} but the inferred return is 
           {'ok',
            #{'has_events' := boolean(),
@@ -1150,19 +1150,19 @@
              'subscription_count' := non_neg_integer(),
              'total_events' := number()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:42:2: The specification for reckon_db_store_inspector:list_all_snapshots/1 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:42:2: The specification for reckon_db_store_inspector:list_all_snapshots/1 states that the function might also return 
           {'error', _} but the inferred return is 
           {'ok', [map()]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:50:2: The specification for reckon_db_store_inspector:list_subscriptions/1 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:50:2: The specification for reckon_db_store_inspector:list_subscriptions/1 states that the function might also return 
           {'error', _} but the inferred return is 
           {'ok', [any()]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:57:2: The specification for reckon_db_store_inspector:subscription_lag/2 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:57:2: The specification for reckon_db_store_inspector:subscription_lag/2 states that the function might also return 
           {'ok', map()} but the inferred return is 
           {'error', 'not_found'}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:60:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:60:9: The pattern 
           {'ok', Sub} can never match the type 
           {'error', 'not_found'} |
           {'ok',
@@ -1181,37 +1181,37 @@
                          checkpoint :: 'undefined' | non_neg_integer(),
                          options :: map()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:75:2: The specification for reckon_db_store_inspector:event_type_summary/1 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:75:2: The specification for reckon_db_store_inspector:event_type_summary/1 states that the function might also return 
           {'error', _} but the inferred return is 
           {'ok', [map()]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:78:30: The created fun has no local return
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:78:30: The created fun has no local return
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:83:2: Invalid type specification for function reckon_db_store_inspector:stream_info/2.
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:83:2: Invalid type specification for function reckon_db_store_inspector:stream_info/2.
  The success typing is reckon_db_store_inspector:stream_info
           (_, _) -> none()
  But the spec is reckon_db_store_inspector:stream_info
           (atom(), binary()) -> {'ok', map()} | {'error', term()}
  The return types do not overlap
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:84:1: Function stream_info/2 has no local return
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:84:1: Function stream_info/2 has no local return
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:86:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:86:9: The pattern 
           {'ok', Version} can never match the type 
           integer()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:95:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:95:9: The pattern 
           Err = {error, _} can never match the type 
           integer()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:112:19: Guard test is_list
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:112:19: Guard test is_list
          (Subs :: {'error', _}) can never succeed
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:121:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:121:9: The pattern 
           {'ok', Version} can never match the type 
           integer()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:140:1: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:140:1: The pattern 
          <StreamId,
           Map = #{version := V}> can never match the type 
          <binary(),
@@ -1223,7 +1223,7 @@
                     anchor_hash :: 'undefined' | binary(),
                     mac :: 'undefined' | {_, _}}>
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:142:1: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:142:1: The pattern 
          <StreamId,
           _> can never match since previous clauses completely covered the type 
          <binary(),
@@ -1235,18 +1235,18 @@
                     anchor_hash :: 'undefined' | binary(),
                     mac :: 'undefined' | {_, _}}>
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:145:1: Function snapshot_coverage/2 will never be called
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:145:1: Function snapshot_coverage/2 will never be called
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:152:1: Function latest_snap_version/1 will never be called
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:152:1: Function latest_snap_version/1 will never be called
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:163:9: The variable _ can never match since previous clauses completely covered the type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:163:9: The variable _ can never match since previous clauses completely covered the type 
           #{'subscriber_pid' => binary(), _ => _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:181:1: Function extract_checkpoint/1 will never be called
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:181:1: Function extract_checkpoint/1 will never be called
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:193:1: Function count_types_in_stream/3 has no local return
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:193:1: Function count_types_in_stream/3 has no local return
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:194:56: The call reckon_db_streams:read_all
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:194:56: The call reckon_db_streams:read_all
          (StoreId :: atom(),
           StreamId :: any(),
           'forward',
@@ -1274,11 +1274,11 @@
           (atom(), binary(), pos_integer(), direction()) ->
              {'ok', [event()]} | {'error', term()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:214:1: Function get_event_timestamp/3 will never be called
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:214:1: Function get_event_timestamp/3 will never be called
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:220:1: Function extract_timestamp/1 will never be called
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_store_inspector.erl:220:1: Function extract_timestamp/1 will never be called
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:69:2: Type specification reckon_db_streams:append
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:69:2: Type specification reckon_db_streams:append
           (atom(), binary(), integer(), [new_event()]) ->
              {'ok', non_neg_integer()} | {'error', term()} is a supertype of the success typing: reckon_db_streams:append
           (atom(),
@@ -1292,11 +1292,11 @@
              {'error', {'wrong_expected_version', _, integer()}} |
              {'ok', non_neg_integer()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:215:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:215:9: The pattern 
           {'ok', _} can never match the type 
           {'error', _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:239:64: Record construction 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:239:64: Record construction 
           #event{event_id :: '_',
                  stream_id :: '_',
                  version :: '_',
@@ -1324,26 +1324,26 @@
           'undefined' | {non_neg_integer(), binary()} and signature ::
           'undefined' | binary()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:247:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:247:9: The pattern 
           [SingleCondition] can never match the type 
           []
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:252:9: The variable _ can never match since previous clauses completely covered the type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:252:9: The variable _ can never match since previous clauses completely covered the type 
           []
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:283:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:283:9: The pattern 
           {'ok', _} can never match the type 
           {'error', _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:349:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:349:9: The pattern 
           {'ok', _} can never match the type 
           {'error', _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:442:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:442:9: The pattern 
           {'ok', _} can never match the type 
           {'error', _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:672:25: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:672:25: The pattern 
           Violation = {integrity_violation, _} can never match the type 
           {'ok',
            [#event{event_id :: binary(),
@@ -1361,7 +1361,7 @@
                    mac :: 'undefined' | {non_neg_integer(), binary()},
                    signature :: 'undefined' | binary()}]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:679:17: The variable Other can never match since previous clauses completely covered the type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:679:17: The variable Other can never match since previous clauses completely covered the type 
           {'ok',
            [#event{event_id :: binary(),
                    event_type :: binary(),
@@ -1378,7 +1378,7 @@
                    mac :: 'undefined' | {non_neg_integer(), binary()},
                    signature :: 'undefined' | binary()}]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:693:2: The specification for reckon_db_streams:maybe_verify_events/6 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:693:2: The specification for reckon_db_streams:maybe_verify_events/6 states that the function might also return 
           {'error', _} but the inferred return is 
           {'ok',
            [{'event',
@@ -1397,7 +1397,7 @@
              'undefined' | {_, _},
              'undefined' | binary()}]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:717:2: The specification for reckon_db_streams:verify_in_direction/6 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:717:2: The specification for reckon_db_streams:verify_in_direction/6 states that the function might also return 
           {'error', _} but the inferred return is 
           {'ok',
            [{'event',
@@ -1416,7 +1416,7 @@
              'undefined' | {_, _},
              'undefined' | binary()}]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:738:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:738:9: The pattern 
           Violation = {integrity_violation, _} can never match the type 
           {'ok',
            [#event{event_id :: binary(),
@@ -1434,7 +1434,7 @@
                    mac :: 'undefined' | {non_neg_integer(), binary()},
                    signature :: 'undefined' | binary()}]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_streams.erl:744:2: The specification for reckon_db_streams:verify_events_forward/5 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_streams.erl:744:2: The specification for reckon_db_streams:verify_events_forward/5 states that the function might also return 
           {'error', _} but the inferred return is 
           {'integrity_violation',
            #{'context' := map(),
@@ -1447,22 +1447,22 @@
              'version' := non_neg_integer()}} |
           {'ok', [{_, _, _, _, _, _, _, _, _, _, _, _, _, _, _}]}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscription_health.erl:190:1: The variable _ can never match since previous clauses completely covered the type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscription_health.erl:190:1: The variable _ can never match since previous clauses completely covered the type 
           'undefined' | pid()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscription_health.erl:254:13: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscription_health.erl:254:13: Expression produces a value of type 
           'ok' |
           {'error',
            'not_found' | 'restarting' | 'running' | 'simple_one_for_one'}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscription_health.erl:365:1: The variable _ can never match since previous clauses completely covered the type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscription_health.erl:365:1: The variable _ can never match since previous clauses completely covered the type 
           map()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:183:21: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:183:21: The pattern 
           'ok' can never match the type 
           {'error', _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:353:2: Type specification reckon_db_subscriptions:create_filter
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:353:2: Type specification reckon_db_subscriptions:create_filter
           (subscription_type(), binary() | map()) -> term() is a supertype of the success typing: reckon_db_subscriptions:create_filter
           ('by_event_pattern' | 'by_event_payload' | 'by_stream' |
           'event_pattern' | 'event_payload' | 'stream',
@@ -1493,7 +1493,7 @@
               #{'on_actions' => ['create' | 'delete' | 'update'],
                 'priority' => integer()}}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:371:31: The call reckon_db_filters:by_tags
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:371:31: The call reckon_db_filters:by_tags
          (Tags :: binary() | map()) will never return since the success typing is 
          (maybe_improper_list()) -> 
           {'evf_tree',
@@ -1522,7 +1522,7 @@
              'priority' => integer()}} and the contract is 
           ([binary()]) -> khepri_evf:tree_event_filter()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:387:2: Type specification reckon_db_subscriptions:setup_event_notification
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:387:2: Type specification reckon_db_subscriptions:setup_event_notification
           (atom(), binary(), term(), subscription()) -> 'ok' is a supertype of the success typing: reckon_db_subscriptions:setup_event_notification
           (atom(),
           binary(),
@@ -1549,17 +1549,17 @@
                         options :: map()}) ->
              'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:392:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:392:9: The pattern 
           'ok' can never match the type 
           {'error', _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:431:2: The specification for reckon_db_subscriptions:register_trigger/3 states that the function might also return 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:431:2: The specification for reckon_db_subscriptions:register_trigger/3 states that the function might also return 
           'ok' but the inferred return is 
           {'error', _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:450:1: Function activate_trigger/4 has no local return
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:450:1: Function activate_trigger/4 has no local return
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:458:72: The call khepri:register_trigger
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:458:72: The call khepri:register_trigger
          (StoreId :: atom(),
           TriggerId :: atom(),
           Filter ::
@@ -1645,10 +1645,10 @@
                 'leader' | 'local' | {'member', {atom(), atom()}},
             'timeout' => 'infinity' | non_neg_integer()})
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:477:13: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:477:13: Expression produces a value of type 
           'ok' | {'error', 'no_emitters'}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:573:2: Type specification reckon_db_subscriptions:do_catchup
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:573:2: Type specification reckon_db_subscriptions:do_catchup
           (atom(),
           pid(),
           non_neg_integer(),
@@ -1664,10 +1664,10 @@
           binary() | map()) ->
              'ok'
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:598:21: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:598:21: Expression produces a value of type 
           'ok' | {'subscription_error', {'integrity_violation', map()}}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:660:13: Expression produces a value of type 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions.erl:660:13: Expression produces a value of type 
           'ok' |
           {'events',
            [#event{event_id :: binary(),
@@ -1686,15 +1686,15 @@
                    signature :: 'undefined' | binary()},
             ...]}, but this value is unmatched
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions_store.erl:58:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions_store.erl:58:9: The pattern 
           'undefined' can never match the type 
           binary()
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_subscriptions_store.erl:123:9: The pattern 
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_subscriptions_store.erl:123:9: The pattern 
           {'ok', _} can never match the type 
           {'error', _}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_sup.erl:46:2: Type specification reckon_db_sup:stop_store
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_sup.erl:46:2: Type specification reckon_db_sup:stop_store
           (atom()) -> 'ok' | {'error', term()} is a supertype of the success typing: reckon_db_sup:stop_store
           (atom()) ->
              'ok' |
@@ -1702,14 +1702,14 @@
               'not_found' | 'restarting' | 'running' |
               'simple_one_for_one'}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_temporal.erl:113:2: Type specification reckon_db_temporal:version_at
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_temporal.erl:113:2: Type specification reckon_db_temporal:version_at
           (atom(), binary(), timestamp()) ->
              {'ok', integer()} | {'error', term()} is a supertype of the success typing: reckon_db_temporal:version_at
           (atom(), binary(), integer()) ->
              {'error', {'stream_not_found', binary()}} |
              {'ok', integer()}
 
-/home/rl/work/codeberg.org/reckon-db-org/reckon-db/src/reckon_db_temporal.erl:199:2: Type specification reckon_db_temporal:emit_telemetry
+/home/rl/work/github.com/reckon-db-org/reckon-db/src/reckon_db_temporal.erl:199:2: Type specification reckon_db_temporal:emit_telemetry
           (atom(), atom(), binary(), term(), term(), integer()) -> 'ok' is a supertype of the success typing: reckon_db_temporal:emit_telemetry
           ('read_range' | 'read_until',
           atom(),
