@@ -5,6 +5,44 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.1] - 2026-09-01
+
+### Fixed
+
+- **`read_all_global/3` re-scanned and re-sorted the ENTIRE matching store
+  on every single paginated call.** `khepri:get_many/2` has no server-side
+  offset/limit (`if_name_matches`/`if_path_matches` are regex-only, no
+  numeric range condition), so `Offset`/`BatchSize` were always applied in
+  memory, after the expensive part. `evoq_store_subscription:
+  catch_up_historical/1` (the real caller) pages through a store in a
+  tight sequential burst of `(StoreId, GrowingOffset, 1000)` calls at
+  every subscription (re)start -- for a store with real accumulated
+  volume, that's a full scan-and-sort repeated once per 1000 events,
+  roughly O(N²/1000) total instead of O(N log N). Found live: restarting
+  `hecate-sentinel` after its own `identity_key_path` fix let it actually
+  reach this code path for the first time in production, sustaining
+  110%+ CPU for minutes against a 129MB store.
+  A secondary index (the pattern `reckon_db_index` already uses for
+  `tags`/`event_type`/`{meta,_}`) was tried first and measured to NOT
+  help -- those are selective (few matches, a point-get per match is
+  cheap); `read_all_global` by construction touches nearly the whole
+  store every call, so N point-gets in a loop cost MORE than the plain
+  scan, and denormalizing full events into the index just duplicated the
+  same full-subtree-fetch under a different path. The real bottleneck is
+  structural: Khepri has no bounded range read at all, so no index
+  design inside a single `get_many` call can avoid paying for the whole
+  matching set.
+  Fixed instead with a fingerprinted cache: the full sorted event list is
+  built once per catch-up burst (keyed by `global_event_count/1`, already
+  O(1) and exact -- it only increments on append) and reused across the
+  burst's remaining pages; a 30s TTL bounds memory for a burst that
+  stalls or never completes. `read_all_global/3`'s signature and
+  semantics are unchanged. Benchmarked on a synthetic 10k-event/50-stream
+  store, same access pattern `catch_up_historical/1` produces (10 pages
+  of 1000): ~275-325ms before (measured 3x, consistent) -> ~55ms after,
+  ~5.6x, with only the first page paying the real scan-and-sort cost and
+  the remaining 9 served from cache.
+
 ## [5.11.0] - 2026-07-08
 
 ### Fixed

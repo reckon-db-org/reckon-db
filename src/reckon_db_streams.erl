@@ -243,19 +243,99 @@ read_all(StoreId, StreamId, BatchSize, Direction) ->
 %%   BatchSize - Maximum number of events to return
 %%
 %% Returns events sorted by epoch_us (global ordering).
+%%
+%% == Why this is cached, and why an index inside Khepri cannot replace it ==
+%%
+%% This function has no true server-side pagination: Khepri's `get_many/2'
+%% has no offset/limit primitive (`if_name_matches'/`if_path_matches' are
+%% regex-only, no numeric range condition), so ANY paginated design over
+%% it -- indexed or not -- pays a full-matching-subtree fetch on every
+%% call. Verified by building and benchmarking a secondary `all' index
+%% first (a natural-looking fix, since `reckon_db_index' already does
+%% exactly this for `tags'/`event_type'/`{meta,_}'): at 10k events it was
+%% NOT faster than the plain scan below, because those calls are
+%% ref+point-resolve (fine when a lookup matches a SMALL subset of the
+%% store, wrong when -- like `read_all_global' -- it touches nearly the
+%% whole store every time), and denormalizing full events into the index
+%% just duplicated the same full-subtree-fetch cost under a different path.
+%%
+%% `evoq_store_subscription:catch_up_historical/1' (the only real caller)
+%% pages through a store via a tight sequential burst of
+%% `(StoreId, GrowingOffset, 1000)' calls at subscription start -- which is
+%% exactly the access pattern this cache targets: pay the full scan-and-sort
+%% ONCE per burst (fingerprinted by `global_event_count/1', already O(1) and
+%% already exact -- it only ever increments on append), not once per page.
+%% A store that grows mid-burst invalidates the cache on its own; the TTL
+%% below is a memory-hygiene bound for a burst that stalls or never
+%% completes, not a correctness mechanism.
 -spec read_all_global(atom(), non_neg_integer(), pos_integer()) ->
     {ok, [event()]} | {error, term()}.
 read_all_global(StoreId, Offset, BatchSize) ->
+    case cached_sorted_events(StoreId) of
+        {ok, SortedEvents} ->
+            Skipped = safe_nthtail(Offset, SortedEvents),
+            {ok, lists:sublist(Skipped, BatchSize)};
+        {error, _} = Error ->
+            Error
+    end.
+
+-define(READ_ALL_GLOBAL_CACHE, reckon_db_read_all_global_cache).
+%% Long enough to cover one catch-up burst (milliseconds to low seconds in
+%% practice); short enough that an entry from a burst nobody ever repeats
+%% doesn't sit in memory indefinitely.
+-define(READ_ALL_GLOBAL_CACHE_TTL_MS, 30000).
+
+%% @private A store's full event list, sorted by epoch, from cache when the
+%% cached entry's `global_event_count/1' fingerprint still matches and
+%% hasn't outlived the TTL; rebuilt (one scan-and-sort, cached) otherwise.
+-spec cached_sorted_events(atom()) -> {ok, [event()]} | {error, term()}.
+cached_sorted_events(StoreId) ->
+    ensure_cache_table(),
+    case global_event_count(StoreId) of
+        {ok, Count} -> cached_or_rebuilt(StoreId, Count);
+        {error, _} = Error -> Error
+    end.
+
+cached_or_rebuilt(StoreId, Count) ->
+    Now = erlang:monotonic_time(millisecond),
+    case ets:lookup(?READ_ALL_GLOBAL_CACHE, StoreId) of
+        [{StoreId, Count, InsertedAt, Sorted}]
+                when Now - InsertedAt < ?READ_ALL_GLOBAL_CACHE_TTL_MS ->
+            {ok, Sorted};
+        _ ->
+            rebuild_cache(StoreId, Count, Now)
+    end.
+
+rebuild_cache(StoreId, Count, Now) ->
     case query_event_results(StoreId, has_data_leaf()) of
         {ok, Results} ->
             Events = [convert_result_to_event(PathKey, Value)
                       || {PathKey, Value} <- Results],
             ValidEvents = [E || E <- Events, E =/= undefined],
             SortedEvents = sort_by_epoch(ValidEvents),
-            Skipped = safe_nthtail(Offset, SortedEvents),
-            {ok, lists:sublist(Skipped, BatchSize)};
+            true = ets:insert(?READ_ALL_GLOBAL_CACHE,
+                               {StoreId, Count, Now, SortedEvents}),
+            {ok, SortedEvents};
         {error, _} = Error ->
             Error
+    end.
+
+%% @private Lazily create the (ownerless, public) cache table. Races on
+%% first use are safe: `ets:new/2' raises `badarg' on a name collision,
+%% which just means another process already won -- nothing to do.
+ensure_cache_table() ->
+    case ets:whereis(?READ_ALL_GLOBAL_CACHE) of
+        undefined -> create_cache_table();
+        _Tid -> ok
+    end.
+
+create_cache_table() ->
+    try
+        ets:new(?READ_ALL_GLOBAL_CACHE,
+                [named_table, public, set, {read_concurrency, true}]),
+        ok
+    catch
+        error:badarg -> ok
     end.
 
 %% @private Leaf condition matching any version/seq node that carries

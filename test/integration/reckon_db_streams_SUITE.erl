@@ -55,7 +55,14 @@
 
     %% Delete tests
     delete_stream/1,
-    delete_nonexistent_stream/1
+    delete_nonexistent_stream/1,
+
+    %% read_all_global / cache tests
+    read_all_global_returns_events_in_epoch_order/1,
+    read_all_global_paginates/1,
+    read_all_global_cache_hit_matches_scan/1,
+    read_all_global_invalidates_on_append/1,
+    read_all_global_cache_isolated_per_store/1
 ]).
 
 -define(STORE_ID, streams_test_store).
@@ -72,7 +79,8 @@ all() ->
         {group, append_tests},
         {group, read_tests},
         {group, metadata_tests},
-        {group, delete_tests}
+        {group, delete_tests},
+        {group, read_all_global_tests}
     ].
 
 groups() ->
@@ -104,6 +112,13 @@ groups() ->
         {delete_tests, [sequence], [
             delete_stream,
             delete_nonexistent_stream
+        ]},
+        {read_all_global_tests, [sequence], [
+            read_all_global_returns_events_in_epoch_order,
+            read_all_global_paginates,
+            read_all_global_cache_hit_matches_scan,
+            read_all_global_invalidates_on_append,
+            read_all_global_cache_isolated_per_store
         ]}
     ].
 
@@ -462,6 +477,118 @@ delete_nonexistent_stream(Config) ->
     Result = reckon_db_streams:delete(StoreId, StreamId),
 
     ?assertEqual(ok, Result),
+    ok.
+
+%%====================================================================
+%% read_all_global / cache tests
+%%====================================================================
+
+%% @doc Events across multiple streams come back in global epoch order,
+%% regardless of which stream they were appended to.
+read_all_global_returns_events_in_epoch_order(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    S1 = generate_stream_id(), S2 = generate_stream_id(),
+
+    {ok, _} = reckon_db_streams:append(StoreId, S1, ?NO_STREAM,
+        [generate_event(<<"rag_e1">>)]),
+    {ok, _} = reckon_db_streams:append(StoreId, S2, ?NO_STREAM,
+        [generate_event(<<"rag_e2">>)]),
+    {ok, _} = reckon_db_streams:append(StoreId, S1, 0,
+        [generate_event(<<"rag_e3">>)]),
+
+    {ok, Events} = reckon_db_streams:read_all_global(StoreId, 0, 100),
+    Types = [T || #event{event_type = T} <- Events],
+    %% All three of ours, in append order (epoch-ascending); other groups'
+    %% events may also be present since groups share the all-streams read,
+    %% so assert containment and relative order rather than exact list.
+    ?assert(lists:member(<<"rag_e1">>, Types)),
+    Idx = fun(T) -> length(lists:takewhile(fun(X) -> X =/= T end, Types)) end,
+    ?assert(Idx(<<"rag_e1">>) < Idx(<<"rag_e2">>)),
+    ?assert(Idx(<<"rag_e2">>) < Idx(<<"rag_e3">>)).
+
+%% @doc Offset/BatchSize correctly page a known, isolated slice of events.
+read_all_global_paginates(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    S = generate_stream_id(),
+    Marker = generate_uuid(),
+    Types = [<<"page_", Marker/binary, "_", (integer_to_binary(N))/binary>>
+             || N <- lists:seq(1, 5)],
+    [begin
+         {ok, _} = reckon_db_streams:append(StoreId, S,
+             case N of 1 -> ?NO_STREAM; _ -> N - 2 end,
+             [generate_event(T)])
+     end || {N, T} <- lists:zip(lists:seq(1, 5), Types)],
+
+    {ok, All} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
+    AllTypes = [T || #event{event_type = T} <- All],
+    OurIndexes = [I || {I, T} <- lists:zip(lists:seq(0, length(AllTypes) - 1), AllTypes),
+                        lists:member(T, Types)],
+    ?assertEqual(5, length(OurIndexes)),
+    %% Our 5 events are contiguous in global order (nothing else appended
+    %% between them within this test) and a page starting at the first of
+    %% ours returns exactly them in order.
+    FirstOurs = lists:min(OurIndexes),
+    {ok, Page} = reckon_db_streams:read_all_global(StoreId, FirstOurs, 5),
+    ?assertEqual(Types, [T || #event{event_type = T} <- Page]).
+
+%% @doc A second read_all_global call with no intervening append returns
+%% the identical result as the first (cache hit, same data either way).
+read_all_global_cache_hit_matches_scan(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    S = generate_stream_id(),
+    {ok, _} = reckon_db_streams:append(StoreId, S, ?NO_STREAM,
+        [generate_event(<<"cache_hit_e">>)]),
+
+    {ok, First} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
+    {ok, Second} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
+    ?assertEqual([E#event.event_id || E <- First],
+                 [E#event.event_id || E <- Second]).
+
+%% @doc An append BETWEEN two read_all_global calls is visible on the next
+%% call -- the count-fingerprinted cache must not serve stale data.
+read_all_global_invalidates_on_append(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    S = generate_stream_id(),
+    {ok, _} = reckon_db_streams:append(StoreId, S, ?NO_STREAM,
+        [generate_event(<<"before_invalidate">>)]),
+
+    {ok, Before} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
+    BeforeCount = length(Before),
+
+    {ok, _} = reckon_db_streams:append(StoreId, S, 0,
+        [generate_event(<<"after_invalidate">>)]),
+
+    {ok, After} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
+    ?assertEqual(BeforeCount + 1, length(After)),
+    AfterTypes = [T || #event{event_type = T} <- After],
+    ?assert(lists:member(<<"after_invalidate">>, AfterTypes)).
+
+%% @doc A cache entry for one store never leaks into another store's read
+%% -- two distinct stores, same group's Khepri instance can't apply here
+%% (groups already isolate at the store level), so this specifically
+%% exercises the cache TABLE being shared process-wide across StoreIds.
+read_all_global_cache_isolated_per_store(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    OtherStoreId = list_to_atom(atom_to_list(StoreId) ++ "_other"),
+    OtherDataDir = proplists:get_value(data_dir, Config) ++ "_other",
+    os:cmd("rm -rf " ++ OtherDataDir),
+    ok = filelib:ensure_dir(filename:join(OtherDataDir, "dummy")),
+    {ok, _} = khepri:start(OtherDataDir, OtherStoreId),
+    khepri:put(OtherStoreId, [streams], #{}),
+
+    S1 = generate_stream_id(),
+    {ok, _} = reckon_db_streams:append(StoreId, S1, ?NO_STREAM,
+        [generate_event(<<"isolation_main">>)]),
+    S2 = reckon_gater_stream_id:new(<<"test">>),
+    {ok, _} = reckon_db_streams:append(OtherStoreId, S2, ?NO_STREAM,
+        [generate_event(<<"isolation_other">>)]),
+
+    {ok, OtherEvents} = reckon_db_streams:read_all_global(OtherStoreId, 0, 100000),
+    OtherTypes = [T || #event{event_type = T} <- OtherEvents],
+    ?assertEqual([<<"isolation_other">>], OtherTypes),
+
+    khepri:stop(OtherStoreId),
+    os:cmd("rm -rf " ++ OtherDataDir),
     ok.
 
 %%====================================================================
