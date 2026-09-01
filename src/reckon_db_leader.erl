@@ -180,9 +180,14 @@ start_emitters_for_subscriptions(StoreId, Subscriptions) ->
     ).
 
 %% @private Start emitter for a single subscription
+%%
+%% Catches exceptions from the emitter pool startup chain. A stale
+%% subscription persisted in Khepri may reference dead subscriber PIDs
+%% or an emitter supervisor that hasn't started yet. These must not
+%% crash the leader worker — the subscription is skipped with a warning.
 -spec start_emitter_for_subscription(atom(), subscription()) -> ok.
 start_emitter_for_subscription(StoreId, #subscription{subscription_name = Name} = Subscription) ->
-    case reckon_db_emitter_pool:start_emitter(StoreId, Subscription) of
+    try reckon_db_emitter_pool:start_emitter(StoreId, Subscription) of
         {ok, _Pid} ->
             logger:debug("Started emitter pool for subscription: ~s (store: ~p)",
                         [Name, StoreId]);
@@ -192,5 +197,10 @@ start_emitter_for_subscription(StoreId, #subscription{subscription_name = Name} 
         {error, Reason} ->
             logger:warning("Failed to start emitter pool for ~s: ~p (store: ~p)",
                           [Name, Reason, StoreId])
+    catch
+        Class:Reason:_Stacktrace ->
+            logger:warning("Exception starting emitter pool for ~s: ~p:~p (store: ~p)",
+                          [Name, Class, Reason, StoreId]),
+            ok
     end,
     ok.

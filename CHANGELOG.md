@@ -5,6 +5,53 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.2] - 2026-09-01
+
+### Fixed
+
+- **Stale subscriptions crashed the leader worker on store restart (noproc
+  crash loop).** When reckon-db restarted with persisted subscriptions in
+  Khepri, `reckon_db_leader:activate_leadership/2` iterated all
+  subscriptions and tried to start emitter pools. If the emitter supervisor
+  wasn't running yet (startup race), `supervisor:start_child/2` threw
+  `{exit, {noproc, ...}}` as an exception — not an `{error, ...}` return.
+  The leader's `case` clause that handled `{error, Reason}` never fired.
+  The exception crashed the leader gen_server, which cascaded up the
+  supervision tree and killed the entire application. On hecate-mail
+  (beam01), this caused 160 restarts in a crash loop until the store was
+  wiped.
+
+  Fixed in `reckon_db_emitter_sup`: `start_emitter_pool/2` and
+  `stop_emitter_pool/2` now check `whereis(SupName)` before calling
+  `supervisor:start_child/2`, returning
+  `{error, {emitter_sup_not_running, SupName}}`.
+
+  Fixed in `reckon_db_leader`: `start_emitter_for_subscription/2` wraps
+  the emitter pool startup in `try/catch`, logging a warning and continuing
+  on any exception. A stale subscription skips gracefully.
+
+- **Same noproc pattern fixed in four additional modules.** The identical
+  bug — calling `supervisor:start_child/2` or `gen_server:call/2,3` on a
+  named process that isn't registered yet, without a `whereis` guard —
+  existed in:
+
+  - `reckon_db_streams_reader:start_new_reader/2` — now guards
+    `whereis(SupName)` before `supervisor:start_child/2`
+  - `reckon_db_streams_writer:start_new_writer/2` — same guard
+  - `reckon_db_store_coordinator:join_cluster/1,2` and
+    `should_handle_nodeup/1` — now return `{error, not_started}` or
+    `false` when the coordinator isn't running
+  - `reckon_db_discovery:get_discovered_nodes/1` — now returns
+    `{error, not_running}` when discovery isn't active
+
+  All five modules now return graceful error tuples instead of crashing
+  callers with `{exit, {noproc}}`.
+
+### Changed
+
+- Updated package links from Codeberg to GitHub (GitHub is now canonical
+  per the 2026-07-26 repatriation).
+
 ## [5.11.1] - 2026-09-01
 
 ### Fixed

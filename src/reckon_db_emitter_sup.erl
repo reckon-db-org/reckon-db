@@ -32,18 +32,28 @@ start_link(#store_config{store_id = StoreId} = Config) ->
 start_emitter_pool(StoreId, Subscription) ->
     SupName = reckon_db_naming:emitter_sup_name(StoreId),
     ChildSpec = emitter_pool_spec(StoreId, Subscription),
-    supervisor:start_child(SupName, ChildSpec).
+    case whereis(SupName) of
+        undefined ->
+            {error, {emitter_sup_not_running, SupName}};
+        _Pid ->
+            supervisor:start_child(SupName, ChildSpec)
+    end.
 
 %% @doc Stop an emitter pool
 -spec stop_emitter_pool(atom(), binary()) -> ok | {error, term()}.
 stop_emitter_pool(StoreId, SubscriptionId) ->
     SupName = reckon_db_naming:emitter_sup_name(StoreId),
     ChildId = reckon_db_naming:emitter_pool_name(StoreId, SubscriptionId),
-    case supervisor:terminate_child(SupName, ChildId) of
-        ok ->
-            supervisor:delete_child(SupName, ChildId);
-        Error ->
-            Error
+    case whereis(SupName) of
+        undefined ->
+            {error, {emitter_sup_not_running, SupName}};
+        _Pid ->
+            case supervisor:terminate_child(SupName, ChildId) of
+                ok ->
+                    supervisor:delete_child(SupName, ChildId);
+                Error ->
+                    Error
+            end
     end.
 
 %%====================================================================

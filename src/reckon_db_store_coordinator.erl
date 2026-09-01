@@ -62,23 +62,42 @@ start_link(#store_config{store_id = StoreId} = Config) ->
     Name = reckon_db_naming:coordinator_name(StoreId),
     gen_server:start_link({local, Name}, ?MODULE, Config, []).
 
-%% @doc Join the Khepri cluster using coordinated approach
--spec join_cluster(atom()) -> ok | coordinator | no_nodes | waiting | failed.
+%% @doc Join the Khepri cluster using coordinated approach.
+%%
+%% Returns {error, not_started} if the coordinator process isn't registered
+%% yet (startup race or after a store stop). gen_server:call/3 throws
+%% {exit, {noproc}} as an exception when the target process doesn't exist
+%% — the guard converts that to an error tuple.
+-spec join_cluster(atom()) -> ok | coordinator | no_nodes | waiting | failed | {error, term()}.
 join_cluster(StoreId) ->
     Name = reckon_db_naming:coordinator_name(StoreId),
-    gen_server:call(Name, {join_cluster, StoreId}, ?JOIN_TIMEOUT).
+    case whereis(Name) of
+        undefined -> {error, not_started};
+        _Pid -> gen_server:call(Name, {join_cluster, StoreId}, ?JOIN_TIMEOUT)
+    end.
 
-%% @doc Join a specific node's cluster
+%% @doc Join a specific node's cluster.
+%%
+%% Returns {error, not_started} if the coordinator process isn't registered.
 -spec join_cluster(atom(), node()) -> ok | {error, term()}.
 join_cluster(StoreId, TargetNode) ->
     Name = reckon_db_naming:coordinator_name(StoreId),
-    gen_server:call(Name, {join_cluster_node, StoreId, TargetNode}, ?JOIN_TIMEOUT).
+    case whereis(Name) of
+        undefined -> {error, not_started};
+        _Pid -> gen_server:call(Name, {join_cluster_node, StoreId, TargetNode}, ?JOIN_TIMEOUT)
+    end.
 
-%% @doc Check if this node should handle nodeup events
+%% @doc Check if this node should handle nodeup events.
+%%
+%% Returns false if the coordinator isn't running — a store without a
+%% coordinator should not handle nodeup events.
 -spec should_handle_nodeup(atom()) -> boolean().
 should_handle_nodeup(StoreId) ->
     Name = reckon_db_naming:coordinator_name(StoreId),
-    gen_server:call(Name, {should_handle_nodeup, StoreId}, 5000).
+    case whereis(Name) of
+        undefined -> false;
+        _Pid -> gen_server:call(Name, {should_handle_nodeup, StoreId}, 5000)
+    end.
 
 %% @doc Get cluster members
 -spec members(atom()) -> {ok, [term()]} | {error, term()}.

@@ -80,11 +80,19 @@ trigger_discovery(StoreId) ->
     Name = reckon_db_naming:discovery_name(StoreId),
     gen_server:cast(Name, trigger_discovery).
 
-%% @doc Get list of discovered nodes
--spec get_discovered_nodes(atom()) -> [node()].
+%% @doc Get list of discovered nodes.
+%%
+%% Returns {error, not_running} if the discovery process isn't registered
+%% (single-node mode, or store hasn't started yet). gen_server:call/3
+%% throws {exit, {noproc}} when the target doesn't exist — the guard
+%% converts that to an error tuple.
+-spec get_discovered_nodes(atom()) -> [node()] | {error, not_running}.
 get_discovered_nodes(StoreId) ->
     Name = reckon_db_naming:discovery_name(StoreId),
-    gen_server:call(Name, get_discovered_nodes).
+    case whereis(Name) of
+        undefined -> {error, not_running};
+        _Pid -> gen_server:call(Name, get_discovered_nodes)
+    end.
 
 %%====================================================================
 %% gen_server callbacks

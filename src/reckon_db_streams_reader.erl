@@ -149,27 +149,36 @@ terminate(_Reason, #state{store_id = StoreId, stream_id = StreamId}) ->
 reader_group_key(StoreId, StreamId) ->
     {StoreId, StreamId, streams_reader}.
 
-%% @private
+%% @private Start a new reader worker via the streams supervisor.
+%%
+%% Guards against the supervisor not being registered yet (startup race
+%% or shutdown in progress). supervisor:start_child/2 throws {exit, {noproc}}
+%% as an exception when the named supervisor isn't running — returning an
+%% error tuple instead of crashing the caller.
 -spec start_new_reader(atom(), binary()) -> pid().
 start_new_reader(StoreId, StreamId) ->
     Partition = partition_for(StoreId, StreamId),
     SupName = reckon_db_naming:streams_sup_name(StoreId),
 
-    ChildSpec = #{
-        id => make_ref(),
-        start => {?MODULE, start_link, [{StoreId, StreamId, Partition}]},
-        restart => temporary,
-        shutdown => 5000,
-        type => worker,
-        modules => [?MODULE]
-    },
-
-    case supervisor:start_child(SupName, ChildSpec) of
-        {ok, Pid} -> Pid;
-        {error, {already_started, Pid}} -> Pid;
-        {error, Reason} ->
-            logger:error("Failed to start streams reader: ~p", [Reason]),
-            error({failed_to_start_reader, Reason})
+    case whereis(SupName) of
+        undefined ->
+            error({streams_sup_not_running, StoreId});
+        _Pid ->
+            ChildSpec = #{
+                id => make_ref(),
+                start => {?MODULE, start_link, [{StoreId, StreamId, Partition}]},
+                restart => temporary,
+                shutdown => 5000,
+                type => worker,
+                modules => [?MODULE]
+            },
+            case supervisor:start_child(SupName, ChildSpec) of
+                {ok, Pid} -> Pid;
+                {error, {already_started, Pid}} -> Pid;
+                {error, Reason} ->
+                    logger:error("Failed to start streams reader: ~p", [Reason]),
+                    error({failed_to_start_reader, Reason})
+            end
     end.
 
 %% @private

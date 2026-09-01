@@ -54,7 +54,8 @@
     health_monitor_reports_healthy/1,
     health_monitor_detects_missing_pool/1,
     bare_khepri_subscribe_no_emitter_pool/1,
-    late_subscribe_starts_pool_immediately/1
+    late_subscribe_starts_pool_immediately/1,
+    stale_subscription_does_not_crash_leader/1
 ]).
 
 %%====================================================================
@@ -79,7 +80,8 @@ all() ->
         health_monitor_reports_healthy,
         health_monitor_detects_missing_pool,
         bare_khepri_subscribe_no_emitter_pool,
-        late_subscribe_starts_pool_immediately
+        late_subscribe_starts_pool_immediately,
+        stale_subscription_does_not_crash_leader
     ].
 
 init_per_suite(Config) ->
@@ -626,6 +628,62 @@ late_subscribe_starts_pool_immediately(Config) ->
     after 5000 ->
         ct:fail("Late subscription did not receive event — pool not started synchronously")
     end,
+
+    %% Cleanup
+    reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
+    ok.
+
+%% @doc GIVEN a store with a persisted subscription whose subscriber PID
+%%      is dead (e.g. after a restart)
+%%      WHEN the leader activates and tries to start emitters for it
+%%      THEN the leader does NOT crash — it logs a warning and continues
+%%
+%%      Regression test for the hecate-mail crash loop on beam01 (2026-09-01).
+%%      A stale subscription persisted in Khepri had dead subscriber PIDs.
+%%      The emitter supervisor wasn't running yet, supervisor:start_child
+%%      threw {noproc}, which crashed the leader worker, which crashed the
+%%      store, which crashed the application — 160 restarts in a loop.
+stale_subscription_does_not_crash_leader(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+
+    ok = wait_for_leader(StoreId, 10000),
+
+    %% Create a subscription with a subscriber that will die
+    StreamId = reckon_db_test_helpers:sid(<<"stale-sub-001">>),
+    SubName = <<"stale_sub_test">>,
+    DeadSubscriber = spawn(fun() -> receive die -> ok end end),
+
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName,
+        #{subscriber => DeadSubscriber}
+    ),
+
+    timer:sleep(300),
+
+    %% Kill the subscriber so its PID is stale
+    DeadSubscriber ! die,
+    timer:sleep(100),
+    ?assertEqual(false, is_process_alive(DeadSubscriber)),
+
+    %% Stop the store — this persists the subscription with the dead PID
+    reckon_db_sup:stop_store(StoreId),
+    timer:sleep(500),
+
+    %% Restart the store — leader activation will find the stale subscription
+    StoreConfig = #store_config{
+        store_id = StoreId,
+        data_dir = proplists:get_value(data_dir, Config),
+        mode = single,
+        writer_pool_size = 1,
+        reader_pool_size = 1,
+        gateway_pool_size = 1,
+        options = #{}
+    },
+    {ok, _} = reckon_db_sup:start_store(StoreConfig),
+
+    %% Leader should still activate successfully despite the stale subscription
+    ok = wait_for_leader(StoreId, 10000),
+    ?assertEqual(true, reckon_db_leader:is_active(StoreId)),
 
     %% Cleanup
     reckon_db_subscriptions:unsubscribe(StoreId, SubKey),

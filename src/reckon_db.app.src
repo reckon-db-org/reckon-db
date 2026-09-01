@@ -6,7 +6,7 @@
                   "hashing, compression, aggregation, filter matching, and graph "
                   "algorithms — with pure-Erlang fallbacks when the toolchain "
                   "isn't available."},
-    {vsn, "5.11.1"},
+    {vsn, "5.11.2"},
     {registered, []},
     {mod, {reckon_db_app, []}},
     {applications, [
@@ -34,9 +34,9 @@
     {modules, []},
     {licenses, ["Apache-2.0"]},
     {links, [
-        {"Codeberg", "https://codeberg.org/reckon-db-org/reckon-db"},
+        {"GitHub", "https://github.com/reckon-db-org/reckon-db"},
         {"Documentation", "https://hexdocs.pm/reckon_db"},
-        {"Changelog", "https://codeberg.org/reckon-db-org/reckon-db/src/branch/main/CHANGELOG.md"}
+        {"Changelog", "https://github.com/reckon-db-org/reckon-db/blob/main/CHANGELOG.md"}
     ]},
     %% Hex packaging: explicit file list for `rebar3 hex publish`.
     %% rebar3_hex reads `files' from THIS app.src, not from
