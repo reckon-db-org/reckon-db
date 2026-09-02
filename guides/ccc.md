@@ -9,7 +9,7 @@ constraint that shapes the API.
 
 For the conceptual framing — what CCC is, how it relates to DCB, and worked
 end-to-end examples — see the
-[reckon-gater CCC guide](https://codeberg.org/reckon-db-org/reckon-gater/src/branch/main/guides/ccc.md).
+[reckon-gater CCC guide](https://github.com/reckon-db-org/reckon-gater/blob/main/guides/ccc.md).
 
 ---
 
@@ -135,4 +135,4 @@ preprocessing.
 
 - [DCB guide](dcb.md) — the full filter algebra and the conditional-append API
 - [DCB Raft design](dcb_raft_design.md) — the Horus constraint and the pre-stamp pattern
-- [reckon-gater CCC guide](https://codeberg.org/reckon-db-org/reckon-gater/src/branch/main/guides/ccc.md) — conceptual framing, worked examples, literature
+- [reckon-gater CCC guide](https://github.com/reckon-db-org/reckon-gater/blob/main/guides/ccc.md) — conceptual framing, worked examples, literature

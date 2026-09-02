@@ -84,7 +84,7 @@ Same signature, same return shape. Routes via the gater worker pool.
 
 For BEAM consumers, the `evoq_decision` behaviour wraps the
 read/decide/write loop with retry + backoff. See
-[evoq's decisions guide](https://codeberg.org/reckon-db-org/evoq/src/branch/main/guides/decisions.md).
+[evoq's decisions guide](https://github.com/reckon-db-org/evoq/blob/main/guides/decisions.md).
 
 ### Through gRPC (polyglot clients)
 
@@ -268,8 +268,8 @@ This is invisible to callers: same API, same return shape.
 
 - [CCC guide](ccc.md) — payload-indexed filters, multi-field hash pattern, and the full CCC framing (5.3.0+)
 - [DCB Raft design](dcb_raft_design.md) — why Raft changes the design vs. PostgreSQL, the Horus pre-stamp pattern, and the hybrid aggregate+DCB model
-- [evoq decisions guide](https://codeberg.org/reckon-db-org/evoq/src/branch/main/guides/decisions.md) — the high-level Erlang API
-- [`plans/PLAN_DCB_IMPLEMENTATION.md`](https://codeberg.org/reckon-db-org/reckon-db/src/branch/main/plans/PLAN_DCB_IMPLEMENTATION.md) — implementation design
-- [hecate-corpus `CONSISTENCY_BOUNDARIES.md`](https://codeberg.org/hecate-social/hecate-corpus/src/branch/main/philosophy/CONSISTENCY_BOUNDARIES.md) — the doctrine
+- [evoq decisions guide](https://github.com/reckon-db-org/evoq/blob/main/guides/decisions.md) — the high-level Erlang API
+- [`plans/PLAN_DCB_IMPLEMENTATION.md`](https://github.com/reckon-db-org/reckon-db/blob/main/plans/PLAN_DCB_IMPLEMENTATION.md) — implementation design
+- [hecate-corpus `CONSISTENCY_BOUNDARIES.md`](https://github.com/hecate-social/hecate-corpus/blob/main/philosophy/CONSISTENCY_BOUNDARIES.md) — the doctrine
 - Ericsson Architects' [aggregateless event sourcing](https://ricofritzsche.me/aggregateless-event-sourcing/) — the inspiration
 - Rico Fritzsche's *Simply Event Sourcing* (2025) — formal CCC treatment and worked DCB patterns

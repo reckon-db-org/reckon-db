@@ -4,7 +4,7 @@ Thanks for your interest in contributing. reckon-db is a BEAM-native event store
 
 ## How to report a bug
 
-1. Open an issue on the canonical Codeberg repository: <https://codeberg.org/reckon-db-org/reckon-db/issues>.
+1. Open an issue on the canonical GitHub repository: <https://github.com/reckon-db-org/reckon-db/issues>.
 2. Include:
    - reckon-db version (`{vsn, ...}` from `src/reckon_db.app.src`, or the hex package version)
    - Erlang/OTP version (`erl -version`)
@@ -24,7 +24,7 @@ For small fixes, a pull request is welcome directly.
 - **Tests.** New behaviour MUST come with EUnit tests. Bug fixes MUST come with a regression test that fails before the fix and passes after.
 - **No new dialyzer warnings.** `rebar3 dialyzer` will flag anything new. See [docs/dialyzer-backlog.md](docs/dialyzer-backlog.md) for the existing backlog — you do not need to fix pre-existing warnings as part of an unrelated change, but you also should not add to them.
 - **No new ex_doc warnings.** `rebar3 ex_doc` must complete clean.
-- **Vertical slicing.** New features go in directories named by intent (`add_stream/`, `verify_chain/`), not by technical layer. No `services/`, `repositories/`, `utils/`. See the project root [CLAUDE.md](https://codeberg.org/reckon-db-org/reckon-db) ecosystem-wide for the full rule set.
+- **Vertical slicing.** New features go in directories named by intent (`add_stream/`, `verify_chain/`), not by technical layer. No `services/`, `repositories/`, `utils/`. See the project root [CLAUDE.md](https://github.com/reckon-db-org/reckon-db) ecosystem-wide for the full rule set.
 - **CRUD events are taboo.** Domain events use business verbs (`stream_appended`, `subscription_registered`, `snapshot_recorded`), never `created` / `updated` / `deleted`.
 
 ### Commit message style
@@ -47,7 +47,7 @@ rebar3 dialyzer     # type-check (see backlog note above)
 rebar3 ex_doc       # generate docs (must be warning-free)
 ```
 
-The full integration-test matrix lives in the sibling [reckon-e2e](https://codeberg.org/reckon-db-org/reckon-e2e) repo. Run that suite when touching cluster, subscription, or snapshot machinery.
+The full integration-test matrix lives in the sibling [reckon-e2e](https://github.com/reckon-db-org/reckon-e2e) repo. Run that suite when touching cluster, subscription, or snapshot machinery.
 
 ## Releasing
 

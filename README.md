@@ -318,7 +318,7 @@ rebar3 ct --suite=reckon_db_cluster_SUITE  # Cluster tests
 
 ## Gateway API
 
-reckon-db is accessed through [reckon-gater](https://codeberg.org/reckon-db-org/reckon-gater), which provides the unified API for load-balanced, distributed access to event stores.
+reckon-db is accessed through [reckon-gater](https://github.com/reckon-db-org/reckon-gater), which provides the unified API for load-balanced, distributed access to event stores.
 
 ### How It Works
 
@@ -360,15 +360,15 @@ Full guide index with audience-grouped reading orders: **[guides/README.md](guid
 reckon-db is one library in the Reckon event-sourcing ecosystem. In dependency
 order (a library only knows about the ones above it):
 
-- **[reckon-proto](https://codeberg.org/reckon-db-org/reckon-proto)**: the wire-contract protobufs; source of truth for the gateway surface.
-- **[reckon-gater](https://codeberg.org/reckon-db-org/reckon-gater)**: shared types and protocols (event, snapshot, subscription, DCB/CCC tag_filter); no Reckon dependencies. The API reckon-db registers its store workers with.
+- **[reckon-proto](https://github.com/reckon-db-org/reckon-proto)**: the wire-contract protobufs; source of truth for the gateway surface.
+- **[reckon-gater](https://github.com/reckon-db-org/reckon-gater)**: shared types and protocols (event, snapshot, subscription, DCB/CCC tag_filter); no Reckon dependencies. The API reckon-db registers its store workers with.
 - **reckon-db (this repo)**: BEAM-native event store. Depends on `reckon_gater`, `khepri`, `ra`. Does not depend on `evoq` or `reckon_evoq`.
-- **[reckon-nifs](https://codeberg.org/reckon-db-org/reckon-nifs)**: standalone Rust NIF helpers; pure-Erlang fallbacks when no toolchain is present.
-- **[evoq](https://codeberg.org/reckon-db-org/evoq)**: standalone CQRS/event-sourcing framework (aggregates, projections, process managers); no Reckon dependencies.
-- **[reckon-evoq](https://codeberg.org/reckon-db-org/reckon-evoq)**: the adapter wiring evoq to a Reckon store. Depends on `evoq` and `reckon_gater`; **not** on `reckon_db` (it reaches the store through the gater API).
-- **[reckon-gateway](https://codeberg.org/reckon-db-org/reckon-gateway)**: gRPC + HTTP/JSON ingress. Consumes `reckon_gater`; can embed a local `reckon_db` store or federate remote clusters.
-- **[reckon-go](https://codeberg.org/reckon-db-org/reckon-go)**: the Go client; talks to reckon-gateway.
-- **reckon-portal**: docs and landing site for the ecosystem ([reckon-internal/reckon-portal](https://codeberg.org/reckon-internal/reckon-portal)).
+- **[reckon-nifs](https://github.com/reckon-db-org/reckon-nifs)**: standalone Rust NIF helpers; pure-Erlang fallbacks when no toolchain is present.
+- **[evoq](https://github.com/reckon-db-org/evoq)**: standalone CQRS/event-sourcing framework (aggregates, projections, process managers); no Reckon dependencies.
+- **[reckon-evoq](https://github.com/reckon-db-org/reckon-evoq)**: the adapter wiring evoq to a Reckon store. Depends on `evoq` and `reckon_gater`; **not** on `reckon_db` (it reaches the store through the gater API).
+- **[reckon-gateway](https://github.com/reckon-db-org/reckon-gateway)**: gRPC + HTTP/JSON ingress. Consumes `reckon_gater`; can embed a local `reckon_db` store or federate remote clusters.
+- **[reckon-go](https://github.com/reckon-db-org/reckon-go)**: the Go client; talks to reckon-gateway.
+- **reckon-portal**: docs and landing site for the ecosystem ([reckon-internal/reckon-portal](https://github.com/reckon-db-org/reckon-portal)).
 
 ### Origin
 
