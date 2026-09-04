@@ -24,21 +24,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cost because it never grew mid-burst).
 
   Fixed by indexing the cache one ETS row per event (`{{StoreId,
-  Position}, Event}`) instead of one row per store. A page read is now
-  `BatchSize` independent point lookups — cost scales with the page, not
-  with the store — instead of one copy of the whole cached collection.
-  The one full scan-and-sort per fingerprint change (`global_event_count/1`,
-  unchanged) is not reduced; that part was already correct. The whole
-  batch (every position row + a meta row) is written with a single
-  `ets:insert/2` call, which OTP guarantees atomic and isolated for
-  `set`/`ordered_set` tables, so a concurrent reader never sees a torn
-  mix of two generations.
+  Position}, Generation, Event}`) instead of one row per store. A page
+  read is now `BatchSize` independent point lookups — cost scales with the
+  page, not with the store — instead of one copy of the whole cached
+  collection. The one full scan-and-sort per fingerprint change
+  (`global_event_count/1`, unchanged as the rebuild trigger) is not
+  reduced; that part was already correct.
+
+  Two correctness properties this needed that a whole-list cache got for
+  free, both closed with a per-rebuild `Generation` tag (an adversarial
+  review caught both before release, neither was hit by the real-data
+  validation below because that store's counter happened to match its
+  real row count exactly):
+  - **Pages are now bounded by the actual row count from the scan
+    (`Len`), never by `global_event_count/1`.** That counter is a
+    fingerprint ("has anything changed"), not an authoritative count —
+    it reads as 0 on stores that predate it, DCB appends never bump it,
+    and deletes never decrement it. Paging against it directly (as an
+    earlier draft of this fix did) would silently truncate catch-up when
+    the counter under-counts, or let a shrunk generation's stale trailing
+    rows leak back in when it over-counts.
+  - **A page whose lookups span a concurrent rebuild fails closed instead
+    of silently mixing two generations.** The whole batch (every position
+    row + a meta row) is still written with one `ets:insert/2` call,
+    atomic and isolated per OTP's own guarantee for `set` tables — but
+    that only makes the WRITE atomic. A page does `BatchSize` *separate*
+    `ets:lookup` calls, so a rebuild can still land between two of them.
+    Each row now carries the `Generation` its rebuild minted; a mismatch
+    (or a missing row, same cause) means a rebuild happened mid-page, and
+    the page is retried once against the fresh generation before failing
+    with `{error, cache_generation_changed_mid_page}` rather than
+    returning a page that isn't a real snapshot of the store.
 
   Verified against the real 87k-event store this was found on: paged
   reads match a single full scan exactly (no dupes, no gaps, no
   off-by-one at page seams), and a full 88-page catch-up burst dropped
   from ~11 seconds to ~164ms (roughly 67x) with the concurrent-write case
-  no slower than the static one.
+  no slower than the static one. The generation-mismatch path itself is
+  covered by a new CT case that pokes the cache table directly to
+  simulate a rebuild landing mid-page, since the real race isn't
+  practical to trigger deterministically.
 
 - **Deprecated bare `catch Expr` syntax across `src/`** (`reckon_db_cluster`,
   `reckon_db_emitter`, `reckon_db_resource_monitor`, `reckon_db_store`,

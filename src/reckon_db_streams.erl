@@ -289,33 +289,64 @@ read_all(StoreId, StreamId, BatchSize, Direction) ->
 %% and each copies exactly one event, not the whole store) instead of one
 %% O(N) copy. The one full scan-and-sort per fingerprint change is
 %% unchanged -- sorting still requires seeing every event at least once --
-%% only the PER-PAGE cost after that scan is fixed. The whole batch
-%% (meta row + every position row) is written with a single `ets:insert/2'
-%% call: for `set'/`ordered_set' tables OTP guarantees that call atomic and
-%% isolated, so a concurrent reader always sees either the complete
-%% previous generation or the complete new one -- never a torn mix of
-%% half-old, half-new positions.
--spec read_all_global(atom(), non_neg_integer(), pos_integer()) ->
-    {ok, [event()]} | {error, term()}.
-read_all_global(StoreId, Offset, BatchSize) ->
-    case ensure_cached(StoreId) of
-        {ok, Count} ->
-            {ok, fetch_page(StoreId, Offset, BatchSize, Count)};
-        {error, _} = Error ->
-            Error
-    end.
-
+%% only the PER-PAGE cost after that scan is fixed.
+%%
+%% Two correctness properties a whole-list cache gets for free and a
+%% per-row one has to earn back, both closed by a per-rebuild Generation
+%% id every row (including the meta row) is tagged with:
+%%
+%% 1. The page bound must be the ACTUAL number of rows this generation
+%%    wrote, never `global_event_count/1'. That counter is a fingerprint
+%%    ("has anything changed"), not an authoritative row count -- it does
+%%    not exist on stores that predate it (reads as 0, nothing backfilled),
+%%    DCB appends (`reckon_db_dcb') never bump it, and deletes never
+%%    decrement it. Any of those makes it diverge from the real scanned
+%%    length: paging against it would silently truncate catch-up (counter
+%%    too low) or let a shrunk generation's stale trailing rows leak back
+%%    in (counter too high). `Len = length(SortedEvents)' from THIS
+%%    rebuild is the only authoritative bound.
+%% 2. A page is `BatchSize' independent `ets:lookup' calls, not one atomic
+%%    read -- so while the WRITE side is atomic (the whole batch lands in
+%%    one `ets:insert/2', which OTP guarantees atomic and isolated for
+%%    `set' tables), the READ side is not: a rebuild can still land between
+%%    two of a page's lookups. If that rebuild's fresh sort reassigns a
+%%    position this page already read (only possible if two events'
+%%    epoch_us values are close enough, or a delete/DCB write races the
+%%    scan, to change relative order -- `sort_by_epoch/1' promises a
+%%    stable sort of whatever it saw, nothing about positions surviving a
+%%    later append), the page would silently mix two generations. Tagging
+%%    each row with its Generation and checking it on every lookup turns
+%%    that into a detectable condition instead of a silent one: a page
+%%    that spans a rebuild is retried once, against the new generation,
+%%    rather than returned torn.
 -define(READ_ALL_GLOBAL_CACHE, reckon_db_read_all_global_cache).
 %% Long enough to cover one catch-up burst (milliseconds to low seconds in
 %% practice); short enough that an entry from a burst nobody ever repeats
 %% doesn't sit in memory indefinitely.
 -define(READ_ALL_GLOBAL_CACHE_TTL_MS, 30000).
+%% One rebuild takes low seconds even against a real ~87k-event store (see
+%% the module doc above); a SECOND rebuild landing inside the handful of
+%% BEAM reductions between two ets:lookup calls of the same page would
+%% need back-to-back rebuilds on that timescale. One retry is generous.
+-define(PAGE_RETRY_LIMIT, 1).
+
+-spec read_all_global(atom(), non_neg_integer(), pos_integer()) ->
+    {ok, [event()]} | {error, term()}.
+read_all_global(StoreId, Offset, BatchSize) ->
+    case ensure_cached(StoreId) of
+        {ok, Len, Generation} ->
+            fetch_page(StoreId, Offset, BatchSize, Len, Generation, ?PAGE_RETRY_LIMIT);
+        {error, _} = Error ->
+            Error
+    end.
 
 %% @private Ensure this store's event index is current (rebuilding it, one
 %% scan-and-sort, when the `global_event_count/1' fingerprint has moved or
-%% the entry outlived its TTL) and return the event count it is indexed
-%% for -- the total `fetch_page/4' pages against.
--spec ensure_cached(atom()) -> {ok, non_neg_integer()} | {error, term()}.
+%% the entry outlived its TTL) and return `{ok, Len, Generation}' --
+%% `fetch_page/5' pages against Len (the real row count) and verifies
+%% Generation on every row it reads.
+-spec ensure_cached(atom()) ->
+    {ok, non_neg_integer(), reference()} | {error, term()}.
 ensure_cached(StoreId) ->
     ensure_cache_table(),
     case global_event_count(StoreId) of
@@ -326,9 +357,9 @@ ensure_cached(StoreId) ->
 cached_or_rebuilt(StoreId, Count) ->
     Now = erlang:monotonic_time(millisecond),
     case ets:lookup(?READ_ALL_GLOBAL_CACHE, {meta, StoreId}) of
-        [{_, Count, InsertedAt}]
+        [{_, Count, Len, Generation, InsertedAt}]
                 when Now - InsertedAt < ?READ_ALL_GLOBAL_CACHE_TTL_MS ->
-            {ok, Count};
+            {ok, Len, Generation};
         _ ->
             rebuild_cache(StoreId, Count, Now)
     end.
@@ -340,35 +371,57 @@ rebuild_cache(StoreId, Count, Now) ->
                       || {PathKey, Value} <- Results],
             ValidEvents = [E || E <- Events, E =/= undefined],
             SortedEvents = sort_by_epoch(ValidEvents),
-            Rows = index_rows(StoreId, SortedEvents),
+            Len = length(SortedEvents),
+            Generation = make_ref(),
+            Rows = index_rows(StoreId, SortedEvents, Generation),
             true = ets:insert(?READ_ALL_GLOBAL_CACHE,
-                               [{{meta, StoreId}, Count, Now} | Rows]),
-            {ok, Count};
+                               [{{meta, StoreId}, Count, Len, Generation, Now} | Rows]),
+            {ok, Len, Generation};
         {error, _} = Error ->
             Error
     end.
 
-%% @private One `{{StoreId, Position}, Event}' row per event, 0-based and
-%% dense -- `fetch_page/4' relies on every position in `[0, Count)' existing.
-index_rows(StoreId, Events) ->
+%% @private One `{{StoreId, Position}, Generation, Event}' row per event,
+%% 0-based and dense -- `fetch_page/5' relies on every position in
+%% `[0, Len)' existing under the SAME Generation this call minted.
+index_rows(StoreId, Events, Generation) ->
     {Rows, _} = lists:mapfoldl(
-        fun(Event, Position) -> {{{StoreId, Position}, Event}, Position + 1} end,
+        fun(Event, Position) -> {{{StoreId, Position}, Generation, Event}, Position + 1} end,
         0, Events),
     Rows.
 
 %% @private A page is `BatchSize' independent point lookups, not a copy of
-%% the whole cached store -- cost scales with the page, not with Count.
-fetch_page(_StoreId, Offset, _BatchSize, Count) when Offset >= Count ->
-    [];
-fetch_page(StoreId, Offset, BatchSize, Count) ->
-    Last = min(Offset + BatchSize, Count) - 1,
-    [Event || Position <- lists:seq(Offset, Last),
-              Event <- lookup_event(StoreId, Position)].
+%% the whole cached store -- cost scales with the page, not with Len. Every
+%% row read must carry the SAME Generation this call started with; a
+%% mismatch (or a missing row -- same cause) means a rebuild landed
+%% mid-page, and the page is retried once against the fresh generation
+%% rather than returned as a torn mix of two.
+fetch_page(_StoreId, Offset, _BatchSize, Len, _Generation, _RetriesLeft) when Offset >= Len ->
+    {ok, []};
+fetch_page(StoreId, Offset, BatchSize, Len, Generation, RetriesLeft) ->
+    Last = min(Offset + BatchSize, Len) - 1,
+    Positions = lists:seq(Offset, Last),
+    case lookup_consistent(StoreId, Positions, Generation, []) of
+        {ok, _Events} = Ok -> Ok;
+        stale -> retry_page(StoreId, Offset, BatchSize, RetriesLeft)
+    end.
 
-lookup_event(StoreId, Position) ->
+lookup_consistent(_StoreId, [], _Generation, Acc) ->
+    {ok, lists:reverse(Acc)};
+lookup_consistent(StoreId, [Position | Rest], Generation, Acc) ->
     case ets:lookup(?READ_ALL_GLOBAL_CACHE, {StoreId, Position}) of
-        [{_, Event}] -> [Event];
-        [] -> []
+        [{_, Generation, Event}] -> lookup_consistent(StoreId, Rest, Generation, [Event | Acc]);
+        _ -> stale
+    end.
+
+retry_page(_StoreId, _Offset, _BatchSize, 0) ->
+    {error, cache_generation_changed_mid_page};
+retry_page(StoreId, Offset, BatchSize, RetriesLeft) ->
+    case ensure_cached(StoreId) of
+        {ok, Len, Generation} ->
+            fetch_page(StoreId, Offset, BatchSize, Len, Generation, RetriesLeft - 1);
+        {error, _} = Error ->
+            Error
     end.
 
 %% @private Lazily create the (ownerless, public) cache table. Races on

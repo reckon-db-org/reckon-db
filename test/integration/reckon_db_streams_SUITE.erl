@@ -62,7 +62,8 @@
     read_all_global_paginates/1,
     read_all_global_cache_hit_matches_scan/1,
     read_all_global_invalidates_on_append/1,
-    read_all_global_cache_isolated_per_store/1
+    read_all_global_cache_isolated_per_store/1,
+    read_all_global_rejects_torn_page_instead_of_mixing_generations/1
 ]).
 
 -define(STORE_ID, streams_test_store).
@@ -118,7 +119,8 @@ groups() ->
             read_all_global_paginates,
             read_all_global_cache_hit_matches_scan,
             read_all_global_invalidates_on_append,
-            read_all_global_cache_isolated_per_store
+            read_all_global_cache_isolated_per_store,
+            read_all_global_rejects_torn_page_instead_of_mixing_generations
         ]}
     ].
 
@@ -590,6 +592,46 @@ read_all_global_cache_isolated_per_store(Config) ->
     khepri:stop(OtherStoreId),
     os:cmd("rm -rf " ++ OtherDataDir),
     ok.
+
+%% @doc If a row this page is about to read carries a Generation tag that
+%% doesn't match what the meta row promised -- what a rebuild landing
+%% between two of this page's `ets:lookup' calls would produce, since the
+%% WRITE side (one atomic `ets:insert/2' per rebuild) does not make the
+%% per-lookup READ side atomic too -- the page must fail closed instead of
+%% silently returning a torn mix of two generations. Pokes the cache table
+%% directly (its name mirrors the private `?READ_ALL_GLOBAL_CACHE' macro)
+%% since there is no other way to construct this exact race
+%% deterministically.
+read_all_global_rejects_torn_page_instead_of_mixing_generations(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    S = generate_stream_id(),
+    Marker = integer_to_binary(erlang:unique_integer([positive])),
+    Types = [<<"torn_", Marker/binary, "_", (integer_to_binary(N))/binary>>
+             || N <- lists:seq(1, 3)],
+    lists:foreach(fun({N, T}) ->
+        Ver = case N of 1 -> ?NO_STREAM; _ -> N - 2 end,
+        {ok, _} = reckon_db_streams:append(StoreId, S, Ver, [generate_event(T)])
+    end, lists:zip(lists:seq(1, 3), Types)),
+
+    %% Force a rebuild so the cache is populated, and find our 3 events'
+    %% positions in it.
+    {ok, All} = reckon_db_streams:read_all_global(StoreId, 0, 1000000),
+    AllTypes = [Ev#event.event_type || Ev <- All],
+    OurIndexes = [I || {I, T} <- lists:zip(lists:seq(0, length(AllTypes) - 1), AllTypes),
+                        lists:member(T, Types)],
+    3 = length(OurIndexes),
+    [FirstOurs | _] = lists:sort(OurIndexes),
+
+    %% Corrupt exactly one of our rows' Generation tag in place -- one row
+    %% now disagrees with the meta row's Generation, the rest still agree.
+    CacheTable = reckon_db_read_all_global_cache,
+    [{Key, _Generation, Event}] = ets:lookup(CacheTable, {StoreId, FirstOurs}),
+    true = ets:insert(CacheTable, {Key, make_ref(), Event}),
+
+    %% A page spanning the corrupted position fails closed rather than
+    %% returning a page silently mixing two generations.
+    Result = reckon_db_streams:read_all_global(StoreId, FirstOurs, 3),
+    ?assertEqual({error, cache_generation_changed_mid_page}, Result).
 
 %%====================================================================
 %% Helper Functions
