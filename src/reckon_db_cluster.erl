@@ -81,7 +81,9 @@ local_healthy(StoreId) ->
 %% bound? A wedged server yields `false' fast rather than blocking the caller.
 -spec local_responsive(atom()) -> boolean().
 local_responsive(StoreId) ->
-    case catch ra:members({StoreId, node()}, ?LOCAL_PROBE_TIMEOUT) of
+    case try ra:members({StoreId, node()}, ?LOCAL_PROBE_TIMEOUT)
+         catch _:_ -> probe_failed
+         end of
         {ok, _Members, _Leader} -> true;
         _                       -> false
     end.

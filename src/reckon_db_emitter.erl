@@ -174,7 +174,7 @@ maybe_forward_events(Pid, Events) when is_pid(Pid) ->
     %% silent-drop here caused subscriptions to lose events whenever
     %% the broadcast/catch-up source ran on a node other than the
     %% subscriber's node.
-    catch (Pid ! {events, Events}),
+    Pid ! {events, Events},
     ok.
 
 deliver_event(undefined, Event, StoreId, _SubscriptionKey, Topic) ->
@@ -191,7 +191,7 @@ broadcast_to_topic(StoreId, Topic, Event) ->
 
     lists:foreach(
         fun(Pid) ->
-            catch Pid ! {events, [Event]}
+            Pid ! {events, [Event]}
         end,
         Members
     ),
@@ -222,7 +222,7 @@ send_to_subscriber(Pid, Event, StoreId, SubscriptionKey) when node(Pid) =:= node
             stop_pool_async(StoreId, SubscriptionKey)
     end;
 send_to_subscriber(Pid, Event, _StoreId, _SubscriptionKey) when is_pid(Pid) ->
-    catch (Pid ! {events, [Event]}),
+    Pid ! {events, [Event]},
     ok.
 
 %% @private Stop the emitter pool asynchronously so event delivery isn't

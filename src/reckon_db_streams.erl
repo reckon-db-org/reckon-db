@@ -268,13 +268,39 @@ read_all(StoreId, StreamId, BatchSize, Direction) ->
 %% A store that grows mid-burst invalidates the cache on its own; the TTL
 %% below is a memory-hygiene bound for a burst that stalls or never
 %% completes, not a correctness mechanism.
+%%
+%% == Why the cache indexes one ETS row per event, not one row per store ==
+%%
+%% A first cut of this cache (5.11.1) stored the WHOLE sorted list as a
+%% single ETS value and served a page via `lists:nthtail'/`sublist' on the
+%% list `ets:lookup' handed back. That still copies and walks the ENTIRE
+%% cached list on EVERY page: `ets:lookup' always deep-copies the full
+%% stored term out to the caller, so a "cache hit" against a real
+%% ~87k-event store (reproduced against a real evidence store, not a
+%% synthetic one -- see hecate-sentinel's CHANGELOG) cost ~110-130ms per
+%% page regardless of hit/miss, not the O(1) the fingerprinting was meant
+%% to buy. Against a store that size, blocking `evoq_store_subscription's
+%% synchronous catch-up for the whole burst was long enough on real
+%% (weaker-than-benchmark) hardware to plausibly trip an external liveness
+%% check mid-replay -- see evoq's async catch-up fix, same release train.
+%%
+%% Indexing each event under its own `{StoreId, Position}' key makes a page
+%% read `BatchSize' independent point lookups (each O(1)/O(log N) in ETS,
+%% and each copies exactly one event, not the whole store) instead of one
+%% O(N) copy. The one full scan-and-sort per fingerprint change is
+%% unchanged -- sorting still requires seeing every event at least once --
+%% only the PER-PAGE cost after that scan is fixed. The whole batch
+%% (meta row + every position row) is written with a single `ets:insert/2'
+%% call: for `set'/`ordered_set' tables OTP guarantees that call atomic and
+%% isolated, so a concurrent reader always sees either the complete
+%% previous generation or the complete new one -- never a torn mix of
+%% half-old, half-new positions.
 -spec read_all_global(atom(), non_neg_integer(), pos_integer()) ->
     {ok, [event()]} | {error, term()}.
 read_all_global(StoreId, Offset, BatchSize) ->
-    case cached_sorted_events(StoreId) of
-        {ok, SortedEvents} ->
-            Skipped = safe_nthtail(Offset, SortedEvents),
-            {ok, lists:sublist(Skipped, BatchSize)};
+    case ensure_cached(StoreId) of
+        {ok, Count} ->
+            {ok, fetch_page(StoreId, Offset, BatchSize, Count)};
         {error, _} = Error ->
             Error
     end.
@@ -285,11 +311,12 @@ read_all_global(StoreId, Offset, BatchSize) ->
 %% doesn't sit in memory indefinitely.
 -define(READ_ALL_GLOBAL_CACHE_TTL_MS, 30000).
 
-%% @private A store's full event list, sorted by epoch, from cache when the
-%% cached entry's `global_event_count/1' fingerprint still matches and
-%% hasn't outlived the TTL; rebuilt (one scan-and-sort, cached) otherwise.
--spec cached_sorted_events(atom()) -> {ok, [event()]} | {error, term()}.
-cached_sorted_events(StoreId) ->
+%% @private Ensure this store's event index is current (rebuilding it, one
+%% scan-and-sort, when the `global_event_count/1' fingerprint has moved or
+%% the entry outlived its TTL) and return the event count it is indexed
+%% for -- the total `fetch_page/4' pages against.
+-spec ensure_cached(atom()) -> {ok, non_neg_integer()} | {error, term()}.
+ensure_cached(StoreId) ->
     ensure_cache_table(),
     case global_event_count(StoreId) of
         {ok, Count} -> cached_or_rebuilt(StoreId, Count);
@@ -298,10 +325,10 @@ cached_sorted_events(StoreId) ->
 
 cached_or_rebuilt(StoreId, Count) ->
     Now = erlang:monotonic_time(millisecond),
-    case ets:lookup(?READ_ALL_GLOBAL_CACHE, StoreId) of
-        [{StoreId, Count, InsertedAt, Sorted}]
+    case ets:lookup(?READ_ALL_GLOBAL_CACHE, {meta, StoreId}) of
+        [{_, Count, InsertedAt}]
                 when Now - InsertedAt < ?READ_ALL_GLOBAL_CACHE_TTL_MS ->
-            {ok, Sorted};
+            {ok, Count};
         _ ->
             rebuild_cache(StoreId, Count, Now)
     end.
@@ -313,11 +340,35 @@ rebuild_cache(StoreId, Count, Now) ->
                       || {PathKey, Value} <- Results],
             ValidEvents = [E || E <- Events, E =/= undefined],
             SortedEvents = sort_by_epoch(ValidEvents),
+            Rows = index_rows(StoreId, SortedEvents),
             true = ets:insert(?READ_ALL_GLOBAL_CACHE,
-                               {StoreId, Count, Now, SortedEvents}),
-            {ok, SortedEvents};
+                               [{{meta, StoreId}, Count, Now} | Rows]),
+            {ok, Count};
         {error, _} = Error ->
             Error
+    end.
+
+%% @private One `{{StoreId, Position}, Event}' row per event, 0-based and
+%% dense -- `fetch_page/4' relies on every position in `[0, Count)' existing.
+index_rows(StoreId, Events) ->
+    {Rows, _} = lists:mapfoldl(
+        fun(Event, Position) -> {{{StoreId, Position}, Event}, Position + 1} end,
+        0, Events),
+    Rows.
+
+%% @private A page is `BatchSize' independent point lookups, not a copy of
+%% the whole cached store -- cost scales with the page, not with Count.
+fetch_page(_StoreId, Offset, _BatchSize, Count) when Offset >= Count ->
+    [];
+fetch_page(StoreId, Offset, BatchSize, Count) ->
+    Last = min(Offset + BatchSize, Count) - 1,
+    [Event || Position <- lists:seq(Offset, Last),
+              Event <- lookup_event(StoreId, Position)].
+
+lookup_event(StoreId, Position) ->
+    case ets:lookup(?READ_ALL_GLOBAL_CACHE, {StoreId, Position}) of
+        [{_, Event}] -> [Event];
+        [] -> []
     end.
 
 %% @private Lazily create the (ownerless, public) cache table. Races on
@@ -1217,8 +1268,3 @@ map_to_event(Map) ->
         metadata_content_type = maps:get(metadata_content_type, Map, ?CONTENT_TYPE_JSON)
     }.
 
-%% @private Safe version of lists:nthtail that returns [] when Offset >= length.
--spec safe_nthtail(non_neg_integer(), list()) -> list().
-safe_nthtail(0, List) -> List;
-safe_nthtail(_, []) -> [];
-safe_nthtail(N, [_ | Rest]) -> safe_nthtail(N - 1, Rest).

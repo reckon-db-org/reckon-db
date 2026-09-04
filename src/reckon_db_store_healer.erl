@@ -345,7 +345,7 @@ clear_local_state(StoreId) ->
 -spec force_delete_local(atom()) -> ok.
 force_delete_local(StoreId) ->
     System = reckon_db_store:ra_system_name(StoreId),
-    _ = catch ra:force_delete_server(System, {StoreId, node()}),
+    _ = (try ra:force_delete_server(System, {StoreId, node()}) catch _:_ -> ok end),
     ok.
 
 %% @private khepri_cluster:reset/1 with a killable timeout guard (it
@@ -354,7 +354,12 @@ force_delete_local(StoreId) ->
 reset_local(StoreId) ->
     Parent = self(),
     Ref = make_ref(),
-    Pid = spawn(fun() -> Parent ! {reset_result, Ref, catch khepri_cluster:reset(StoreId)} end),
+    Pid = spawn(fun() ->
+        Result = try khepri_cluster:reset(StoreId)
+                 catch Class:Reason -> {error, {Class, Reason}}
+                 end,
+        Parent ! {reset_result, Ref, Result}
+    end),
     MRef = erlang:monitor(process, Pid),
     receive
         {reset_result, Ref, ok} ->
@@ -388,8 +393,12 @@ verify_rejoined(StoreId, LeaderNode) ->
 recycle_local(StoreId) ->
     System = reckon_db_store:ra_system_name(StoreId),
     Server = {StoreId, node()},
-    _ = bounded(fun() -> catch ra:stop_server(System, Server) end),
-    case bounded(fun() -> catch ra:restart_server(System, Server) end) of
+    _ = bounded(fun() -> try ra:stop_server(System, Server) catch _:_ -> ok end end),
+    case bounded(fun() ->
+           try ra:restart_server(System, Server)
+           catch Class:Reason -> {error, {Class, Reason}}
+           end
+       end) of
         {ok, ok}         -> verify_responsive(StoreId);
         {ok, {error, R}} -> {error, R};
         {ok, Other}      -> {error, {restart_failed, Other}};
@@ -474,7 +483,9 @@ leaderboard_member_nodes(StoreId) ->
 %% yields `false' fast instead of blocking the whole audit forever.
 -spec local_responsive(atom()) -> boolean().
 local_responsive(StoreId) ->
-    case catch ra:members({StoreId, node()}, ?LOCAL_PROBE_TIMEOUT) of
+    case try ra:members({StoreId, node()}, ?LOCAL_PROBE_TIMEOUT)
+         catch _:_ -> probe_failed
+         end of
         {ok, _Members, _Leader} -> true;
         _                       -> false
     end.

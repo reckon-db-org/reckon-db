@@ -78,7 +78,7 @@ init(Config) ->
     DataDir = resolve_data_dir(Config),
     %% Prime cpu_sup: its first util/0 reading is the since-boot baseline;
     %% discard it so the first real sample reflects the live interval.
-    _ = (catch cpu_sup:util()),
+    _ = (try cpu_sup:util() catch _:_ -> ok end),
     S0 = #state{interval = Interval, data_dir = DataDir, os_mon = OsMon},
     S1 = do_sample(S0),
     {ok, S1#state{timer = schedule(Interval)}}.
@@ -153,7 +153,7 @@ do_sample(#state{data_dir = DD0} = State) ->
 %% --- CPU ---
 
 sample_cpu() ->
-    Busy = case (catch cpu_sup:util()) of
+    Busy = case (try cpu_sup:util() catch _:_ -> undefined end) of
                U when is_number(U) -> round_2(U);
                _ -> undefined
            end,
@@ -165,7 +165,7 @@ sample_cpu() ->
 
 %% cpu_sup:avgN/0 returns the load average * 256 (integer); normalise to a float.
 load_avg(F) ->
-    case (catch F()) of
+    case (try F() catch _:_ -> undefined end) of
         N when is_integer(N) -> round_2(N / 256);
         _ -> undefined
     end.
@@ -200,7 +200,7 @@ sample_disk(DataDir) ->
 
 %% Bare-metal fallback: disksup gives {MountId, TotalKb, UsedPct}.
 disksup_rows() ->
-    case (catch disksup:get_disk_data()) of
+    case (try disksup:get_disk_data() catch _:_ -> [] end) of
         Data when is_list(Data), Data =/= [] ->
             [#{mount => to_bin(Id), total_kb => T, used_percent => U,
                available_kb => round(T * (100 - U) / 100)}

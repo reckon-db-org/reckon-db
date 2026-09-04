@@ -186,7 +186,7 @@ terminate(Reason, #state{store_id = StoreId, started_at = StartedAt}) ->
     Uptime = erlang:system_time(millisecond) - StartedAt,
 
     %% Unannounce store from the distributed registry
-    catch reckon_db_store_registry:unannounce_store(StoreId),
+    _ = (try reckon_db_store_registry:unannounce_store(StoreId) catch _:_ -> ok end),
 
     %% Emit telemetry
     telemetry:execute(
@@ -198,8 +198,8 @@ terminate(Reason, #state{store_id = StoreId, started_at = StartedAt}) ->
     %% Clear tamper-resistance state from persistent_term so a future
     %% reincarnation of this store ID does not inherit stale key
     %% material.
-    catch reckon_db_integrity_key:clear(StoreId),
-    catch reckon_db_index_config:clear(StoreId),
+    _ = (try reckon_db_integrity_key:clear(StoreId) catch _:_ -> ok end),
+    _ = (try reckon_db_index_config:clear(StoreId) catch _:_ -> ok end),
 
     %% Stop Khepri store
     case khepri:stop(StoreId) of
@@ -225,7 +225,7 @@ restart_local_khepri(StoreId, DataDir, Mode) ->
             logger:warning("Restarting torn-down local Khepri store ~p", [StoreId]),
             case start_khepri_store(StoreId, DataDir, Mode) of
                 ok ->
-                    catch init_store_paths(StoreId),
+                    _ = (try init_store_paths(StoreId) catch _:_ -> ok end),
                     ok;
                 {error, _} = Error ->
                     logger:error("Failed to restart local Khepri store ~p: ~p",

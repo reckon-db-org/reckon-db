@@ -5,6 +5,52 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.3] - 2026-09-05
+
+### Fixed
+
+- **`read_all_global/3`'s 5.11.1 cache still cost O(N) per page at real scale,
+  not the O(1) it was meant to buy.** The 5.11.1 fix cached the whole
+  sorted event list as a single ETS value and served pages via
+  `lists:nthtail`/`sublist` against the list `ets:lookup` handed back —
+  but `ets:lookup` always deep-copies the FULL stored term out to the
+  caller, so every page (hit or miss) paid a copy of the entire cached
+  list plus an `nthtail` walk to the requested offset. Reproduced against
+  a real ~87k-event evidence store (hecate-sentinel, not a synthetic one):
+  ~110-130ms per page regardless of cache status, and the store had been
+  taken out of the fleet's `reconcile.manifest` since 2026-09-01 after
+  this made real-scale CPU worse than pre-5.11.1, not better (the 10k
+  synthetic benchmark that validated 5.11.1 never exercised the copy-out
+  cost because it never grew mid-burst).
+
+  Fixed by indexing the cache one ETS row per event (`{{StoreId,
+  Position}, Event}`) instead of one row per store. A page read is now
+  `BatchSize` independent point lookups — cost scales with the page, not
+  with the store — instead of one copy of the whole cached collection.
+  The one full scan-and-sort per fingerprint change (`global_event_count/1`,
+  unchanged) is not reduced; that part was already correct. The whole
+  batch (every position row + a meta row) is written with a single
+  `ets:insert/2` call, which OTP guarantees atomic and isolated for
+  `set`/`ordered_set` tables, so a concurrent reader never sees a torn
+  mix of two generations.
+
+  Verified against the real 87k-event store this was found on: paged
+  reads match a single full scan exactly (no dupes, no gaps, no
+  off-by-one at page seams), and a full 88-page catch-up burst dropped
+  from ~11 seconds to ~164ms (roughly 67x) with the concurrent-write case
+  no slower than the static one.
+
+- **Deprecated bare `catch Expr` syntax across `src/`** (`reckon_db_cluster`,
+  `reckon_db_emitter`, `reckon_db_resource_monitor`, `reckon_db_store`,
+  `reckon_db_store_healer`, `reckon_db_subscriptions`) — OTP's compiler now
+  warns on the value-returning `catch` form, and this project's
+  `warnings_as_errors` turned that into a build failure on a current OTP
+  release. Replaced with `try ... catch ... end`, same behavior at every
+  call site (verified case by case against what each caller actually
+  branches on — mostly discarded fire-and-forget results, a couple of
+  `{ok,_} | {error,_} | Other`-shaped results where only "not ok" mattered).
+  No functional change.
+
 ## [5.11.2] - 2026-09-01
 
 ### Fixed

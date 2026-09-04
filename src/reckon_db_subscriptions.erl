@@ -733,14 +733,15 @@ cleanup_emitter_pool(StoreId, SubscriptionKey) ->
     Members = reckon_db_emitter_group:members(StoreId, SubscriptionKey),
     lists:foreach(
         fun(Pid) ->
-            catch reckon_db_emitter_group:leave(StoreId, SubscriptionKey, Pid)
+            _ = (try reckon_db_emitter_group:leave(StoreId, SubscriptionKey, Pid)
+                 catch _:_ -> ok end)
         end,
         Members
     ),
 
     %% Remove persisted emitter names
     Key = reckon_db_emitter_group:group_key(StoreId, SubscriptionKey),
-    catch persistent_term:erase(Key),
+    _ = (try persistent_term:erase(Key) catch _:_ -> ok end),
     ok.
 
 %% @private Check if a local PID is alive. Remote PIDs are assumed alive.
