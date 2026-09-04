@@ -70,11 +70,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reckon_db_store_healer`, `reckon_db_subscriptions`) — OTP's compiler now
   warns on the value-returning `catch` form, and this project's
   `warnings_as_errors` turned that into a build failure on a current OTP
-  release. Replaced with `try ... catch ... end`, same behavior at every
-  call site (verified case by case against what each caller actually
-  branches on — mostly discarded fire-and-forget results, a couple of
-  `{ok,_} | {error,_} | Other`-shaped results where only "not ok" mattered).
-  No functional change.
+  release. Replaced with `try ... catch ... end`, verified case by case
+  against what each caller actually branches on — mostly discarded
+  fire-and-forget results, a couple of `{ok,_} | {error,_} | Other`-shaped
+  results where only "not ok" mattered. Two call sites in
+  `reckon_db_store_healer` (`reset_local/1`, `recycle_local/1`) now surface
+  a crash as `{error, {Class, Reason}}` instead of the old bare `catch`'s
+  `{error, {reset_failed, {'EXIT', Reason}}}`/`{restart_failed, ...}`
+  wrapping — their one caller (`clear_local_state/1`, `recycle/2`) only
+  logs the value with `~p`, so this is not a behavior change in practice,
+  but it is a different error shape, not a byte-identical one.
 
 ## [5.11.2] - 2026-09-01
 
