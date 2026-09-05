@@ -5,6 +5,32 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.5] - 2026-09-05
+
+### Fixed
+
+- **`priv/build-nifs.sh` could silently serve a stale compiled NIF.**
+  It skipped rebuilding purely on `[ -f "$NIF_FILE" ]` — whether the
+  artifact existed at all, never whether it was still current relative
+  to its source. Modeled on macula-io/macula's own `priv/build-nifs.sh`
+  (same header comment says so), which had the identical defect —
+  found there first, when a stale Aug-27 `.so` silently masked a
+  security fix through a full day of "clean `rebar3 eunit`" runs.
+  Fixed here the same way: also check, via `find -newer` (POSIX,
+  portable), whether any `.rs`/`Cargo.toml`/`Cargo.lock` file under the
+  crate is newer than the built artifact — rebuild if so.
+
+  Verified RED-then-GREEN: reproduced the original silent-staleness
+  bug in isolation, confirmed the fix catches it, confirmed it doesn't
+  over-trigger once genuinely up to date, and confirmed end-to-end
+  against this repo's own build — touching
+  `native/reckon_db_crypto_nif/src/lib.rs` and running `rebar3 compile`
+  now visibly rebuilds the crate and produces a newer `.so`, where
+  before it silently did neither. Full `rebar3 eunit` (662/662,
+  1 flake reconfirmed clean on rerun) and `dialyzer` (217 warnings,
+  matching the already-confirmed pre-existing baseline) clean
+  afterward.
+
 ## [5.11.4] - 2026-09-05
 
 ### Fixed

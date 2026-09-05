@@ -38,8 +38,15 @@ build_nif() {
     local NIF_FILE="${PRIV_DIR}/${CRATE_NAME}.so"
     local CRATE_DIR="${NATIVE_DIR}/${CRATE_NAME}"
 
-    if [ -f "${NIF_FILE}" ]; then
-        return 0  # already built
+    # Skip only if already built AND no source file is newer than the
+    # built artifact -- "already built" alone goes stale silently on any
+    # edit to the crate. Same defect, same fix as macula-io/macula's
+    # priv/build-nifs.sh (this script's own header already says
+    # "Modeled on macula's"), found 2026-09-05 when a stale .so there
+    # silently masked a security fix through a full day of "clean
+    # rebar3 eunit" runs. `find -newer` is POSIX and portable.
+    if [ -f "${NIF_FILE}" ] && [ -z "$(find "${CRATE_DIR}" \( -name '*.rs' -o -name 'Cargo.toml' -o -name 'Cargo.lock' \) -newer "${NIF_FILE}" 2>/dev/null)" ]; then
+        return 0  # already built and up to date
     fi
 
     if [ ! -d "${CRATE_DIR}" ]; then
