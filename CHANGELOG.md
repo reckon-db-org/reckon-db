@@ -5,6 +5,27 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.4] - 2026-09-05
+
+### Fixed
+
+- Removed `erl_opts` (`no_debug_info`, `deterministic`) from the `prod`
+  profile in `rebar.config`. rebar3 merges a fetched dependency's
+  `erl_opts` across *every* profile that dependency defines, not just
+  whichever one the consuming project actually activated — so this
+  library's `prod` profile (a local-dev-only convenience, not used
+  anywhere in this repo's own CI) was silently stripping `debug_info`
+  from every consumer's copy of reckon_db, whether or not they ever
+  selected `prod` themselves, breaking `rebar3 dialyzer` with reckon_db
+  in `plt_extra_apps` for anyone depending on this library. Same defect,
+  same fix, as macula-io/macula 10.19.2 — confirmed with the identical
+  controlled A/B methodology (a bare dependency fetch of this exact repo,
+  only variable changed was this profile's `erl_opts`) during the same
+  org-wide sweep. The `prod` profile's `relx` release settings are
+  untouched. Pass `--erl_opts +no_debug_info` on the `rebar3 as prod
+  release` command line instead if a leaner local release build is ever
+  needed again.
+
 ## [5.11.3] - 2026-09-05
 
 ### Fixed
