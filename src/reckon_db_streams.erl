@@ -38,7 +38,8 @@
 %% Internal exports for workers
 -export([
     do_append/4,
-    do_read/5
+    do_read/5,
+    ensure_cache_table/0
 ]).
 
 %%====================================================================
@@ -424,9 +425,33 @@ retry_page(StoreId, Offset, BatchSize, RetriesLeft) ->
             Error
     end.
 
-%% @private Lazily create the (ownerless, public) cache table. Races on
-%% first use are safe: `ets:new/2' raises `badarg' on a name collision,
-%% which just means another process already won -- nothing to do.
+%% @doc Idempotently create the read-all-global cache table.
+%%
+%% Exported (not just called lazily from `ensure_cached/1') so the
+%% top-level supervisor's own init callback can call this itself,
+%% making the SUPERVISOR
+%% the table's owner instead of whichever transient gateway worker
+%% happens to call `read_all_global/3' first.
+%%
+%% That mattered: a `public' ETS table is owned by whoever calls
+%% `ets:new/2', and the table dies with its owner regardless of how
+%% many other processes still reference it by name. A table created
+%% lazily by a short-lived worker vanishes the instant that worker
+%% exits for ANY reason -- including a routine one-off supervised
+%% restart unrelated to this table -- and the next caller's
+%% `ets:lookup/2' in `cached_or_rebuilt/2' then crashes with
+%% `{badarg, "the table identifier does not refer to an existing ETS
+%% table"}'. Reproduced on every boot in practice: gateway workers
+%% restart routinely during a store's own startup churn, and whichever
+%% one happened to win the race to create this table took it down
+%% with it moments later.
+%%
+%% Racing calls to THIS function are still safe on their own terms
+%% (`ets:new/2' raises `badarg' on a name collision, meaning another
+%% process already won -- nothing to do) -- the fix is giving the
+%% table a caller that is never itself the process racing to use it
+%% moments later.
+-spec ensure_cache_table() -> ok.
 ensure_cache_table() ->
     case ets:whereis(?READ_ALL_GLOBAL_CACHE) of
         undefined -> create_cache_table();

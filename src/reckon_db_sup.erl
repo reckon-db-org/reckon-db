@@ -73,6 +73,14 @@ init([]) ->
         period => 60
     },
 
+    %% Owned by THIS supervisor, not by whichever gateway worker first
+    %% calls read_all_global/3 — a public ETS table dies with whoever
+    %% created it, and a table owned by a transient worker vanishes the
+    %% instant that worker restarts for any unrelated reason, crashing
+    %% the next reader. reckon_db_sup outlives every store/worker under
+    %% it, so this only resets when the whole app does.
+    ok = reckon_db_streams:ensure_cache_table(),
+
     %% pg scope must start first — emitters, trackers, and stream
     %% workers all use pg groups under this scope for event delivery.
     %% Previously started unsupervised from reckon_db_app:start/2,

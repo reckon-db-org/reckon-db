@@ -43,6 +43,9 @@
 -export([verify_raft_consistency/1]).
 -export([get_quorum_status/1]).
 -export([on_status_change/2]).
+
+%% Internal export for tests -- see count_available_nodes/2's own doc
+-export([count_available_nodes/2]).
 -export([remove_callback/2]).
 
 %% gen_server callbacks
@@ -537,10 +540,44 @@ analyze_raft_consistency(Stats, Leader) ->
     end.
 
 %% @private Count available nodes
+%%
+%% A single-member cluster is handled separately from the general case:
+%% `is_node_available/1' trusts `Node =:= node()' for the local node,
+%% but a genuinely single-node deployment's persisted Ra membership
+%% entry can drift from the CURRENT `node()' across a restart — most
+%% commonly a container whose hostname changes on every recreate, which
+%% `RELEASE_NODE' folds straight into the distributed node name. The
+%% local Ra server for this store can be perfectly healthy under its
+%% new identity while `Node =:= node()' is false AND `net_adm:ping/1'
+%% (which needs the OLD, now-nonexistent node to answer) also fails —
+%% making `available_nodes' read 0 against a `total_nodes' of 1
+%% forever, with no transient recovery possible. A single-member
+%% cluster has no peer to distinguish "self" from anyway, so skip
+%% identity matching entirely and just ask the local Ra server whether
+%% it is actually up, the same bounded liveness probe
+%% `reckon_db_cluster:local_healthy/1' uses for its own local check.
 -spec count_available_nodes(atom(), [term()]) -> non_neg_integer().
-count_available_nodes(_StoreId, Members) ->
-    Nodes = extract_nodes_from_members(Members),
-    length(lists:filter(fun(Node) -> is_node_available(Node) end, Nodes)).
+count_available_nodes(StoreId, Members) ->
+    case extract_nodes_from_members(Members) of
+        [_SingleNode] ->
+            case local_ra_responsive(StoreId) of
+                true -> 1;
+                false -> 0
+            end;
+        Nodes ->
+            length(lists:filter(fun(Node) -> is_node_available(Node) end, Nodes))
+    end.
+
+%% @private Bounded local Ra liveness probe — yields `false' fast
+%% rather than blocking on a wedged local server.
+-spec local_ra_responsive(atom()) -> boolean().
+local_ra_responsive(StoreId) ->
+    case try ra:members({StoreId, node()}, 2000)
+         catch _:_ -> probe_failed
+         end of
+        {ok, _Members, _Leader} -> true;
+        _ -> false
+    end.
 
 is_node_available(Node) when Node =:= node() ->
     true;

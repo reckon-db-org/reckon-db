@@ -5,6 +5,83 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.7] - 2026-09-09
+
+### Fixed — single-node quorum permanently read `no_quorum` after a node identity change
+
+Found live on a production single-node deployment: `health_check/1`
+reported `status => no_quorum`, `available_nodes => 0` against
+`total_nodes => 1` for a store that was, by every other measure,
+completely healthy — an elected leader, a local Ra server that
+recovered in 2ms. The numbers were not transient or still catching up;
+they were structurally wrong for the single-node case and would never
+self-correct, permanently blocking anything gated on this store being
+healthy.
+
+`reckon_db_consistency_checker:is_node_available/1` trusts an exact
+`Node =:= node()` match for the local node, falling back to
+`net_adm:ping/1` otherwise. A genuinely single-node deployment's
+persisted Ra membership entry can drift from the CURRENT `node()`
+across a restart — most commonly a container whose hostname changes on
+every recreate, which `RELEASE_NODE` folds straight into the
+distributed node name. The local Ra server for this store can be
+perfectly healthy under its new identity while BOTH the exact-match
+AND the ping (which needs the OLD, now-nonexistent node to answer)
+fail — `available_nodes` then reads 0 forever, since nothing ever
+un-drifts the persisted identity on its own.
+
+`reckon_db_cluster:local_healthy/1` already has a similar
+identity-independent local liveness probe, but doesn't fit here either:
+it explicitly requires `length(Members) > 1`, which a genuinely
+single-node deployment never satisfies.
+
+Fixed in `count_available_nodes/2`: for a single-member cluster, skip
+node-identity matching entirely and ask the local Ra server directly
+whether it responds (the same bounded `ra:members/2` probe
+`local_healthy/1` uses), rather than comparing identity strings that
+have no reason to still match after a restart. Multi-node clusters are
+unaffected — that branch is untouched.
+
+New `reckon_db_single_node_quorum_SUITE` regression-tests the exact
+scenario (a single-member store whose recorded membership entry names
+a node that isn't the current one, confirming it still reports
+available) alongside the unremarkable healthy-single-node path and a
+genuinely-unknown-store-id path (must still fail closed, not report
+every unknown store as trivially healthy).
+
+## [5.11.6] - 2026-09-09
+
+### Fixed — `read_all_global_cache` ETS table died with whichever transient worker created it
+
+`reckon_db_streams:ensure_cache_table/0` created the read-all-global
+cache table (`reckon_db_read_all_global_cache`) lazily, from whatever
+process first called `read_all_global/3`. A `public` ETS table is owned
+by whoever calls `ets:new/2`, and the table dies with its owner
+regardless of how many other processes still reference it by name — so
+a table created by a short-lived gateway worker vanished the instant
+that worker exited for ANY reason, including a routine one-off
+supervised restart unrelated to this table at all. The next reader's
+`ets:lookup/2` inside `cached_or_rebuilt/2` then crashed with
+`{badarg, "the table identifier does not refer to an existing ETS
+table"}`. Reproduced on every single app boot in practice: gateway
+workers restart routinely during a store's own startup churn, and
+whichever one happened to win the creation race took the table down
+with it moments later.
+
+`ensure_cache_table/0` is now exported and called once from
+`reckon_db_sup:init/1`, before any child starts — the table's owner
+becomes the top-level supervisor, which outlives every worker under it
+and only resets when the whole application does. Racing calls to
+`ensure_cache_table/0` remain safe on their own terms (`ets:new/2`
+raises `badarg` on a name collision, meaning nothing to do) — the fix
+is giving the table an owner that is never itself the process racing to
+use it moments later.
+
+New `reckon_db_read_all_global_cache_owner_SUITE` regression-tests both
+the ownership (`ets:info(Tid, owner) =:= whereis(reckon_db_sup)`) and
+that a transient process calling `ensure_cache_table/0` and exiting no
+longer takes the table with it.
+
 ## [5.11.5] - 2026-09-05
 
 ### Fixed
