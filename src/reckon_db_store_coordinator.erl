@@ -362,8 +362,25 @@ join_existing_cluster(StoreId, TargetNode) ->
     %% Self-heal by restarting the local store, so the retry loop recovers
     %% instead of looping forever on "not registered".
     case ensure_local_ra_server(StoreId) of
-        ok     -> do_join_with_timeout(StoreId, TargetNode);
+        ok     -> join_preserving_subscriptions(StoreId, TargetNode);
         failed -> failed
+    end.
+
+%% @private `khepri_cluster:join' RESETS the local tree. Subscriptions a
+%% consumer created while this node was still standalone (it subscribes
+%% as soon as the store is up; the join comes seconds later) would go
+%% with it: record and trigger gone, its emitter pool left running, the
+%% consumer never told. Capture the live ones first and re-create them
+%% in the cluster's tree once the join has succeeded.
+-spec join_preserving_subscriptions(atom(), node()) -> ok | failed.
+join_preserving_subscriptions(StoreId, TargetNode) ->
+    Live = reckon_db_subscriptions:snapshot_live(StoreId),
+    case do_join_with_timeout(StoreId, TargetNode) of
+        ok ->
+            ok = reckon_db_subscriptions:restore(StoreId, Live),
+            ok;
+        failed ->
+            failed
     end.
 
 %% @private Ensure the local Ra server for the store is registered, healing

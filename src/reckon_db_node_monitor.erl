@@ -74,7 +74,9 @@ init(#store_config{store_id = StoreId, mode = Mode} = Config) ->
             schedule_leader_check(?LEADER_CHECK_INTERVAL),
             schedule_membership_check(?MEMBERSHIP_CHECK_INTERVAL);
         single ->
-            %% In single mode, check leader once to activate
+            %% In single mode the first check comes sooner (one Ra
+            %% election away); it keeps polling afterwards, see
+            %% schedule_leader_check_if_needed/2.
             schedule_leader_check(1000)
     end,
 
@@ -164,12 +166,12 @@ terminate(_Reason, _State) ->
 %% Internal functions
 %%====================================================================
 
-schedule_leader_check_if_needed(cluster, _State) ->
-    schedule_leader_check(?LEADER_CHECK_INTERVAL);
-schedule_leader_check_if_needed(single, #state{current_leader = undefined}) ->
-    schedule_leader_check(?LEADER_CHECK_INTERVAL);
-schedule_leader_check_if_needed(single, _State) ->
-    ok.
+%% Every mode keeps polling. Single mode used to stop after the first
+%% leader detection, which left nobody to notice a leader worker that
+%% was restarted underneath this monitor (see handle_leader_detected/4)
+%% or a Ra re-election after the local store restarted.
+schedule_leader_check_if_needed(_Mode, _State) ->
+    schedule_leader_check(?LEADER_CHECK_INTERVAL).
 
 %% @private Handle nodeup in cluster mode.
 %% Spawned to avoid blocking the node monitor — coordinator calls can be slow.
@@ -199,8 +201,15 @@ attempt_cluster_join(StoreId) ->
 
 %% @private Handle leader detected
 -spec handle_leader_detected(node(), node() | undefined, atom(), #state{}) -> #state{}.
-handle_leader_detected(LeaderNode, LeaderNode, _StoreId, State) ->
-    %% No change
+handle_leader_detected(LeaderNode, LeaderNode, StoreId, State) ->
+    %% Same leader as last tick. The leader worker may still have been
+    %% restarted underneath us: notification_sup (rest_for_one) or
+    %% core_sup (one_for_all) bring it back inactive with an EMPTY
+    %% emitter supervisor, and this monitor lives outside that subtree,
+    %% so nothing else would re-activate it before the subscription
+    %% health monitor's first sweep (2x its interval). Every event in
+    %% between fires its trigger into an empty pg group.
+    maybe_reactivate_leader(LeaderNode, StoreId),
     State;
 handle_leader_detected(LeaderNode, undefined, StoreId, State) ->
     %% First leader detection
@@ -226,6 +235,22 @@ handle_no_leader(undefined, _StoreId, State) ->
 handle_no_leader(PreviousLeader, StoreId, State) ->
     logger:warning("Leadership lost: was ~p (store: ~p)", [PreviousLeader, StoreId]),
     State#state{current_leader = undefined}.
+
+%% @private Re-activate a leader worker that came back inactive after a
+%% contained supervisor restart while this node stayed Ra leader.
+-spec maybe_reactivate_leader(node(), atom()) -> ok.
+maybe_reactivate_leader(LeaderNode, StoreId) when LeaderNode =:= node() ->
+    reactivate_if_inactive(reckon_db_leader:is_active(StoreId), StoreId);
+maybe_reactivate_leader(_LeaderNode, _StoreId) ->
+    ok.
+
+reactivate_if_inactive(true, _StoreId) ->
+    ok;
+reactivate_if_inactive(false, StoreId) ->
+    logger:warning("Leader worker inactive while this node is Ra leader; "
+                   "re-activating (store: ~p)", [StoreId]),
+    _ = reckon_db_leader:activate(StoreId),
+    ok.
 
 %% @private Maybe activate leader worker
 -spec maybe_activate_leader(node(), atom()) -> ok.

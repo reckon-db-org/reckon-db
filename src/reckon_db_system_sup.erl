@@ -103,7 +103,8 @@ cluster_sup_spec(#store_config{store_id = StoreId} = Config) ->
     }.
 
 %% @private Node monitor — runs in all modes for leader detection.
-%% In single mode: detects Ra leader, activates LeaderWorker, stops polling.
+%% In single mode: detects Ra leader, activates LeaderWorker, keeps
+%% polling so a leader worker restarted under core_sup is re-activated.
 %% In cluster mode: continuous leader/membership monitoring.
 -spec node_monitor_spec(store_config()) -> supervisor:child_spec().
 node_monitor_spec(#store_config{store_id = StoreId} = Config) ->

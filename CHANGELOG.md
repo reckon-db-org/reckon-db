@@ -5,6 +5,164 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.8] - 2026-09-09
+
+### Fixed — re-subscribing to a persisted subscription left its emitter pool down until leader activation
+
+Reproduced live in macula-realm (2026-09-09): after a restart against a
+persisted store, every dispatch logged `No emitters for
+["realms_store:<key>"]` for BOTH persisted `$all` subscriptions (evoq's
+own and the default `all-events`), the projection handlers were never
+invoked, and the events were dropped from the live path for good. The
+same test suite against a wiped store delivered every event, which is
+why the symptom looked like a leader-activation race and was not one:
+leader activation ran fine in both cases. What differed was the path a
+re-subscribe takes when the subscription already exists in Khepri.
+
+`reckon_db_subscriptions:reregister_subscriber/4` (the reconnect path,
+added in c5edc0d one day after 687d584 made `setup_event_notification/4`
+start the emitter pool eagerly for brand-new subscriptions) re-bound the
+subscriber pid and re-armed the Khepri trigger, but never started an
+emitter pool and never re-pointed a pool that was still running. It
+relied entirely on leader activation to start pools, and that is the
+node monitor's first `check_leader` 1000ms after the store starts, then
+one attempt per 5000ms for as long as Ra has not elected a leader yet,
+which after a restart it has not. Every event appended in that window
+fired the persisted trigger into an empty pg group. Two concrete shapes:
+
+- **After a BEAM restart** (no pool in this VM, stale pid persisted):
+  nothing served the subscription until activation, 1s at best and 6s+
+  typically. evoq's catch-up covers only what was appended BEFORE its
+  subscribe, so everything appended during the window was lost to the
+  live path.
+- **Subscriber restarts inside one BEAM** (pool still running): the
+  running emitter still held the dead pid, so the next delivery found it
+  dead, tore the whole pool down (`send_to_subscriber/4`), dropped that
+  event, and nothing restarted the pool until the subscription health
+  monitor's next sweep, 60s later at best (120s on the first sweep).
+
+Fixed: `reregister_subscriber/4` now calls `ensure_emitter_pool/2` right
+after re-binding the pid and BEFORE re-arming the trigger (the same
+ordering `setup_event_notification/4` documents): no pool, start one via
+the existing `maybe_start_emitter_pool/3`; pool running, re-point each
+emitter at the new pid via `reckon_db_emitter:update_subscriber/2`
+(which existed but had no caller). Leader activation and the health
+monitor are unchanged and still act as the backstop; cluster mode is
+unaffected, since the eager pool on the subscribing node was already the
+design for new subscriptions and pg membership is scope-wide.
+
+Two new cases in `reckon_db_emitter_autostart_SUITE` pin each shape
+(`resubscribe_after_pool_loss_starts_pool_immediately`,
+`resubscribe_with_running_pool_repoints_emitter`); both verified RED on
+5.11.7 and GREEN with the fix.
+
+### Fixed — a contained supervisor restart left the leader inactive and every emitter pool gone
+
+Found by sweeping the codebase for the same shape as the fix above (a
+recovery path that silently skips a step its fresh counterpart does).
+Confirmed by a regression test before fixing.
+
+When `reckon_db_notification_sup` (rest_for_one, after `leader_sup`
+dies) or `reckon_db_core_sup` (one_for_all, after any of persistence,
+notification or store manager dies) restarts its subtree, the leader
+worker comes back with `active = false` and the emitter supervisor
+comes back with no children: every emitter pool is gone. The node
+monitor is a sibling of `core_sup` under `system_sup`, so a contained
+restart never restarts it; it still remembers the same leader, and
+"same leader as last tick" was a no-op. Single mode had even stopped
+polling after its first detection. The only backstop was the
+subscription health monitor's first sweep, 2x its interval (120s by
+default) after *its* restart. Every event in between fired its trigger
+into an empty pg group.
+
+Fixed in `reckon_db_node_monitor`: every mode keeps polling, and a tick
+that finds this node still Ra leader but the leader worker inactive
+re-activates it, so pools are back within one check interval (5s).
+Cluster mode already polled; the only change there is the
+re-activation on "same leader". Two new cases pin both restart shapes
+(`notification_subtree_restart_reactivates_leader`,
+`core_subtree_restart_reactivates_leader`), RED before, GREEN after.
+
+### Fixed — a restarted emitter reverted to the pid its pool was started with
+
+Adjacent to the reconnect fix above: `reckon_db_emitter_pool` bakes the
+subscriber pid into each emitter's child spec at pool start. After
+`ensure_emitter_pool/2` re-pointed a running pool at a new subscriber,
+an emitter that later crashed and was restarted by its pool supervisor
+went back to the old, dead pid, found it dead on the next delivery and
+tore the whole pool down again, undoing the re-point.
+
+`reckon_db_emitter:init/1` now resolves the subscriber from the
+persisted subscription record and only falls back to the child spec's
+pid when the record carries none. New case
+`emitter_restart_after_repoint_delivers_to_current_subscriber`, RED
+before, GREEN after.
+
+### Fixed — joining an existing cluster silently discarded the joiner's pre-join subscriptions
+
+`khepri_cluster:join/2` resets the joiner's local tree and replaces it
+with the cluster's. A subscription created while the node was still a
+standalone cluster of one (the normal boot shape: a consumer subscribes
+as soon as the store is up, discovery joins seconds later) went with
+it: record and Khepri trigger gone, the consumer's emitter pool left
+running as an orphan, the consumer itself never told and receiving
+nothing until its own restart. The healer's reset-and-rejoin had the
+same effect for anything subscribed while a replica was orphaned.
+
+Confirmed on two real peer nodes (new
+`reckon_db_cluster_join_subscriptions_SUITE`, OTP `peer` over
+standard_io): after the join, the joiner's subscription no longer
+existed. Fixed: `reckon_db_store_coordinator:join_existing_cluster/2`
+and `reckon_db_store_healer:reset_and_rejoin/2` capture the live
+subscriptions first (`reckon_db_subscriptions:snapshot_live/1`, a
+bounded query so an unhealthy store cannot hang the reset) and
+re-create them in the cluster's tree once the join has succeeded
+(`reckon_db_subscriptions:restore/2`, through the ordinary subscribe
+path: record, trigger, emitter pool, tracker notification, and a
+catch-up from position 0 of the cluster's history, which the consumer
+has never seen). Events the node wrote locally before joining are
+still replaced by the cluster's history, as before; what no longer
+happens is a consumer silently losing its subscription along with
+them. RED before, GREEN after.
+
+### Fixed — a subscriber restarting on a follower lost half of the leader's deliveries
+
+Found while testing leadership durability on real peer nodes. A
+subscription created through a follower gets TWO pools: the eager one
+on the follower and one the leader's tracker starts on the leader
+(`reckon_db_leader_tracker`). The reconnect fix above re-pointed only
+the local pool's emitters, by registered name. When the subscriber
+restarted on the follower, the leader's emitter kept the dead REMOTE
+pid, and the remote clause of `reckon_db_emitter:send_to_subscriber/4`
+is a plain send with no liveness check, so every event the leader's
+trigger routed through its own emitter vanished silently: measured 10
+of 20 (`subscriber_restart_on_follower_repoints_every_node`, two-member
+cluster, RED). `ensure_emitter_pool/2` now re-points every member of
+the subscription's pg group, on every node, whether or not a local
+pool exists, then starts a local pool only if none is running. GREEN
+after.
+
+Leadership durability itself was verified on the same harness and
+needed no change: with a real `ra:transfer_leadership/2` between two
+members, and with a three-member cluster whose leader node shuts down,
+the new leader activates, starts an emitter pool for a subscription it
+did not create, the old leader reports not-leader, and events appended
+on either side reach the (remote) subscriber exactly once
+(`leadership_transfer_new_leader_serves_existing_subscription`,
+`leader_shutdown_failover_new_leader_serves_existing_subscription`).
+
+Also corrected the `RECKON_DB_VERSION` macro, stuck at "5.11.3" since
+that release, so the "reckon-db vX started" boot line reports the
+version actually running.
+
+Not fixed here, noted for the record: Khepri re-fires stored-procedure
+triggers that were never acked before the previous shutdown as soon as
+a leader is elected after a restart (its at-least-once contract). That
+fires before ANY emitter pool can exist in the current design, so those
+redeliveries always log "No emitters". For evoq consumers this is
+harmless (their own catch-up already covers those events); a raw
+`subscriber` pid consumer loses the redelivery.
+
 ## [5.11.7] - 2026-09-09
 
 ### Fixed — single-node quorum permanently read `no_quorum` after a node identity change

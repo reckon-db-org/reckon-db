@@ -55,6 +55,11 @@
     health_monitor_detects_missing_pool/1,
     bare_khepri_subscribe_no_emitter_pool/1,
     late_subscribe_starts_pool_immediately/1,
+    resubscribe_after_pool_loss_starts_pool_immediately/1,
+    resubscribe_with_running_pool_repoints_emitter/1,
+    emitter_restart_after_repoint_delivers_to_current_subscriber/1,
+    notification_subtree_restart_reactivates_leader/1,
+    core_subtree_restart_reactivates_leader/1,
     stale_subscription_does_not_crash_leader/1
 ]).
 
@@ -81,6 +86,11 @@ all() ->
         health_monitor_detects_missing_pool,
         bare_khepri_subscribe_no_emitter_pool,
         late_subscribe_starts_pool_immediately,
+        resubscribe_after_pool_loss_starts_pool_immediately,
+        resubscribe_with_running_pool_repoints_emitter,
+        emitter_restart_after_repoint_delivers_to_current_subscriber,
+        notification_subtree_restart_reactivates_leader,
+        core_subtree_restart_reactivates_leader,
         stale_subscription_does_not_crash_leader
     ].
 
@@ -633,6 +643,266 @@ late_subscribe_starts_pool_immediately(Config) ->
     reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
     ok.
 
+%% @doc GIVEN a persisted subscription whose subscriber died and whose
+%%      emitter pool is gone (the shape every consumer meets after a BEAM
+%%      restart: Khepri still holds the subscription with a stale pid,
+%%      this VM has no pool for it yet)
+%%      WHEN a new subscriber re-subscribes under the same name
+%%      THEN the emitter pool is back before subscribe/5 returns, and the
+%%      next appended event reaches the new subscriber via the live path
+%%
+%%      Reproduced live in macula-realm (2026-09-09): on a restarted store
+%%      every dispatch logged "No emitters for [...]" for both persisted
+%%      subscriptions until leader activation ran, 1000ms after the node
+%%      monitor started at best, 5000ms later per missed check while Ra
+%%      was still electing. reregister_subscriber/4 re-bound the pid and
+%%      re-armed the trigger but never started the pool, so every event
+%%      in that window fired the trigger into an empty pg group.
+resubscribe_after_pool_loss_starts_pool_immediately(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"testresubnopool-001">>),
+    SubName = <<"resub_no_pool_test">>,
+
+    ok = wait_for_leader(StoreId, 10000),
+
+    %% First incarnation of the subscriber: its pool starts eagerly.
+    Old = spawn(fun() -> receive die -> ok end end),
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName,
+        #{subscriber => Old}
+    ),
+    PoolName = reckon_db_emitter_pool:name(StoreId, SubKey),
+    ?assertNotEqual(undefined, whereis(PoolName)),
+
+    %% Model the restart: subscription persisted with a dead pid, no pool.
+    ok = reckon_db_emitter_pool:stop(StoreId, SubKey),
+    Old ! die,
+    ok = wait_until_dead(Old),
+    ?assertEqual(undefined, whereis(PoolName)),
+    ?assertEqual([], reckon_db_emitter_group:members(StoreId, SubKey)),
+
+    %% Park the checkpoint far ahead so the reconnect catch-up replays
+    %% nothing: the event below may then ONLY arrive via the live path.
+    ok = reckon_db_subscriptions:ack(StoreId, SubName, undefined, 1000000),
+
+    %% Second incarnation re-subscribes: the reconnect path.
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName,
+        #{subscriber => self()}
+    ),
+
+    %% NO sleep and NO leader activation in between: the pool must be
+    %% back now, with an emitter already in the pg group.
+    ?assertNotEqual(undefined, whereis(PoolName)),
+    ?assert(length(reckon_db_emitter_group:members(StoreId, SubKey)) > 0),
+
+    Event = #{
+        event_type => <<"resub_no_pool_event_v1">>,
+        data => #{<<"key">> => <<"value">>}
+    },
+    {ok, _} = reckon_db_streams:append(StoreId, StreamId, -2, [Event]),
+
+    receive
+        {events, [Received]} ->
+            ?assertEqual(<<"resub_no_pool_event_v1">>, Received#event.event_type)
+    after 5000 ->
+        ct:fail("Re-subscribed subscriber did not receive event — "
+                "reconnect path left the emitter pool down")
+    end,
+
+    reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
+    ok.
+
+%% @doc GIVEN a subscription whose subscriber process died while its
+%%      emitter pool is STILL running (a supervised subscriber restarting
+%%      inside one BEAM, faster than any event arrived)
+%%      WHEN the restarted subscriber re-subscribes under the same name
+%%      THEN the next event reaches the NEW subscriber and the pool stays
+%%      up
+%%
+%%      Without re-pointing, the running emitter still holds the dead pid:
+%%      the next delivery finds it dead, stops the whole pool
+%%      (reckon_db_emitter:send_to_subscriber/4), and nothing restarts it
+%%      until the subscription health monitor's next sweep, 60s later at
+%%      best. The event itself is dropped.
+resubscribe_with_running_pool_repoints_emitter(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"testresubrepoint-001">>),
+    SubName = <<"resub_repoint_test">>,
+
+    ok = wait_for_leader(StoreId, 10000),
+
+    Old = spawn(fun() -> receive die -> ok end end),
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName,
+        #{subscriber => Old}
+    ),
+    PoolName = reckon_db_emitter_pool:name(StoreId, SubKey),
+    ?assertNotEqual(undefined, whereis(PoolName)),
+
+    %% Subscriber dies; the pool is untouched and still points at it.
+    Old ! die,
+    ok = wait_until_dead(Old),
+    ?assertNotEqual(undefined, whereis(PoolName)),
+
+    ok = reckon_db_subscriptions:ack(StoreId, SubName, undefined, 1000000),
+
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName,
+        #{subscriber => self()}
+    ),
+
+    Event = #{
+        event_type => <<"resub_repoint_event_v1">>,
+        data => #{<<"key">> => <<"value">>}
+    },
+    {ok, _} = reckon_db_streams:append(StoreId, StreamId, -2, [Event]),
+
+    receive
+        {events, [Received]} ->
+            ?assertEqual(<<"resub_repoint_event_v1">>, Received#event.event_type)
+    after 5000 ->
+        ct:fail("Re-subscribed subscriber did not receive event — "
+                "running emitter still delivered to the dead pid")
+    end,
+
+    %% The delivery went to a live pid, so the pool was not torn down.
+    ?assertNotEqual(undefined, whereis(PoolName)),
+
+    reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
+    ok.
+
+%% @doc GIVEN a subscription whose running pool was re-pointed at a new
+%%      subscriber (the reconnect path, after the old subscriber died)
+%%      WHEN one of its emitter workers crashes and is restarted by the
+%%      pool supervisor
+%%      THEN the restarted emitter delivers to the CURRENT subscriber,
+%%      not to the pid baked into its child spec when the pool started
+%%
+%%      The pool's child specs carry the subscriber pid the pool was
+%%      started with. A restarted emitter that trusts that argument goes
+%%      back to the dead pid, finds it dead on the next delivery, and
+%%      tears the whole pool down again — undoing the re-point.
+emitter_restart_after_repoint_delivers_to_current_subscriber(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"testemitterrestart-001">>),
+    SubName = <<"emitter_restart_test">>,
+
+    ok = wait_for_leader(StoreId, 10000),
+
+    Old = spawn(fun() -> receive die -> ok end end),
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName,
+        #{subscriber => Old}
+    ),
+    PoolName = reckon_db_emitter_pool:name(StoreId, SubKey),
+    ?assertNotEqual(undefined, whereis(PoolName)),
+
+    Old ! die,
+    ok = wait_until_dead(Old),
+    ok = reckon_db_subscriptions:ack(StoreId, SubName, undefined, 1000000),
+
+    %% Re-point the running pool at this process (reconnect path).
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName,
+        #{subscriber => self()}
+    ),
+
+    %% Crash the emitter worker; its pool supervisor restarts it.
+    [Emitter] = reckon_db_emitter_group:members(StoreId, SubKey),
+    exit(Emitter, kill),
+    ok = wait_for_new_member(StoreId, SubKey, Emitter, 5000),
+
+    Event = #{
+        event_type => <<"emitter_restart_event_v1">>,
+        data => #{<<"key">> => <<"value">>}
+    },
+    {ok, _} = reckon_db_streams:append(StoreId, StreamId, -2, [Event]),
+
+    receive
+        {events, [Received]} ->
+            ?assertEqual(<<"emitter_restart_event_v1">>, Received#event.event_type)
+    after 5000 ->
+        ct:fail("Restarted emitter did not deliver to the current subscriber — "
+                "it went back to the stale child-spec pid")
+    end,
+
+    ?assertNotEqual(undefined, whereis(PoolName)),
+
+    reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
+    ok.
+
+%% @doc GIVEN an active leader with a live subscription
+%%      WHEN the notification subtree restarts underneath it (leader_sup
+%%      dies; notification_sup is rest_for_one, so emitter_sup and the
+%%      health monitor restart with it, and every emitter pool is gone)
+%%      THEN leadership is re-activated and delivery resumes without
+%%      waiting for the health monitor's first sweep (2x its interval)
+%%
+%%      The node monitor is a sibling of core_sup under system_sup, so a
+%%      contained restart never restarts it; it still remembers the same
+%%      leader, and "same leader" used to be a no-op. Single mode had even
+%%      stopped polling after the first detection.
+notification_subtree_restart_reactivates_leader(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"testnotifrestart-001">>),
+    SubName = <<"notification_restart_test">>,
+
+    ok = wait_for_leader(StoreId, 10000),
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName, #{subscriber => self()}),
+    PoolName = reckon_db_emitter_pool:name(StoreId, SubKey),
+    ?assertNotEqual(undefined, whereis(PoolName)),
+
+    ok = assert_delivery(StoreId, StreamId, <<"before_notification_restart_v1">>),
+
+    EmitterSupName = reckon_db_naming:emitter_sup_name(StoreId),
+    OldEmitterSup = whereis(EmitterSupName),
+    exit(whereis(reckon_db_naming:leader_sup_name(StoreId)), kill),
+    ok = wait_for_new_pid(EmitterSupName, OldEmitterSup, 5000),
+    ?assertEqual(undefined, whereis(PoolName)),
+
+    %% Re-activation happens on the node monitor's next tick (5s), so the
+    %% pool must be back and delivering well inside 15s.
+    ok = wait_for(fun() -> whereis(PoolName) =/= undefined end, 15000),
+    ok = assert_delivery(StoreId, StreamId, <<"after_notification_restart_v1">>),
+    ?assertEqual(true, reckon_db_leader:is_active(StoreId)),
+
+    reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
+    ok.
+
+%% @doc GIVEN an active leader with a live subscription
+%%      WHEN the whole core subtree restarts (notification_sup dies;
+%%      core_sup is one_for_all, so the Khepri store, streams and
+%%      notification subsystems all restart and Ra re-elects)
+%%      THEN leadership is re-activated once the store is back and
+%%      delivery resumes without waiting for the health monitor
+core_subtree_restart_reactivates_leader(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"testcorerestart-001">>),
+    SubName = <<"core_restart_test">>,
+
+    ok = wait_for_leader(StoreId, 10000),
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName, #{subscriber => self()}),
+    PoolName = reckon_db_emitter_pool:name(StoreId, SubKey),
+    ?assertNotEqual(undefined, whereis(PoolName)),
+
+    ok = assert_delivery(StoreId, StreamId, <<"before_core_restart_v1">>),
+
+    EmitterSupName = reckon_db_naming:emitter_sup_name(StoreId),
+    OldEmitterSup = whereis(EmitterSupName),
+    exit(whereis(reckon_db_naming:notification_sup_name(StoreId)), kill),
+    ok = wait_for_new_pid(EmitterSupName, OldEmitterSup, 10000),
+
+    %% Store restart + Ra re-election + next node monitor tick.
+    ok = wait_for(fun() -> whereis(PoolName) =/= undefined end, 20000),
+    ok = assert_delivery(StoreId, StreamId, <<"after_core_restart_v1">>),
+    ?assertEqual(true, reckon_db_leader:is_active(StoreId)),
+
+    reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
+    ok.
+
 %% @doc GIVEN a store with a persisted subscription whose subscriber PID
 %%      is dead (e.g. after a restart)
 %%      WHEN the leader activates and tries to start emitters for it
@@ -763,6 +1033,52 @@ cleanup_bare_khepri_testcase(Config) ->
 wait_for_leader(StoreId, Timeout) ->
     Deadline = erlang:monotonic_time(millisecond) + Timeout,
     wait_for_leader_loop(StoreId, Deadline).
+
+%% Block until Pid has actually exited (monitor-based, no sleep race).
+wait_until_dead(Pid) ->
+    MRef = erlang:monitor(process, Pid),
+    receive
+        {'DOWN', MRef, process, Pid, _} -> ok
+    after 5000 ->
+        ct:fail("process ~p did not die", [Pid])
+    end.
+
+%% Block until the registered Name resolves to a pid other than OldPid.
+wait_for_new_pid(Name, OldPid, Timeout) ->
+    wait_for(fun() ->
+                 case whereis(Name) of
+                     undefined -> false;
+                     OldPid -> false;
+                     _New -> true
+                 end
+             end, Timeout).
+
+%% Block until the subscription's pg group holds a member other than Old.
+wait_for_new_member(StoreId, SubKey, Old, Timeout) ->
+    wait_for(fun() ->
+                 lists:any(fun(P) -> P =/= Old end,
+                           reckon_db_emitter_group:members(StoreId, SubKey))
+             end, Timeout).
+
+%% Poll Pred every 100ms until it returns true or Timeout elapses.
+wait_for(Pred, Timeout) when Timeout > 0 ->
+    case Pred() of
+        true -> ok;
+        false -> timer:sleep(100), wait_for(Pred, Timeout - 100)
+    end;
+wait_for(_Pred, _Timeout) ->
+    ct:fail("condition not met within timeout").
+
+%% Append one event of EventType and require it to reach this process
+%% through the live subscription path.
+assert_delivery(StoreId, StreamId, EventType) ->
+    {ok, _} = reckon_db_streams:append(StoreId, StreamId, -2,
+        [#{event_type => EventType, data => #{<<"key">> => <<"value">>}}]),
+    receive
+        {events, [#event{event_type = EventType}]} -> ok
+    after 5000 ->
+        ct:fail("event ~s was not delivered", [EventType])
+    end.
 
 wait_for_leader_loop(StoreId, Deadline) ->
     case reckon_db_leader:is_active(StoreId) of

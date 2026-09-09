@@ -73,10 +73,19 @@ update_subscriber(Emitter, NewSubscriber) ->
 %% gen_server callbacks
 %%====================================================================
 
-init({StoreId, SubscriptionKey, Subscriber}) ->
+init({StoreId, SubscriptionKey, SpecSubscriber}) ->
     process_flag(trap_exit, true),
 
     Topic = reckon_db_emitter_group:topic(StoreId, SubscriptionKey),
+
+    %% Resolve the subscriber from the store, not from the child spec.
+    %% The spec carries the pid the POOL was started with. After the
+    %% reconnect path re-pointed a running pool at a new subscriber
+    %% (reckon_db_subscriptions:ensure_emitter_pool/2), an emitter
+    %% restarted by its pool supervisor would otherwise revert to the
+    %% old, dead pid, find it dead on the next delivery and tear the
+    %% whole pool down again. The spec's pid is only the fallback.
+    Subscriber = current_subscriber(StoreId, SubscriptionKey, SpecSubscriber),
 
     %% Join the emitter group
     ok = reckon_db_emitter_group:join(StoreId, SubscriptionKey, self()),
@@ -145,6 +154,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+%% @private The subscription's persisted subscriber pid when it has one,
+%% else whatever the pool's child spec carried.
+-spec current_subscriber(atom(), binary(), pid() | undefined) -> pid() | undefined.
+current_subscriber(StoreId, SubscriptionKey, Fallback) ->
+    persisted_subscriber(reckon_db_subscriptions_store:get(StoreId, SubscriptionKey), Fallback).
+
+persisted_subscriber(#subscription{subscriber_pid = Pid}, _Fallback) when is_pid(Pid) ->
+    Pid;
+persisted_subscriber(_Subscription, Fallback) ->
+    Fallback.
 
 %% @private Handle event delivery to subscriber
 -spec handle_event_delivery(binary(), event(), #state{}) -> ok.

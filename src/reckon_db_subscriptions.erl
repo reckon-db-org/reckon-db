@@ -30,8 +30,15 @@
     get/2,
     list/1,
     exists/2,
-    setup_tracking/2
+    setup_tracking/2,
+    snapshot_live/1,
+    restore/2
 ]).
+
+%% Upper bound on the query behind snapshot_live/1: it runs right before
+%% a local reset, possibly against a store the healer already judged
+%% unhealthy, and must never hang its caller.
+-define(SNAPSHOT_TIMEOUT, 5000).
 
 %%====================================================================
 %% Types
@@ -180,11 +187,21 @@ finalize_subscription(StoreId, Key, Type, Selector, Subscription, StartTime) ->
 %% Khepri triggers store Erlang funs (stored procedures) that may become
 %% stale after a BEAM restart. Re-registering ensures the trigger's proc
 %% function is fresh and the emitter group names are persisted.
+%%
+%% The emitter pool is (re)established here as well, BEFORE the trigger
+%% is re-armed, mirroring setup_event_notification/4. Until 5.11.8 this
+%% path re-bound the pid and re-armed the trigger but left the pool to
+%% leader activation: the node monitor's first check fires 1000ms after
+%% the store starts and, while Ra is still electing after a restart,
+%% every miss costs another 5000ms. Every event appended in that window
+%% fired the (persisted) trigger into an empty pg group and was dropped
+%% with "No emitters". Reproduced live in macula-realm on 2026-09-09.
 -spec reregister_subscriber(atom(), binary(), binary(), subscribe_opts()) ->
     {ok, binary()}.
 reregister_subscriber(StoreId, Key, SubscriptionName, Opts) ->
     NewPid = maps:get(subscriber, Opts, undefined),
     ok = update_subscriber_pid(StoreId, Key, SubscriptionName, NewPid),
+    ok = ensure_emitter_pool(StoreId, Key),
     %% Re-register the Khepri trigger and emitter names.
     %% The trigger's stored proc (an Erlang fun) may be stale after restart.
     ok = reregister_trigger(StoreId, Key),
@@ -214,6 +231,52 @@ maybe_register_trigger({error, _}, _StoreId, _Key, _PoolSize) ->
 maybe_register_trigger(Filter, StoreId, Key, PoolSize) ->
     _ = reckon_db_emitter_group:persist_emitters(StoreId, Key, PoolSize),
     ok = register_trigger(StoreId, Key, Filter).
+
+%% @private Make sure the emitters serving this subscription deliver to
+%% its CURRENT subscriber pid on the reconnect path, and that this node
+%% has a pool at all. Two shapes:
+%%
+%% - no local pool: the subscriber came back after a BEAM restart, or the
+%%   pool was stopped when the previous subscriber died. Start one,
+%%   exactly as setup_event_notification/4 does for a brand-new
+%%   subscription.
+%% - emitters still running (here, or on any other node): the subscriber
+%%   process restarted faster than any event arrived. Those emitters
+%%   still hold the dead pid. A local one would find it dead on the next
+%%   delivery and tear its whole pool down
+%%   (reckon_db_emitter:send_to_subscriber/4); a REMOTE one never checks
+%%   liveness at all, its delivery is a plain send that the runtime drops
+%%   silently. Re-point every one of them.
+-spec ensure_emitter_pool(atom(), binary()) -> ok.
+ensure_emitter_pool(StoreId, Key) ->
+    ensure_emitter_pool(reckon_db_subscriptions_store:get(StoreId, Key), StoreId, Key).
+
+ensure_emitter_pool(undefined, _StoreId, _Key) ->
+    ok;
+ensure_emitter_pool(#subscription{subscriber_pid = Pid} = Sub, StoreId, Key) ->
+    ok = repoint_emitters(StoreId, Key, Pid),
+    PoolName = reckon_db_emitter_pool:name(StoreId, Key),
+    ensure_local_pool(whereis(PoolName), Sub, StoreId, Key).
+
+ensure_local_pool(undefined, Sub, StoreId, Key) ->
+    maybe_start_emitter_pool(StoreId, Key, Sub);
+ensure_local_pool(_PoolPid, _Sub, _StoreId, _Key) ->
+    ok.
+
+%% @private Re-point EVERY node's emitters for this subscription, via the
+%% pg group rather than this node's registered names. The leader's
+%% tracker starts its own pool for a subscription created on a follower
+%% (reckon_db_leader_tracker), so re-pointing only the local pool left
+%% the leader's emitter holding the dead remote pid and silently lost
+%% whatever the leader's trigger routed through it: measured 10 of 20
+%% events on a two-member cluster. A cast to an emitter that is
+%% momentarily gone is a no-op.
+-spec repoint_emitters(atom(), binary(), pid() | undefined) -> ok.
+repoint_emitters(StoreId, Key, Pid) when is_pid(Pid) ->
+    lists:foreach(fun(Emitter) -> reckon_db_emitter:update_subscriber(Emitter, Pid) end,
+                  reckon_db_emitter_group:members(StoreId, Key));
+repoint_emitters(_StoreId, _Key, _Pid) ->
+    ok.
 
 -spec update_subscriber_pid(atom(), binary(), binary(), pid() | undefined) -> ok.
 update_subscriber_pid(_StoreId, _Key, _Name, undefined) ->
@@ -267,6 +330,62 @@ list(StoreId) ->
 -spec exists(atom(), binary()) -> boolean().
 exists(StoreId, Key) ->
     reckon_db_subscriptions_store:exists(StoreId, Key).
+
+%% @doc Subscriptions on this store whose subscriber is still alive.
+%%
+%% Taken right BEFORE an operation that resets the local Khepri tree
+%% (joining an existing cluster, the healer's reset-and-rejoin), so
+%% restore/2 can re-establish them in the cluster's tree afterwards.
+%% khepri_cluster:join/2 replaces the joiner's whole tree; a consumer
+%% that subscribed while its node was still a standalone cluster of one
+%% (the normal boot shape: it subscribes as soon as the store is up,
+%% discovery joins seconds later) would otherwise keep a live pid and a
+%% running emitter pool while its record and trigger are silently gone.
+%%
+%% Bounded query (see SNAPSHOT_TIMEOUT); on failure nothing is captured
+%% rather than hanging the reset.
+-spec snapshot_live(atom()) -> [subscription()].
+snapshot_live(StoreId) ->
+    case reckon_db_subscriptions_store:list(StoreId, ?SNAPSHOT_TIMEOUT) of
+        {ok, Subs} ->
+            [S || S <- Subs, subscriber_alive(S)];
+        {error, Reason} ->
+            logger:warning("Could not snapshot live subscriptions before reset "
+                           "(store: ~p): ~p", [StoreId, Reason]),
+            []
+    end.
+
+%% @doc Re-establish subscriptions captured by snapshot_live/1 after the
+%% local tree was replaced by the cluster's.
+%%
+%% Each goes through subscribe/5. Absent from the cluster tree (the
+%% reset took it), it is created there: record, trigger, emitter pool,
+%% tracker notification, and its subscriber is caught up from position
+%% 0 of the cluster's history, which it has never seen (its own local
+%% history did not survive the join, so its previous checkpoint means
+%% nothing against the cluster's log). Already present with the same
+%% live subscriber (it was replicated before the reset), nothing needs
+%% doing.
+-spec restore(atom(), [subscription()]) -> ok.
+restore(StoreId, Subs) ->
+    lists:foreach(fun(Sub) -> restore_one(StoreId, Sub) end, Subs).
+
+restore_one(StoreId, #subscription{type = Type, selector = Selector,
+                                   subscription_name = Name,
+                                   subscriber_pid = Pid, pool_size = PoolSize}) ->
+    Result = subscribe(StoreId, Type, Selector, Name,
+                       #{subscriber => Pid, pool_size => PoolSize, start_from => 0}),
+    log_restore(Result, Name, StoreId).
+
+log_restore({ok, _Key}, Name, StoreId) ->
+    logger:info("Restored subscription ~s after cluster join (store: ~p)",
+                [Name, StoreId]);
+log_restore({error, {already_exists, _}}, Name, StoreId) ->
+    logger:debug("Subscription ~s already present after cluster join (store: ~p)",
+                 [Name, StoreId]);
+log_restore({error, Reason}, Name, StoreId) ->
+    logger:warning("Could not restore subscription ~s after cluster join "
+                   "(store: ~p): ~p", [Name, StoreId, Reason]).
 
 %% @doc Setup subscription tracking for a process
 %%

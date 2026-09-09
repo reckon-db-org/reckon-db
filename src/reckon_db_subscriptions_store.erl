@@ -20,6 +20,7 @@
     exists/2,
     exists/3,
     list/1,
+    list/2,
     key/1,
     key/3,
     update_checkpoint/3,
@@ -113,8 +114,17 @@ subscription_matches(#subscription{type = T, subscription_name = N}, Type, Name)
 %% @doc List all subscriptions in the store
 -spec list(store_id()) -> {ok, [subscription()]} | {error, term()}.
 list(StoreId) ->
+    do_list(StoreId, #{}).
+
+%% @doc List all subscriptions, giving up after Timeout milliseconds.
+%% For callers that must not hang on an unhealthy local store.
+-spec list(store_id(), timeout()) -> {ok, [subscription()]} | {error, term()}.
+list(StoreId, Timeout) ->
+    do_list(StoreId, #{timeout => Timeout}).
+
+do_list(StoreId, Options) ->
     Path = ?SUBSCRIPTIONS_PATH ++ [?KHEPRI_WILDCARD_STAR],
-    case khepri:get_many(StoreId, Path) of
+    case khepri:get_many(StoreId, Path, Options) of
         {ok, Results} when is_map(Results) ->
             Subs = [convert_to_subscription(V) || {_, V} <- maps:to_list(Results)],
             {ok, [S || S <- Subs, S =/= undefined]};

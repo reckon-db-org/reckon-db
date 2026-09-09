@@ -319,10 +319,16 @@ do_heal(#{majority_leader := LeaderNode}, #state{store_id = StoreId} = State) ->
 %% component to cooperate.
 -spec reset_and_rejoin(atom(), node()) -> ok | {error, term()}.
 reset_and_rejoin(StoreId, LeaderNode) ->
+    %% The reset below wipes the local tree before the coordinator's own
+    %% join-time snapshot could see it, so capture the live subscriptions
+    %% here and re-create them once the rejoin has succeeded.
+    Live = reckon_db_subscriptions:snapshot_live(StoreId),
     ok = clear_local_state(StoreId),
     _ = reckon_db_store:ensure_khepri_started(StoreId),
     case reckon_db_store_coordinator:join_cluster(StoreId, LeaderNode) of
-        ok  -> verify_rejoined(StoreId, LeaderNode);
+        ok  ->
+            ok = reckon_db_subscriptions:restore(StoreId, Live),
+            verify_rejoined(StoreId, LeaderNode);
         Err -> {error, {join_failed, Err}}
     end.
 
