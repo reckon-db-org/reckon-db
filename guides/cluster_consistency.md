@@ -425,7 +425,7 @@ handle_cluster_event([reckon_db, health, node, failed],
 | Symptom | Likely Cause | Resolution |
 |---------|--------------|------------|
 | Frequent `degraded` status | Network latency | Increase probe timeout |
-| `no_quorum` after restart | Nodes not discovered | Check UDP multicast |
+| `no_quorum` after restart | Nodes not discovered | Check UDP multicast and that every node has the same cluster secret of at least 32 bytes |
 | `split_brain` detected | Network partition | Identify partition, restore connectivity |
 | Slow recovery detection | High failure threshold | Reduce threshold (with caution) |
 

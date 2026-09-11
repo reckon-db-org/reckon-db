@@ -29,7 +29,7 @@ follow one of the suggested orders below.
 
 | Guide | What it covers |
 |---|---|
-| [Configuration](configuration.md) | sys.config / app env: stores, pools, timeouts, telemetry, cluster discovery (multicast + k8s DNS), cluster secret. |
+| [Configuration](configuration.md) | sys.config / app env: stores, pools, timeouts, telemetry, multicast cluster discovery and its cluster secret. |
 | [Cluster Consistency](cluster_consistency.md) | Split-brain prevention, quorum behaviour, and consistency guarantees. |
 | [Memory Pressure](memory_pressure.md) | Memory-pressure monitoring and back-pressure behaviour. |
 | [Scavenging](scavenging.md) | Event lifecycle, deleting old events, and the snapshot/replay interaction. |

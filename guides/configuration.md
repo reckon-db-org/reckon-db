@@ -417,6 +417,55 @@ reckon_db:join_cluster(my_store, 'store1@192.168.1.10').
 :reckon_db.join_cluster(:my_store, :"store1@192.168.1.10")
 ```
 
+### Multicast Discovery
+
+In cluster mode, nodes on the same LAN can find each other by UDP multicast
+and then connect over Erlang distribution. Discovery needs a cluster secret
+of at least 32 bytes, the same on every node:
+
+- the `RECKON_DB_CLUSTER_SECRET` environment variable, or
+- the `cluster_secret` application key, used when that variable is unset or
+  empty.
+
+Without a secret, or with a shorter one, discovery stays passive: it opens no
+socket, sends nothing and logs a `discovery_disabled` report whose `reason` is
+`secret_required` or `{secret_too_short, #{bytes => N, required => 32}}`.
+Joining nodes with `reckon_db:join_cluster/2` keeps working. Generate a secret
+with, for example, `openssl rand -hex 32`, and keep it out of source control.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `cluster_secret` | none | Shared secret of at least 32 bytes |
+| `discovery_port` | `45892` | UDP port |
+| `multicast_addr` | `{239, 255, 0, 1}` | Multicast group; the socket is bound to it |
+| `broadcast_interval` | `5000` | Milliseconds between announcements |
+
+Each announcement carries the node name and a timestamp, tagged with
+HMAC-SHA256 under the secret. A node takes an announcement only when its tag
+verifies and its timestamp is within 60 seconds of the node's own clock.
+
+#### Erlang Example
+
+```erlang
+{reckon_db, [
+  {cluster_secret, <<"at least 32 bytes of shared secret">>},
+  {discovery_port, 45892},
+  {multicast_addr, {239, 255, 0, 1}},
+  {broadcast_interval, 5000}
+]}
+```
+
+#### Elixir Example
+
+```elixir
+# config/runtime.exs
+config :reckon_db,
+  cluster_secret: System.fetch_env!("CLUSTER_SECRET"),
+  discovery_port: 45892,
+  multicast_addr: {239, 255, 0, 1},
+  broadcast_interval: 5_000
+```
+
 ## Data Directory Guidelines
 
 ### Linux/Production

@@ -1,26 +1,29 @@
 %% @doc Cluster discovery for reckon-db
 %%
-%% Handles node discovery via UDP multicast (LAN) or Kubernetes DNS.
+%% Handles node discovery via UDP multicast on the LAN.
 %% Ported from LibCluster's gossip strategy.
 %%
-%% Protocol (v2, since 5.1.0):
-%% 1. Broadcast {gossip_v2, NodeBin, Timestamp, Hmac} every
-%%    BROADCAST_INTERVAL, where Hmac = HMAC-SHA256 over the node name
-%%    and timestamp keyed with the cluster secret. The secret itself
-%%    never goes on the wire (v1 broadcast it in cleartext).
-%% 2. On receive: safe-decode, constant-time HMAC check, freshness
-%%    window, THEN net_kernel:connect_node/1. The node name travels
-%%    as a binary and is only atomized after authentication, so
-%%    unauthenticated LAN datagrams can neither grow the atom table
-%%    nor trigger term decoding of attacker-shaped structures.
-%% 3. On node up: trigger Khepri cluster join via StoreCoordinator
+%% Protocol (v3):
+%% 1. Every BROADCAST_INTERVAL a node sends a datagram with a fixed
+%%    layout: the prefix RDBG, version 3, a signed 64-bit timestamp in
+%%    milliseconds, a one-byte name length, the node name, and a 32-byte
+%%    HMAC-SHA256 tag over all the bytes before it, keyed with the cluster
+%%    secret. The secret itself never goes on the wire.
+%% 2. On receive: the tag is checked in constant time over the raw bytes
+%%    before any field is read, then the layout and the freshness window.
+%%    No term is decoded from a datagram, and the node name becomes an
+%%    atom only after its tag verifies.
+%% 3. A verified node is dialled from a monitored process of its own, one
+%%    dial per node at a time, so discovery keeps serving while a dial
+%%    waits. On connect: trigger Khepri cluster join via StoreCoordinator
 %%
-%% Discovery requires an explicitly configured cluster secret: the
+%% The socket is bound to the multicast group address.
+%%
+%% Discovery requires a cluster secret of at least 32 bytes: the
 %% RECKON_DB_CLUSTER_SECRET env var, or the cluster_secret application
-%% environment key. Without one, cluster-mode discovery stays passive:
-%% no broadcasts, inbound gossip ignored. v1 shipped a hardcoded
-%% default secret, which made every unconfigured deployment trust any
-%% LAN host.
+%% environment key when that variable is unset or empty. Without one,
+%% cluster-mode discovery stays passive: no socket, no broadcasts, and a
+%% discovery_disabled report in the log giving the reason.
 %%
 %% @author rgfaber
 
@@ -38,8 +41,11 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
+%% Runs in a dial process of its own, spawned by the discovery server.
+-export([dial_node/1]).
+
 -ifdef(TEST).
--export([encode_gossip_message/2, decode_gossip/2, gossip_mac/3]).
+-export([encode_gossip_message/2, decode_gossip/2]).
 -endif.
 
 -define(DEFAULT_PORT, 45892).
@@ -51,8 +57,15 @@
 %% skew. Replaying a fresh packet only re-announces the legitimate
 %% node, which is harmless (dist cookie still gates the connection).
 -define(GOSSIP_FRESHNESS_MS, 60_000).
-%% Erlang node names are practically bounded; anything bigger is junk.
--define(MAX_NODE_NAME_BYTES, 255).
+%% Bytes of cluster secret discovery needs to start.
+-define(MIN_SECRET_BYTES, 32).
+%% A datagram starts with this prefix and version.
+-define(GOSSIP_PREFIX, "RDBG").
+-define(GOSSIP_VERSION, 3).
+%% The HMAC-SHA256 tag that ends a datagram.
+-define(TAG_BYTES, 32).
+%% Prefix, version, timestamp, name length, a 255-byte name and the tag.
+-define(MAX_DATAGRAM_BYTES, 4 + 1 + 8 + 1 + 255 + ?TAG_BYTES).
 
 -record(state, {
     store_id :: atom(),
@@ -62,7 +75,9 @@
     multicast_addr :: inet:ip4_address() | undefined,
     cluster_secret :: binary() | undefined,
     broadcast_interval :: non_neg_integer() | undefined,
-    discovered_nodes :: [node()]
+    discovered_nodes :: [node()],
+    %% Dials in flight, by the monitor on the process dialling each node
+    dialling = #{} :: #{reference() => node()}
 }).
 
 %%====================================================================
@@ -105,33 +120,45 @@ init(#store_config{store_id = StoreId, mode = Mode} = Config) ->
         single ->
             %% In single mode, discovery is a no-op
             logger:info("Discovery disabled in single-node mode (store: ~p)", [StoreId]),
-            {ok, #state{
-                store_id = StoreId,
-                config = Config,
-                socket = undefined,
-                discovered_nodes = []
-            }}
+            {ok, passive_state(StoreId, Config)}
     end.
 
 init_cluster_mode(StoreId, Config) ->
-    case get_cluster_secret() of
-        {ok, ClusterSecret} ->
-            init_cluster_discovery(StoreId, Config, ClusterSecret);
-        error ->
-            %% Fail closed: without an explicit shared secret, anyone
-            %% on the LAN multicast segment could have us dial them.
-            %% Manual/static cluster joins keep working.
-            logger:error(
-                "Discovery disabled (store: ~p): no cluster secret configured. "
-                "Set RECKON_DB_CLUSTER_SECRET or {reckon_db, cluster_secret} "
-                "to enable multicast discovery.", [StoreId]),
-            {ok, #state{
-                store_id = StoreId,
-                config = Config,
-                socket = undefined,
-                discovered_nodes = []
-            }}
-    end.
+    start_with_secret(secret_check(get_cluster_secret()), StoreId, Config).
+
+%% @private Discovery starts only with a cluster secret of MIN_SECRET_BYTES
+%% or more.
+-spec secret_check(binary() | undefined) ->
+    {ok, binary()}
+  | {error, secret_required
+          | {secret_too_short, #{bytes := non_neg_integer(), required := ?MIN_SECRET_BYTES}}}.
+secret_check(undefined) ->
+    {error, secret_required};
+secret_check(Secret) when byte_size(Secret) < ?MIN_SECRET_BYTES ->
+    {error, {secret_too_short, #{bytes => byte_size(Secret),
+                                 required => ?MIN_SECRET_BYTES}}};
+secret_check(Secret) ->
+    {ok, Secret}.
+
+start_with_secret({ok, ClusterSecret}, StoreId, Config) ->
+    init_cluster_discovery(StoreId, Config, ClusterSecret);
+start_with_secret({error, Reason}, StoreId, Config) ->
+    %% Without a cluster secret discovery stays passive. Manual and static
+    %% cluster joins keep working.
+    logger:error(#{what => discovery_disabled,
+                   store_id => StoreId,
+                   reason => Reason,
+                   remedy => "set RECKON_DB_CLUSTER_SECRET or {reckon_db, cluster_secret} "
+                             "to a secret of at least 32 bytes"}),
+    {ok, passive_state(StoreId, Config)}.
+
+passive_state(StoreId, Config) ->
+    #state{
+        store_id = StoreId,
+        config = Config,
+        socket = undefined,
+        discovered_nodes = []
+    }.
 
 init_cluster_discovery(StoreId, Config, ClusterSecret) ->
     Port = get_config_value(discovery_port, ?DEFAULT_PORT),
@@ -191,6 +218,12 @@ handle_info({udp, _Socket, _IP, _Port, Data}, State) ->
     NewState = handle_gossip_message(Data, State),
     {noreply, NewState};
 
+%% A dial ended: its process exits with the dial's result
+handle_info({'DOWN', Ref, process, _Pid, Reason}, #state{dialling = Dialling} = State)
+        when is_map_key(Ref, Dialling) ->
+    {Node, Rest} = maps:take(Ref, Dialling),
+    {noreply, dialled(dial_result(Reason), Node, State#state{dialling = Rest})};
+
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -204,7 +237,8 @@ terminate(_Reason, #state{socket = Socket}) ->
 %% Internal functions
 %%====================================================================
 
-%% @private Open UDP multicast socket
+%% @private Open UDP multicast socket, bound to the group address so only
+%% datagrams sent to the group arrive
 -spec open_multicast_socket(non_neg_integer(), inet:ip4_address()) ->
     {ok, gen_udp:socket()} | {error, term()}.
 open_multicast_socket(Port, MulticastAddr) ->
@@ -212,6 +246,7 @@ open_multicast_socket(Port, MulticastAddr) ->
         binary,
         {active, true},
         {reuseaddr, true},
+        {ip, MulticastAddr},
         {multicast_ttl, ?MULTICAST_TTL},
         {multicast_loop, false},
         {add_membership, {MulticastAddr, {0, 0, 0, 0}}}
@@ -231,19 +266,19 @@ broadcast_presence(#state{socket = Socket, port = Port, multicast_addr = Addr,
                           [StoreId, Reason])
     end.
 
-%% @private Encode gossip message (v2: authenticated, atom-free,
-%% secret never on the wire).
+%% @private Encode the datagram announcing Node: the fixed layout, with an
+%% HMAC-SHA256 tag over its bytes. The secret never goes on the wire.
 -spec encode_gossip_message(node(), binary()) -> binary().
 encode_gossip_message(Node, Secret) ->
-    Timestamp = erlang:system_time(millisecond),
     NodeBin = atom_to_binary(Node, utf8),
-    Mac = gossip_mac(NodeBin, Timestamp, Secret),
-    term_to_binary({gossip_v2, NodeBin, Timestamp, Mac}).
+    Body = <<?GOSSIP_PREFIX, ?GOSSIP_VERSION,
+             (erlang:system_time(millisecond)):64/signed-big,
+             (byte_size(NodeBin)):8, NodeBin/binary>>,
+    <<Body/binary, (gossip_tag(Body, Secret))/binary>>.
 
--spec gossip_mac(binary(), integer(), binary()) -> binary().
-gossip_mac(NodeBin, Timestamp, Secret) ->
-    crypto:mac(hmac, sha256, Secret,
-               <<Timestamp:64/signed-big, NodeBin/binary>>).
+-spec gossip_tag(binary(), binary()) -> binary().
+gossip_tag(Body, Secret) ->
+    crypto:mac(hmac, sha256, Secret, Body).
 
 %% @private Handle incoming gossip message.
 -spec handle_gossip_message(binary(), #state{}) -> #state{}.
@@ -269,38 +304,35 @@ maybe_handle_node(true, _Node, _StoreId, _KnownNodes, State) ->
 maybe_handle_node(false, Node, StoreId, KnownNodes, State) ->
     handle_discovered_node(Node, StoreId, KnownNodes, State).
 
-%% @private Decode + authenticate one gossip datagram.
+%% @private Authenticate and read one datagram, which is untrusted LAN
+%% input.
 %%
-%% The datagram is untrusted LAN input. Decode with [safe] (a plain
-%% binary_to_term here allowed remote atom-table exhaustion and
-%% arbitrary-term allocation before any authentication), pattern-match
-%% the exact v2 shape, verify the HMAC in constant time, then check
-%% freshness. The try is required: [safe] raises badarg on unknown
-%% atoms / garbage and a hostile packet must degrade to a no-op, not
-%% crash discovery.
+%% The tag is checked in constant time over the raw bytes before any field
+%% is read; then the layout must match exactly and the timestamp must be
+%% fresh. Nothing on this path raises, and no term is decoded.
 -spec decode_gossip(binary(), binary()) -> {ok, binary()} | reject.
-decode_gossip(Data, Secret) ->
-    Decoded = try
-                  {term, binary_to_term(Data, [safe])}
-              catch
-                  error:badarg -> invalid
-              end,
-    authenticate_gossip_term(Decoded, Secret).
+decode_gossip(Data, Secret)
+        when byte_size(Data) > ?TAG_BYTES, byte_size(Data) =< ?MAX_DATAGRAM_BYTES ->
+    BodyBytes = byte_size(Data) - ?TAG_BYTES,
+    <<Body:BodyBytes/binary, Tag:?TAG_BYTES/binary>> = Data,
+    read_verified(crypto:hash_equals(gossip_tag(Body, Secret), Tag), Body);
+decode_gossip(_Data, _Secret) ->
+    reject.
 
-authenticate_gossip_term({term, {gossip_v2, NodeBin, Timestamp, Mac}}, Secret)
-        when is_binary(NodeBin), byte_size(NodeBin) > 0,
-             byte_size(NodeBin) =< ?MAX_NODE_NAME_BYTES,
-             is_integer(Timestamp),
-             is_binary(Mac), byte_size(Mac) =:= 32 ->
-    Expected = gossip_mac(NodeBin, Timestamp, Secret),
-    case crypto:hash_equals(Expected, Mac) andalso is_fresh(Timestamp) of
-        true ->
-            {ok, NodeBin};
-        false ->
-            logger:debug("Ignoring gossip with invalid MAC or stale timestamp"),
-            reject
-    end;
-authenticate_gossip_term(_Invalid, _Secret) ->
+read_verified(true, <<?GOSSIP_PREFIX, ?GOSSIP_VERSION, Timestamp:64/signed-big,
+                      NameBytes:8, NodeBin:NameBytes/binary>>) when NameBytes > 0 ->
+    fresh(is_fresh(Timestamp), NodeBin);
+read_verified(true, _Body) ->
+    logger:debug("Ignoring gossip with a verified tag and an unknown layout"),
+    reject;
+read_verified(false, _Body) ->
+    logger:debug("Ignoring gossip with an invalid tag"),
+    reject.
+
+fresh(true, NodeBin) ->
+    {ok, NodeBin};
+fresh(false, _NodeBin) ->
+    logger:debug("Ignoring gossip with a stale timestamp"),
     reject.
 
 is_fresh(Timestamp) ->
@@ -314,25 +346,44 @@ handle_discovered_node(Node, StoreId, KnownNodes, State) ->
             State;
         false ->
             logger:info("Discovered new node: ~p (store: ~p)", [Node, StoreId]),
-            connect_discovered_node(Node, StoreId, KnownNodes, State)
+            dial(Node, State)
     end.
 
-connect_discovered_node(Node, StoreId, KnownNodes, State) ->
-    case net_kernel:connect_node(Node) of
-        true ->
-            logger:info("Connected to discovered node: ~p", [Node]),
-            telemetry:execute(
-                ?CLUSTER_NODE_UP,
-                #{system_time => erlang:system_time(millisecond)},
-                #{store_id => StoreId, node => Node,
-                  member_count => length(nodes()) + 1}
-            ),
-            trigger_cluster_join(StoreId),
-            State#state{discovered_nodes = [Node | KnownNodes]};
-        false ->
-            logger:warning("Failed to connect to discovered node: ~p", [Node]),
-            State
-    end.
+%% @private A dial runs in a monitored process of its own, one per node at
+%% a time, so a node that is slow to answer never holds up discovery. The
+%% process exits with the dial's result.
+-spec dial(node(), #state{}) -> #state{}.
+dial(Node, #state{dialling = Dialling} = State) ->
+    dial_unless_dialling(lists:member(Node, maps:values(Dialling)), Node, State).
+
+dial_unless_dialling(true, _Node, State) ->
+    State;
+dial_unless_dialling(false, Node, #state{dialling = Dialling} = State) ->
+    {_Pid, Ref} = spawn_monitor(?MODULE, dial_node, [Node]),
+    State#state{dialling = Dialling#{Ref => Node}}.
+
+%% @private Dials Node and exits with the result, for the discovery server
+%% that monitors this process.
+-spec dial_node(node()) -> no_return().
+dial_node(Node) ->
+    exit({dialled, net_kernel:connect_node(Node)}).
+
+dial_result({dialled, Result}) -> Result;
+dial_result(_Crashed) -> false.
+
+dialled(true, Node, #state{store_id = StoreId, discovered_nodes = KnownNodes} = State) ->
+    logger:info("Connected to discovered node: ~p", [Node]),
+    telemetry:execute(
+        ?CLUSTER_NODE_UP,
+        #{system_time => erlang:system_time(millisecond)},
+        #{store_id => StoreId, node => Node,
+          member_count => length(nodes()) + 1}
+    ),
+    trigger_cluster_join(StoreId),
+    State#state{discovered_nodes = [Node | KnownNodes]};
+dialled(_NotConnected, Node, State) ->
+    logger:warning("Failed to connect to discovered node: ~p", [Node]),
+    State.
 
 %% @private Trigger cluster join via store coordinator
 -spec trigger_cluster_join(atom()) -> ok.
@@ -354,27 +405,24 @@ do_cluster_join(StoreId) ->
 schedule_broadcast(Interval) ->
     erlang:send_after(Interval, self(), broadcast).
 
-%% @private Get cluster secret from environment or config.
-%% No default: a hardcoded fallback secret means every unconfigured
-%% deployment trusts any LAN host that knows the public source code.
--spec get_cluster_secret() -> {ok, binary()} | error.
+%% @private Get the cluster secret: RECKON_DB_CLUSTER_SECRET, or the
+%% cluster_secret application key when that variable is unset or empty.
+%% There is no default secret.
+-spec get_cluster_secret() -> binary() | undefined.
 get_cluster_secret() ->
-    case os:getenv("RECKON_DB_CLUSTER_SECRET") of
-        false ->
-            get_cluster_secret_from_env();
-        Secret ->
-            {ok, list_to_binary(Secret)}
-    end.
+    env_cluster_secret(os:getenv("RECKON_DB_CLUSTER_SECRET")).
 
-get_cluster_secret_from_env() ->
-    case application:get_env(reckon_db, cluster_secret) of
-        {ok, Secret} when is_binary(Secret), byte_size(Secret) > 0 ->
-            {ok, Secret};
-        {ok, Secret} when is_list(Secret), Secret =/= [] ->
-            {ok, list_to_binary(Secret)};
-        _ ->
-            error
-    end.
+env_cluster_secret(Unset) when Unset =:= false; Unset =:= "" ->
+    app_cluster_secret(application:get_env(reckon_db, cluster_secret));
+env_cluster_secret(Secret) ->
+    list_to_binary(Secret).
+
+app_cluster_secret({ok, Secret}) when is_binary(Secret), byte_size(Secret) > 0 ->
+    Secret;
+app_cluster_secret({ok, Secret}) when is_list(Secret), Secret =/= [] ->
+    list_to_binary(Secret);
+app_cluster_secret(_) ->
+    undefined.
 
 %% @private Get config value with default
 -spec get_config_value(atom(), term()) -> term().

@@ -501,8 +501,9 @@ discovery_get_nodes_works_in_single_mode(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     ClusterConfig = (proplists:get_value(store_config, Config))#store_config{mode = cluster},
 
-    %% Discovery requires a cluster secret to start in cluster mode
-    application:set_env(reckon_db, cluster_secret, <<"test-secret">>),
+    %% Discovery requires a cluster secret of at least 32 bytes to start in
+    %% cluster mode
+    application:set_env(reckon_db, cluster_secret, <<"0123456789abcdef0123456789abcdef">>),
 
     {ok, _} = reckon_db_sup:start_store(ClusterConfig),
     ok = wait_for_leader(StoreId, 10000),

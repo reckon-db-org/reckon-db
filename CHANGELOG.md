@@ -5,6 +5,27 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed: discovery needs a cluster secret of at least 32 bytes
+
+Cluster-mode multicast discovery starts only with a cluster secret of at
+least 32 bytes, from `RECKON_DB_CLUSTER_SECRET` or the `cluster_secret`
+application key. An empty `RECKON_DB_CLUSTER_SECRET` counts as unset and
+gives way to the key. Without a secret, or with a shorter one, discovery
+stays passive and logs a `discovery_disabled` report whose `reason` is
+`secret_required` or `{secret_too_short, #{bytes => N, required => 32}}`.
+
+Discovery datagrams have a fixed binary layout, version 3, tagged with
+HMAC-SHA256 over their bytes, so nodes on this version and nodes on
+earlier versions do not discover each other. The discovery socket is bound
+to the multicast group address, and a discovered node is dialled from a
+process of its own, so discovery keeps answering while a dial waits.
+
+The README and the configuration guide now describe the discovery keys
+reckon-db reads: `cluster_secret`, `discovery_port`, `multicast_addr` and
+`broadcast_interval`.
+
 ## [5.11.9] - 2026-09-11
 
 ### Fixed: the events of one append could replay out of order

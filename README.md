@@ -24,7 +24,7 @@ reckon-db is an Erlang implementation of a distributed event store designed for:
 - Stream links and projections, system streams under the `$` namespace, and temporal (time-based) queries (see [guides/stream_links.md](guides/stream_links.md), [guides/system_streams.md](guides/system_streams.md), [guides/temporal_queries.md](guides/temporal_queries.md))
 - Event lifecycle management (scavenging, schema evolution / upcasting) (see [guides/scavenging.md](guides/scavenging.md), [guides/schema_evolution.md](guides/schema_evolution.md))
 - Emitter pools for high-throughput event delivery
-- Clustering with hardened UDP multicast discovery (HMAC-keyed gossip v2) and Kubernetes DNS discovery (see [guides/configuration.md](guides/configuration.md), [guides/cluster_consistency.md](guides/cluster_consistency.md))
+- Clustering with UDP multicast discovery, authenticated with a shared cluster secret of at least 32 bytes (see [guides/configuration.md](guides/configuration.md), [guides/cluster_consistency.md](guides/cluster_consistency.md))
 - Embedded Rust NIFs (crypto, hashing, compression, aggregation, filter matching) with pure-Erlang fallbacks when no toolchain is present
 - BEAM telemetry with optional OpenTelemetry exporters
 
@@ -255,13 +255,12 @@ reckon_db_telemetry:detach(HandlerId) -> ok.
     {writer_pool_size, 10},
     {reader_pool_size, 10},
 
-    %% Cluster discovery (cluster mode only)
-    {discovery, [
-        {method, multicast},  %% multicast | k8s_dns
-        {port, 45892},
-        {multicast_addr, {239, 255, 0, 1}},
-        {secret, <<"cluster_secret">>}
-    ]}
+    %% Cluster discovery (cluster mode only). Multicast discovery needs a
+    %% shared secret of at least 32 bytes, here or in RECKON_DB_CLUSTER_SECRET.
+    {cluster_secret, <<"at least 32 bytes of shared secret">>},
+    {discovery_port, 45892},
+    {multicast_addr, {239, 255, 0, 1}},
+    {broadcast_interval, 5000}
 ]}].
 ```
 
