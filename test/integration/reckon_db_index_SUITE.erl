@@ -22,7 +22,8 @@
     meta_index_absent_value_empty/1,
     index_matches_scan_parity/1,
     unindexed_store_falls_back_to_scan/1,
-    multi_event_batch_fully_indexed/1
+    multi_event_batch_fully_indexed/1,
+    one_append_reads_back_in_version_order/1
 ]).
 
 suite() -> [{timetrap, {seconds, 30}}].
@@ -35,7 +36,8 @@ all() ->
      meta_index_absent_value_empty,
      index_matches_scan_parity,
      unindexed_store_falls_back_to_scan,
-     multi_event_batch_fully_indexed].
+     multi_event_batch_fully_indexed,
+     one_append_reads_back_in_version_order].
 
 %%====================================================================
 %% CT boilerplate
@@ -219,3 +221,25 @@ multi_event_batch_fully_indexed(Config) ->
     ]),
     {ok, Tagged} = reckon_db_streams:read_by_tags(StoreId, [<<"g">>], any, 100),
     ?assertEqual([<<"a">>, <<"b">>, <<"c">>], types(Tagged)).
+
+%% The events of one append share a single epoch_us, so the indexed reads
+%% must order them by version too, not leave them in whatever order the
+%% index subtree or the ref de-duplication map produced. 40 events, more
+%% than a flat Erlang map holds, so map order is hash order.
+one_append_reads_back_in_version_order(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    declare(StoreId, [tags, event_type]),
+    S = sid(<<"one-append">>),
+    Count = 40,
+    {ok, _} = reckon_db_streams:append(StoreId, S, ?ANY_VERSION,
+        [#{event_type => <<"tied">>, data => #{}, tags => [<<"g">>, <<"h">>]}
+         || _ <- lists:seq(1, Count)]),
+    Expected = lists:seq(0, Count - 1),
+    Versions = fun(Events) -> [V || #event{version = V} <- Events] end,
+
+    {ok, ByType} = reckon_db_streams:read_by_event_types(StoreId, [<<"tied">>], 1000),
+    ?assertEqual(Expected, Versions(ByType)),
+    {ok, ByAnyTag} = reckon_db_streams:read_by_tags(StoreId, [<<"g">>, <<"h">>], any, 1000),
+    ?assertEqual(Expected, Versions(ByAnyTag)),
+    {ok, ByAllTags} = reckon_db_streams:read_by_tags(StoreId, [<<"g">>, <<"h">>], all, 1000),
+    ?assertEqual(Expected, Versions(ByAllTags)).

@@ -78,7 +78,7 @@ handle_call({get_events, _StoreId, StreamId, StartVersion, Count, Direction}, _F
     Result = reckon_db_streams:read(StoreId, StreamId, StartVersion, Count, Direction),
     {reply, Result, State};
 
-%% Read all events globally (cross-stream, sorted by epoch_us)
+%% Read all events globally (cross-stream, in global order)
 handle_call({read_all_global, _StoreId, Offset, BatchSize}, _From,
             #state{store_id = StoreId} = State) ->
     Result = reckon_db_streams:read_all_global(StoreId, Offset, BatchSize),

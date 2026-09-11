@@ -31,8 +31,9 @@
 %% == Reads ==
 %%
 %% `lookup_*' read the relevant subtree, resolve refs to events (dropping
-%% refs whose event has since been removed, e.g. by scavenge), and sort by
-%% `epoch_us'. Compound tag `all' intersects ref sets across tags.
+%% refs whose event has since been removed, e.g. by scavenge), and sort them
+%% into global order with `sort_in_global_order/1'. Compound tag `all'
+%% intersects ref sets across tags.
 %%
 %% See plans/DESIGN_SECONDARY_INDEX.md.
 -module(reckon_db_index).
@@ -43,6 +44,7 @@
 -export([
     entries/2,
     order_key/1,
+    sort_in_global_order/1,
     event_ref/1,
     lookup_tags/3,
     lookup_event_types/2,
@@ -99,6 +101,22 @@ order_key(#event{epoch_us = EpochUs, stream_id = StreamId, version = Version}) -
     Epoch = pad(EpochUs, ?INDEX_ORDER_KEY_WIDTH),
     Ver = pad(Version, ?VERSION_PADDING),
     <<Epoch/binary, "|", StreamId/binary, "|", Ver/binary>>.
+
+%% @doc Events sorted into the store's global order: epoch_us, then
+%% stream_id, then version, the order `order_key/1' encodes.
+%%
+%% epoch_us alone is not an order. One append stamps a single epoch_us on
+%% every event it writes (`reckon_db_streams:append_events_to_stream/4'),
+%% so comparing epoch_us leaves a batch in whatever order the input list
+%% had, and callers build that list from Khepri maps, whose iteration order
+%% Erlang leaves undefined. A catch-up replay then applied one command's
+%% events out of order, and projections built on them silently lost fields
+%% (hecate-tube, 2026-09-11). The unique order key puts the events of one
+%% append back in version order.
+-spec sort_in_global_order([event()]) -> [event()].
+sort_in_global_order(Events) ->
+    Keyed = lists:keysort(1, [{order_key(Event), Event} || Event <- Events]),
+    [Event || {_OrderKey, Event} <- Keyed].
 
 %% @doc The reference stored at an index leaf — enough to point-get the
 %% primary event under the Model C layout.
@@ -230,14 +248,11 @@ intersect_all([]) -> sets:new();
 intersect_all([S | Rest]) ->
     lists:foldl(fun sets:intersection/2, S, Rest).
 
-%% @private Resolve refs to events (dropping refs whose event is gone),
-%% sorted by epoch_us — consistent with the pre-index read_by_* ordering.
+%% @private Resolve refs to events (dropping refs whose event is gone), in
+%% global order, the same order as the scan fallbacks in reckon_db_streams.
 -spec resolve_sorted(atom(), [event_ref()]) -> [event()].
 resolve_sorted(StoreId, Refs) ->
-    Events = lists:filtermap(fun(Ref) -> resolve(StoreId, Ref) end, Refs),
-    lists:sort(
-        fun(#event{epoch_us = E1}, #event{epoch_us = E2}) -> E1 =< E2 end,
-        Events).
+    sort_in_global_order(lists:filtermap(fun(Ref) -> resolve(StoreId, Ref) end, Refs)).
 
 -spec resolve(atom(), event_ref()) -> {true, event()} | false.
 resolve(StoreId, #{stream_id := StreamId, version := Version}) ->

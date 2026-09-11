@@ -5,6 +5,37 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed: the events of one append could replay out of order
+
+`read_all_global/3`, the scan fallbacks of `read_by_event_types/3`,
+`read_by_tags/4` and `read_by_metadata/3`, and every indexed lookup sorted
+events by `epoch_us` alone. One append stamps a single `epoch_us` on all of
+its events, so a batch came back in the order of the Khepri map it was read
+from, which Erlang leaves undefined: a 40-event append read back as
+`[14, 30, 9, 15, ...]`. Catch-up subscriptions replay through
+`read_all_global/3`, so projections saw one command's events out of order.
+
+Reproduced live in hecate-tube (2026-09-11). An upload appends
+`video_clip_uploaded_v1`, `video_clip_scanned_v1` and
+`video_clip_accepted_v1` together. Three restarts replayed them in three
+different orders and lost one, three and zero clip thumbnails, because the
+projection merges `scanned` into the row `uploaded` creates.
+
+All of these now sort with `reckon_db_index:sort_in_global_order/1`:
+`epoch_us`, then `stream_id`, then `version`, the order
+`reckon_db_index:order_key/1` already encodes for index entries. The private
+`sort_by_epoch/1` is gone.
+
+New tests, both failing before the fix:
+
+- `reckon_db_streams_SUITE:read_all_global_keeps_one_appends_version_order`:
+  a full read, a cache hit, pages that split the batch, a read after a
+  rebuild, and the unindexed `read_by_event_types/3` scan.
+- `reckon_db_index_SUITE:one_append_reads_back_in_version_order`: the
+  indexed event type lookup and both tag lookups.
+
 ## [5.11.8] - 2026-09-09
 
 ### Fixed — re-subscribing to a persisted subscription left its emitter pool down until leader activation

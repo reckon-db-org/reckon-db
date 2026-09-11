@@ -63,7 +63,8 @@
     read_all_global_cache_hit_matches_scan/1,
     read_all_global_invalidates_on_append/1,
     read_all_global_cache_isolated_per_store/1,
-    read_all_global_rejects_torn_page_instead_of_mixing_generations/1
+    read_all_global_rejects_torn_page_instead_of_mixing_generations/1,
+    read_all_global_keeps_one_appends_version_order/1
 ]).
 
 -define(STORE_ID, streams_test_store).
@@ -120,7 +121,8 @@ groups() ->
             read_all_global_cache_hit_matches_scan,
             read_all_global_invalidates_on_append,
             read_all_global_cache_isolated_per_store,
-            read_all_global_rejects_torn_page_instead_of_mixing_generations
+            read_all_global_rejects_torn_page_instead_of_mixing_generations,
+            read_all_global_keeps_one_appends_version_order
         ]}
     ].
 
@@ -633,9 +635,47 @@ read_all_global_rejects_torn_page_instead_of_mixing_generations(Config) ->
     Result = reckon_db_streams:read_all_global(StoreId, FirstOurs, 3),
     ?assertEqual({error, cache_generation_changed_mid_page}, Result).
 
+%% @doc The events of ONE append share a single epoch_us, so epoch order
+%% alone cannot place them: every read that promises global order must
+%% return them in version order. Ordered by epoch_us only, they came back
+%% in the order of the Khepri get_many result map (maps:to_list/1), which
+%% for more than 32 events is hash order, not append order -- hecate-tube
+%% lost read-model fields on replay because of it. Covers a full read, a
+%% cache hit, pages that split the batch, a read after an append rebuilds
+%% the cache, and the unindexed read_by_event_types scan.
+read_all_global_keeps_one_appends_version_order(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    S = generate_stream_id(),
+    Type = <<"one_append_", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Count = 40,
+    {ok, _} = reckon_db_streams:append(StoreId, S, ?NO_STREAM, generate_events(Type, Count)),
+    Expected = lists:seq(0, Count - 1),
+    VersionsOf = fun(Events) -> [V || #event{event_type = T, version = V} <- Events, T =:= Type] end,
+
+    {ok, First} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
+    ?assertEqual(Expected, VersionsOf(First)),
+    {ok, CacheHit} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
+    ?assertEqual(Expected, VersionsOf(CacheHit)),
+    ?assertEqual(Expected, VersionsOf(read_in_pages(StoreId, 0, 7, []))),
+
+    {ok, _} = reckon_db_streams:append(StoreId, generate_stream_id(), ?NO_STREAM,
+        [generate_event(<<"one_append_rebuild">>)]),
+    {ok, Rebuilt} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
+    ?assertEqual(Expected, VersionsOf(Rebuilt)),
+
+    {ok, ByType} = reckon_db_streams:read_by_event_types(StoreId, [Type], 1000),
+    ?assertEqual(Expected, VersionsOf(ByType)).
+
 %%====================================================================
 %% Helper Functions
 %%====================================================================
+
+%% @private The whole store read through read_all_global pages of PageSize.
+read_in_pages(StoreId, Offset, PageSize, Acc) ->
+    case reckon_db_streams:read_all_global(StoreId, Offset, PageSize) of
+        {ok, []} -> lists:append(lists:reverse(Acc));
+        {ok, Page} -> read_in_pages(StoreId, Offset + length(Page), PageSize, [Page | Acc])
+    end.
 
 %% @private Generate a unique stream ID conforming to the
 %% reckon-db user-stream format. See reckon_gater_stream_id.

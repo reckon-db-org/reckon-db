@@ -232,18 +232,20 @@ read(StoreId, StreamId, StartVersion, Count, Direction, Opts) ->
 read_all(StoreId, StreamId, BatchSize, Direction) ->
     read(StoreId, StreamId, 0, BatchSize, Direction).
 
-%% @doc Read all events across all streams in global epoch_us order.
+%% @doc Read all events across all streams in global order.
 %%
-%% Returns events sorted by epoch_us, skipping `Offset' events and
-%% returning up to `BatchSize' events. Used by catch-up subscriptions
-%% to replay historical events to a subscriber.
+%% Returns events in global order (epoch_us, then stream_id, then version;
+%% see `reckon_db_index:sort_in_global_order/1'), skipping `Offset' events
+%% and returning up to `BatchSize' events. Used by catch-up subscriptions
+%% to replay historical events to a subscriber, so the events of one append
+%% replay in the order they were appended.
 %%
 %% Parameters:
 %%   StoreId   - The store identifier
 %%   Offset    - Number of events to skip (0-based)
 %%   BatchSize - Maximum number of events to return
 %%
-%% Returns events sorted by epoch_us (global ordering).
+%% Returns events in global order (epoch_us, stream_id, version).
 %%
 %% == Why this is cached, and why an index inside Khepri cannot replace it ==
 %%
@@ -313,9 +315,10 @@ read_all(StoreId, StreamId, BatchSize, Direction) ->
 %%    two of a page's lookups. If that rebuild's fresh sort reassigns a
 %%    position this page already read (only possible if two events'
 %%    epoch_us values are close enough, or a delete/DCB write races the
-%%    scan, to change relative order -- `sort_by_epoch/1' promises a
-%%    stable sort of whatever it saw, nothing about positions surviving a
-%%    later append), the page would silently mix two generations. Tagging
+%%    scan, to change relative order --
+%%    `reckon_db_index:sort_in_global_order/1' promises a total order of
+%%    whatever it saw, nothing about positions surviving a later append),
+%%    the page would silently mix two generations. Tagging
 %%    each row with its Generation and checking it on every lookup turns
 %%    that into a detectable condition instead of a silent one: a page
 %%    that spans a rebuild is retried once, against the new generation,
@@ -371,7 +374,7 @@ rebuild_cache(StoreId, Count, Now) ->
             Events = [convert_result_to_event(PathKey, Value)
                       || {PathKey, Value} <- Results],
             ValidEvents = [E || E <- Events, E =/= undefined],
-            SortedEvents = sort_by_epoch(ValidEvents),
+            SortedEvents = reckon_db_index:sort_in_global_order(ValidEvents),
             Len = length(SortedEvents),
             Generation = make_ref(),
             Rows = index_rows(StoreId, SortedEvents, Generation),
@@ -476,13 +479,6 @@ has_data_leaf() ->
         #if_has_data{has_data = true}
     ]}.
 
-%% @private Sort events into global epoch_us order.
--spec sort_by_epoch([event()]) -> [event()].
-sort_by_epoch(Events) ->
-    lists:sort(
-        fun(#event{epoch_us = E1}, #event{epoch_us = E2}) -> E1 =< E2 end,
-        Events).
-
 %% @private Query every event node across the store. Model C stores
 %% regular events at 4 levels ([streams, Type, Id, Version]) and the DCB
 %% pseudo-stream at 2 ([streams, _dcb, SeqKey]), so a single get_many
@@ -527,7 +523,7 @@ get_many_list(StoreId, Pattern) ->
 %%   EventTypes - List of event type binaries to match
 %%   BatchSize  - Maximum number of events to return (for pagination)
 %%
-%% Returns events sorted by epoch_us (global ordering).
+%% Returns events in global order (epoch_us, stream_id, version).
 -spec read_by_event_types(atom(), [binary()], pos_integer()) ->
     {ok, [event()]} | {error, term()}.
 read_by_event_types(StoreId, EventTypes, BatchSize) when is_list(EventTypes) ->
@@ -575,7 +571,7 @@ scan_by_event_types(StoreId, EventTypes, BatchSize) ->
             Events = [convert_result_to_event(PathKey, Value)
                       || {PathKey, Value} <- Results],
             ValidEvents = [E || E <- Events, E =/= undefined],
-            SortedEvents = sort_by_epoch(ValidEvents),
+            SortedEvents = reckon_db_index:sort_in_global_order(ValidEvents),
             LimitedEvents = lists:sublist(SortedEvents, BatchSize),
             {ok, LimitedEvents};
         {error, _} = Error ->
@@ -607,7 +603,7 @@ scan_by_event_types(StoreId, EventTypes, BatchSize) ->
 %%
 %% == Returns ==
 %%
-%% Events sorted by epoch_us (global ordering).
+%% Events in global order (epoch_us, stream_id, version).
 -spec read_by_tags(atom(), [binary()], any | all, pos_integer()) ->
     {ok, [event()]} | {error, term()}.
 read_by_tags(StoreId, Tags, Match, BatchSize) when is_list(Tags), is_atom(Match) ->
@@ -633,7 +629,7 @@ scan_by_tags(StoreId, Tags, Match, BatchSize) ->
                          || {PathKey, Value} <- Results],
             ValidEvents = [E || E <- AllEvents, E =/= undefined],
             FilteredEvents = filter_events_by_tags(ValidEvents, Tags, Match),
-            SortedEvents = sort_by_epoch(FilteredEvents),
+            SortedEvents = reckon_db_index:sort_in_global_order(FilteredEvents),
             LimitedEvents = lists:sublist(SortedEvents, BatchSize),
             {ok, LimitedEvents};
         {error, _} = Error ->
@@ -672,7 +668,7 @@ scan_by_metadata(StoreId, Key, Value) ->
             Events = [convert_result_to_event(P, V) || {P, V} <- Results],
             Matching = [E || #event{metadata = M} = E <- Events,
                              is_map(M), maps:get(Key, M, undefined) =:= Value],
-            {ok, sort_by_epoch(Matching)};
+            {ok, reckon_db_index:sort_in_global_order(Matching)};
         {error, _} = Error ->
             Error
     end.

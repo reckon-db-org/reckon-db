@@ -710,8 +710,8 @@ maybe_start_catchup(StoreId,
 %%
 %% On integrity-enabled stores, every event is MAC-verified before
 %% delivery. Cross-stream chain verification is intentionally NOT
-%% performed here — catch-up reads sort by epoch_us across all
-%% streams, so there is no single chain to walk. Per-stream chain
+%% performed here — catch-up reads interleave all streams in
+%% global order, so there is no single chain to walk. Per-stream chain
 %% integrity is the consumer's responsibility (Layer 6 — the evoq
 %% aggregate rebuild path does walk a single stream and can do the
 %% chain check there).
