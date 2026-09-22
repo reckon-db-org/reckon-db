@@ -1,0 +1,148 @@
+# Runs reckon-db's checks on the pinned OTP 28, so a change that breaks the
+# event store shows here before a consumer pulls it in. Nothing here publishes;
+# releases go through publish-hex.yml.
+#
+# Shaped after reckon-gater's, which adopted the two decisions below from its
+# own unmerged CI branch; they apply here for the same reasons:
+#
+#   1. NEVER CACHE `_build', only the hex package cache and dialyzer's PLTs.
+#   2. rebar3 BY DIRECT DOWNLOAD, checked against the sha256 GitHub publishes,
+#      because setup-beam's own rebar3 lookup has failed on the GitHub releases
+#      pagination cap.
+#
+# ⚠ `branches: ['**']' IS LOAD-BEARING: a `push' event fires for TAG refs too,
+# so without it this suite runs a second time on every release tag beside
+# publish-hex.yml. Same defect fixed in evoq (c589fcc) and macula (7edc84d2).
+#
+# ⚠ THE RUST NIFs ARE THE POINT OF THE `Check the NIFs actually built' STEP.
+# `priv/build-nifs.sh' is TOLERANT by design: with no Rust toolchain it logs a
+# warning, skips, and every wrapper module falls back to its pure-Erlang
+# implementation. The suite then passes without ever running the Rust code, and
+# nothing in the output says the accelerated path went untested. The step turns
+# that silence into a failure.
+#
+# ⚠ XREF, LINT AND DIALYZER each arrived with debt, and each is handled
+# differently on purpose:
+#   - xref: `{xref_checks, ...}' is now stated in rebar.config. Without it the
+#     default set includes `exports_not_used', which for a LIBRARY reported 290
+#     "unused export" warnings and not one undefined function. Noise, removed at
+#     the source rather than baselined.
+#   - lint: 26 elvis findings across 10 files, all `no_deep_nesting', recorded
+#     in `.lint_baseline'.
+#   - dialyzer: 215 findings across 45 files, recorded in `.dialyzer_baseline'.
+# Both baselines are RATCHETS (scripts/check_ratchet.sh): a finding outside the
+# baseline fails the job, a finding that disappears is reported so its line can
+# be struck. Do NOT add continue-on-error, and do not regenerate a baseline to
+# make a new finding go away: --update is for recording something somebody
+# decided to accept, in a commit that says why.
+name: lint-and-test
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore:
+      - '**.md'
+      - 'guides/**'
+      - 'assets/**'
+      - 'doc/**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'guides/**'
+      - 'assets/**'
+      - 'doc/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # From .tool-versions, which is what a developer's shell resolves here.
+  OTP_VERSION: '28.4.2'
+  REBAR3_VERSION: '3.27.0'
+  REBAR3_SHA256: 'af85aab41f9fd74bdd6341ebdf6fe9c88077aab9f8eac82371583fa02f2b0bdf'
+
+# A newer push to the same branch supersedes a running check, except on main,
+# where every commit keeps its own result.
+concurrency:
+  group: lint-and-test-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  check:
+    name: compile + NIFs + xref + lint + eunit + ct + proper + dialyzer (OTP 28.4.2)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Erlang/OTP
+        id: beam
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          version-type: strict
+
+      - name: Install rebar3
+        run: |
+          curl -fsSL -o rebar3 "https://github.com/erlang/rebar3/releases/download/${REBAR3_VERSION}/rebar3"
+          echo "${REBAR3_SHA256}  rebar3" | sha256sum --check --strict -
+          chmod +x rebar3
+          sudo mv rebar3 /usr/local/bin/rebar3
+          rebar3 version
+
+      - name: Cache hex packages and PLTs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/rebar3
+            _build/default/*_plt
+          key: ${{ runner.os }}-otp-${{ steps.beam.outputs.otp-version }}-${{ hashFiles('rebar.config') }}
+
+      - name: Compile
+        id: compile
+        run: rebar3 compile
+
+      # build-nifs.sh skips silently without cargo, and every wrapper falls
+      # back to Erlang, so a green suite would say nothing about the Rust path.
+      - name: Check the NIFs actually built
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        run: |
+          cargo --version
+          missing=0
+          for crate in $(git ls-files 'native/*/Cargo.toml' | xargs -n1 dirname | xargs -n1 basename); do
+            if [ ! -f "priv/$crate.so" ]; then echo "::error::priv/$crate.so was not built"; missing=1; fi
+          done
+          [ "$missing" -eq 0 ] || { echo "::error::the Rust NIFs did not build, so the suite would only exercise the Erlang fallbacks"; exit 1; }
+          echo "all $(git ls-files 'native/*/Cargo.toml' | wc -l) NIF crate(s) built"
+
+      # Once the code compiles, every check runs even when an earlier one
+      # failed, so one run reports all failures. The job still fails if any
+      # check fails.
+      - name: Xref
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        run: rebar3 xref
+
+      - name: Lint (ratchet against .lint_baseline)
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        run: bash scripts/check_ratchet.sh --tool lint
+
+      - name: EUnit
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        run: rebar3 eunit
+
+      - name: Common Test
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        run: rebar3 ct
+
+      # The branch's list did not include proper, though rebar3_proper is a
+      # project plugin here and the suite passes. Added so the plugin is not
+      # carried unrun.
+      - name: PropEr
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        run: rebar3 proper
+
+      - name: Dialyzer (ratchet against .dialyzer_baseline)
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        run: bash scripts/check_ratchet.sh

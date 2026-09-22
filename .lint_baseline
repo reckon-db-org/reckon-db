@@ -1,0 +1,29 @@
+# Known dialyzer findings, recorded as a ratchet. See scripts/dialyzer_ratchet.sh.
+# lint reported 10 when this was written (files for lint, warnings for dialyzer).
+# A new finding fails CI. A fixed finding should have its line deleted here.
+src/reckon_db_cluster.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_consistency_checker.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_consistency_checker.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_consistency_checker.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_emitter_sup.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_resource_monitor.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_resource_monitor.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_resource_monitor.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_resource_monitor.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_resource_monitor.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store_coordinator.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store_healer.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store_healer.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store_healer.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store_healer.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store_healer.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store_healer.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store_healer.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store_healer.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_store_healer.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_streams_reader.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_streams_writer.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).
+src/reckon_db_subscriptions.erl	41c55ba3ef0d	no_deep_nesting: an expression is nested (level = 3) beyond the configured limit (limit: 2).

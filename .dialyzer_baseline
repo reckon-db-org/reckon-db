@@ -1,0 +1,218 @@
+# Known dialyzer findings, recorded as a ratchet. See scripts/dialyzer_ratchet.sh.
+# dialyzer reported 215 when this was written (files for lint, warnings for dialyzer).
+# A new finding fails CI. A fixed finding should have its line deleted here.
+src/reckon_db_app.erl	229929d0a14f	Expression produces a value of type 'ok' | {'error','already_exists'}, but this value is unmatched
+src/reckon_db_app.erl	f0ceac231f4c	The specification for reckon_db_app:start/0 states that the function might also return {'ok',pid()} but the in
+src/reckon_db_archive_backend.erl	09e6070a81e6	Type specification reckon_db_archive_backend:parse_key(binary()) -> {'ok',map()} | {'error','invalid_key'} is 
+src/reckon_db_archive_file.erl	665a5fc34768	Type specification reckon_db_archive_file:path_to_key(atom(),binary(),string()) -> binary() is a supertype of 
+src/reckon_db_archive_file.erl	75f23926393d	Type specification reckon_db_archive_file:init(map()) -> {'ok',#state{}} | {'error',term()} is a supertype of 
+src/reckon_db_archive_file.erl	ebae50527e0f	Type specification reckon_db_archive_file:delete(#state{},binary()) -> {'ok',#state{}} | {'error',term()} is a
+src/reckon_db_backpressure.erl	bd891a77eb8b	Matching of pattern {'bp_queue', _, _, _, _, _, 'infinity', _, _, _} tagged with a record name violates the de
+src/reckon_db_backpressure.erl	eae6c3b4fa23	The specification for reckon_db_backpressure:get_demand/1 states that the function might also return 'infinity
+src/reckon_db_backpressure.erl	f843a8929236	The pattern 'infinity' can never match the type non_neg_integer()
+src/reckon_db_backpressure.erl	f843a8929236	The pattern 'infinity' can never match the type non_neg_integer()
+src/reckon_db_capability_verifier.erl	38bb487864f8	The pattern 'true' can never match the type 'false'
+src/reckon_db_capability_verifier.erl	912ea1e89641	Type specification reckon_db_capability_verifier:check_permission(capability(),binary(),binary()) -> 'ok' | {'
+src/reckon_db_capability_verifier.erl	d1564eaec17b	Type specification reckon_db_capability_verifier:verify_signature(capability()) -> 'ok' | {'error',capability_
+src/reckon_db_capability_verifier.erl	e3f7b691c856	The specification for reckon_db_capability_verifier:is_revoked/1 states that the function might also return 't
+src/reckon_db_capability_verifier.erl	feac90696fc8	The specification for reckon_db_capability_verifier:maybe_check_revocation/2 states that the function might al
+src/reckon_db_ccc_filter.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
+src/reckon_db_ccc_filter.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
+src/reckon_db_ccc_filter.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
+src/reckon_db_ccc_filter.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
+src/reckon_db_ccc_filter.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
+src/reckon_db_ccc_filter.erl	958a0fcfb1d5	Unknown type reckon_gater_types:seq_cutoff/0
+src/reckon_db_ccc_filter.erl	958a0fcfb1d5	Unknown type reckon_gater_types:seq_cutoff/0
+src/reckon_db_ccc_paths.erl	3b85565165d9	Type specification reckon_db_ccc_paths:by_payload_path(binary(),binary(),non_neg_integer()) -> [term()] is a s
+src/reckon_db_ccc_paths.erl	5cd509e09481	Type specification reckon_db_ccc_paths:by_payload_pattern(binary(),binary()) -> [term()] is a supertype of the
+src/reckon_db_ccc_paths.erl	62ceb3fc577b	Type specification reckon_db_ccc_paths:by_payload_hash_path(binary(),non_neg_integer()) -> [term()] is a super
+src/reckon_db_ccc_paths.erl	e37fceb957dd	Type specification reckon_db_ccc_paths:by_payload_hash_pattern(binary()) -> [term()] is a supertype of the suc
+src/reckon_db_cluster.erl	3da25342bf4e	Type specification reckon_db_cluster:check_log_consistency(atom()) -> {'ok',map()} | {'error',term()} is a sup
+src/reckon_db_cluster.erl	43520633c105	Type specification reckon_db_cluster:health_check(atom()) -> {'ok',map()} | {'error',term()} is a supertype of
+src/reckon_db_cluster.erl	4d64971cc1d9	Type specification reckon_db_cluster:verify_consistency(atom()) -> {'ok',map()} | {'error',term()} is a supert
+src/reckon_db_cluster.erl	b54c1a880e35	Type specification reckon_db_cluster:verify_membership(atom()) -> {'ok',map()} | {'error',term()} is a superty
+src/reckon_db_consistency_checker.erl	0232c466ad65	Type specification reckon_db_consistency_checker:determine_overall_status(#{atom()=>check_detail()}) -> consis
+src/reckon_db_consistency_checker.erl	139310920486	Expression produces a value of type 'ok' | reference(), but this value is unmatched
+src/reckon_db_consistency_checker.erl	1bd89f8f6593	Type specification reckon_db_consistency_checker:analyze_leader_consensus(#{node()=>term()}) -> {'ok',map()} i
+src/reckon_db_consistency_checker.erl	2ea2504c7e6d	Type specification reckon_db_consistency_checker:get_quorum_status(atom()) -> {'ok',map()} | {'error',term()} 
+src/reckon_db_consistency_checker.erl	6b1e5f18ffd1	Type specification reckon_db_consistency_checker:verify_membership_consensus(atom()) -> {'ok',map()} | {'error
+src/reckon_db_consistency_checker.erl	6c281042c3e8	Type specification reckon_db_consistency_checker:notify_callbacks(#{reference()=>fun()},consistency_status()) 
+src/reckon_db_consistency_checker.erl	ba8e3c16afce	The pattern #{'commit_index':=CommitIdx, 'current_term':=Term, 'last_applied':=LastApplied, 'state':=RaftState
+src/reckon_db_consistency_checker.erl	ca5f260dfd03	Type specification reckon_db_consistency_checker:analyze_membership_consensus(#{node()=>term()},[term()]) -> {
+src/reckon_db_consistency_checker.erl	e57618365e7d	Type specification reckon_db_consistency_checker:analyze_raft_consistency(#{node()=>term()},term()) -> {'ok',m
+src/reckon_db_consistency_checker.erl	e8d43229ff73	Type specification reckon_db_consistency_checker:verify_raft_consistency(atom()) -> {'ok',map()} | {'error',te
+src/reckon_db_consistency_checker.erl	ed05e30e08ba	Type specification reckon_db_consistency_checker:verify_leader_consensus(atom()) -> {'ok',map()} | {'error',te
+src/reckon_db_dcb.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
+src/reckon_db_dcb.erl	44b19cbc9210	The variable _ can never match since previous clauses completely covered the type binary() | map()
+src/reckon_db_dcb.erl	958a0fcfb1d5	Unknown type reckon_gater_types:seq_cutoff/0
+src/reckon_db_dcb_paths.erl	49b6f2e0d5f8	Type specification reckon_db_dcb_paths:by_tag_path(binary(),non_neg_integer()) -> [term()] is a supertype of t
+src/reckon_db_dcb_paths.erl	6fb40c9e6976	Type specification reckon_db_dcb_paths:by_event_type_pattern(binary()) -> [term()] is a supertype of the succe
+src/reckon_db_dcb_paths.erl	a4a4999321a8	Type specification reckon_db_dcb_paths:by_event_type_path(binary(),non_neg_integer()) -> [term()] is a superty
+src/reckon_db_dcb_paths.erl	b8d89f1c592c	Type specification reckon_db_dcb_paths:event_path(non_neg_integer()) -> [term()] is a supertype of the success
+src/reckon_db_dcb_paths.erl	efa422c85648	Type specification reckon_db_dcb_paths:by_tag_pattern(binary()) -> [term()] is a supertype of the success typi
+src/reckon_db_discovery.erl	110a24cf3899	Type specification reckon_db_discovery:open_multicast_socket(non_neg_integer(),inet:ip4_address()) -> {'ok',ge
+src/reckon_db_discovery.erl	dacdb58bda5e	Type specification reckon_db_discovery:get_config_value(atom(),term()) -> term() is a supertype of the success
+src/reckon_db_emitter.erl	525f9e860ca7	Expression produces a value of type 'ok' | {'events',maybe_improper_list()}, but this value is unmatched
+src/reckon_db_emitter_pool.erl	adf699289f90	Type specification reckon_db_emitter_pool:stop(atom(),binary()) -> 'ok' | {'error',term()} is a supertype of t
+src/reckon_db_emitter_pool.erl	ec9ef7ec6b22	Type specification reckon_db_emitter_pool:stop_emitter(atom(),subscription()) -> 'ok' | {'error',term()} is a 
+src/reckon_db_emitter_sup.erl	76c60448ca0e	Type specification reckon_db_emitter_sup:stop_emitter_pool(atom(),binary()) -> 'ok' | {'error',term()} is a su
+src/reckon_db_filter_nif.erl	49dda33328f4	The variable Result can never match since previous clauses completely covered the type binary()
+src/reckon_db_filter_nif.erl	49dda33328f4	The variable Result can never match since previous clauses completely covered the type binary()
+src/reckon_db_filters.erl	29a244e1bf7e	Function by_event_type/1 has no local return
+src/reckon_db_filters.erl	312bbcdbcf5f	Record construction #event{event_id::'_',event_type::binary(),stream_id::'_',version::'_',data::'_',metadata::
+src/reckon_db_filters.erl	89477d934b1d	Invalid type specification for function reckon_db_filters:by_event_type/1. The success typing is (_) -> none()
+src/reckon_db_filters.erl	ae50ce4d4601	Cons will produce an improper list since its 2nd argument is none()
+src/reckon_db_filters.erl	ae50ce4d4601	Cons will produce an improper list since its 2nd argument is none()
+src/reckon_db_filters.erl	ae50ce4d4601	Cons will produce an improper list since its 2nd argument is none()
+src/reckon_db_filters.erl	ae50ce4d4601	Cons will produce an improper list since its 2nd argument is none()
+src/reckon_db_filters.erl	ae50ce4d4601	Cons will produce an improper list since its 2nd argument is none()
+src/reckon_db_gateway_worker.erl	450ea474fbce	Expression produces a value of type {'error',_}, but this value is unmatched
+src/reckon_db_gateway_worker.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_gateway_worker.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_gateway_worker.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_gateway_worker.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_gateway_worker.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_gateway_worker.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_gateway_worker.erl	bbfd02436f2e	Type specification reckon_db_gateway_worker:subscription_to_map(subscription() | map()) -> map() is a supertyp
+src/reckon_db_gateway_worker.erl	e746ee89656f	The variable Map can never match since previous clauses completely covered the type #subscription{id::binary()
+src/reckon_db_gateway_worker.erl	ea7f71f18efd	Expression produces a value of type {'error','not_found'}, but this value is unmatched
+src/reckon_db_health_prober.erl	00ba855a221f	Type specification reckon_db_health_prober:handle_probe_result(#node_state{},'ok' | {'error',term()},non_neg_i
+src/reckon_db_health_prober.erl	139310920486	Expression produces a value of type 'ok' | reference(), but this value is unmatched
+src/reckon_db_health_prober.erl	3c2b2fdac4dc	Type specification reckon_db_health_prober:notify_failed_callbacks(#{reference()=>fun()},node()) -> 'ok' is a 
+src/reckon_db_health_prober.erl	6afc4ae02e6f	Type specification reckon_db_health_prober:notify_recovered_callbacks(#{reference()=>fun()},node()) -> 'ok' is
+src/reckon_db_health_prober.erl	818cba5aea28	Expression produces a value of type 'error' | 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_index_config.erl	f2db46e31365	Type specification reckon_db_index_config:is_valid_decl(term()) -> boolean() is a supertype of the success typ
+src/reckon_db_index.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
+src/reckon_db_index.erl	4bcc0fe73feb	Type specification reckon_db_index:event_type_path(binary(),binary()) -> khepri_path:native_path() is a supert
+src/reckon_db_index.erl	9af4734da6f7	Type specification reckon_db_index:order_key(event()) -> nonempty_binary() is a supertype of the success typin
+src/reckon_db_index.erl	bcfb1bc20a94	Type specification reckon_db_index:tag_path(binary(),binary()) -> khepri_path:native_path() is a supertype of 
+src/reckon_db_integrity_key.erl	678fc230bf68	Type specification reckon_db_integrity_key:status(StoreId::atom()) -> #{'enabled':=boolean(),'algo':=binary(),
+src/reckon_db_leader.erl	4a4d42353f99	Type specification reckon_db_leader:activate(atom()) -> 'ok' | {'error',term()} is a supertype of the success 
+src/reckon_db_leader.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_leader.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_leader_tracker.erl	0270a04a9737	Record construction #subscription{id::'undefined',type::'by_stream',selector::<<_:56>>,subscription_name::<<_:
+src/reckon_db_leader_tracker.erl	5596f06045b2	Record construction #subscription{options::'undefined'} violates the declared type of field options::map()
+src/reckon_db_leader_tracker.erl	9cb16afac67d	Type specification reckon_db_leader_tracker:format_subscription_data(map() | subscription()) -> subscription()
+src/reckon_db_links.erl	01e26c482807	Invalid type specification for function reckon_db_links:start_link_subscription/2. The success typing is (_,_)
+src/reckon_db_links.erl	164fb90a9356	The specification for reckon_db_links:start/2 states that the function might also return 'ok' but the inferred
+src/reckon_db_links.erl	53cac1e1d0e4	Type specification reckon_db_links:wildcard_to_regex(binary()) -> binary() is a supertype of the success typin
+src/reckon_db_links.erl	5ac8d578b964	The specification for reckon_db_links:stop/2 states that the function might also return {'error',_} but the in
+src/reckon_db_links.erl	604935c0c8ae	The call reckon_db_subscriptions:subscribe(StoreId::atom(), 'stream', StreamId::binary(), SubscriptionName::<<
+src/reckon_db_links.erl	736d89253640	Type specification reckon_db_links:info(atom(),binary()) -> {'ok',map()} | {'error','not_found'} is a supertyp
+src/reckon_db_links.erl	7cb5ac895c8d	Type specification reckon_db_links:update_status(atom(),binary(),'running' | 'stopped' | 'error') -> 'ok' is a
+src/reckon_db_links.erl	9cc57d0386aa	Function start_link_subscription/2 has no local return
+src/reckon_db_links.erl	affa23d32e30	Type specification reckon_db_links:event_to_map(event()) -> map() is a supertype of the success typing: reckon
+src/reckon_db_links.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_links.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_links.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_links.erl	d9391146ebf2	Type specification reckon_db_links:emit_telemetry(atom(),binary(),atom()) -> 'ok' is a supertype of the succes
+src/reckon_db_links.erl	e4616dd292fd	The call reckon_db_subscriptions:subscribe(StoreId::atom(), 'event_pattern', Pattern::binary(), SubscriptionNa
+src/reckon_db_links.erl	ff2fb20384df	The call reckon_db_subscriptions:subscribe(StoreId::atom(), 'all', <<42>>, SubscriptionName::<<_:8,_:_*1>>, #{
+src/reckon_db_memory.erl	3678e6a165c5	Expression produces a value of type 'false' | non_neg_integer(), but this value is unmatched
+src/reckon_db_naming.erl	c57aa27f2b59	Type specification reckon_db_naming:make_name(string(),atom()) -> atom() is a supertype of the success typing:
+src/reckon_db_node_monitor.erl	139310920486	Expression produces a value of type 'ok' | reference(), but this value is unmatched
+src/reckon_db_node_monitor.erl	818cba5aea28	Expression produces a value of type 'error' | 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_node_monitor.erl	b1569a1df4fc	Type specification reckon_db_node_monitor:schedule_leader_check(non_neg_integer()) -> reference() is a superty
+src/reckon_db_node_monitor.erl	c45e6e372d5a	Type specification reckon_db_node_monitor:schedule_membership_check(non_neg_integer()) -> reference() is a sup
+src/reckon_db_node_monitor.erl	f969e353fb6d	Type specification reckon_db_node_monitor:get_members(atom()) -> {'ok',[term()]} | {'error',term()} is a super
+src/reckon_db_persistence_worker.erl	00b01478e167	The pattern {'store_config', _, _, _, _, _, _, _, _, _, _} can never match since previous clauses completely c
+src/reckon_db_persistence_worker.erl	086229e39d0a	Type specification reckon_db_persistence_worker:persist_pending_stores(sets:set(atom())) -> 'ok' | {'error',te
+src/reckon_db_persistence_worker.erl	794b232bd051	The specification for reckon_db_persistence_worker:persist_store/1 states that the function might also return 
+src/reckon_db_persistence_worker.erl	90283aa06700	Expression produces a value of type 'false' | 'ok' | non_neg_integer(), but this value is unmatched
+src/reckon_db_persistence_worker.erl	be4a87981f41	The pattern Error = {'error', Reason} can never match the type 'ok'
+src/reckon_db_persistence_worker.erl	c03fbf2e8467	The specification for reckon_db_persistence_worker:flush_async/1 states that the function might also return {'
+src/reckon_db_persistence_worker.erl	ed727b6cf135	Expression produces a value of type 'ok' | {'error',{'partial_success',_,_}}, but this value is unmatched
+src/reckon_db_resource_monitor.erl	18b05e4be6c0	The variable _ can never match since previous clauses completely covered the type [binary() | maybe_improper_l
+src/reckon_db_resource_monitor.erl	3678e6a165c5	Expression produces a value of type 'false' | non_neg_integer(), but this value is unmatched
+src/reckon_db_revocation.erl	28d0a137f178	Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+src/reckon_db_revocation.erl	28d0a137f178	Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+src/reckon_db_scavenge.erl	24e0786fa64e	Type specification reckon_db_scavenge:emit_telemetry(atom(),binary(),term(),integer()) -> 'ok' is a supertype 
+src/reckon_db_scavenge.erl	ec67d48ef23f	The call reckon_db_scavenge:do_scavenge(StoreId::atom(), StreamId::binary(), #{'archived_key':=binary(), 'befo
+src/reckon_db_scavenge.erl	f7dd930bba77	Type specification reckon_db_scavenge:scavenge(atom(),binary(),scavenge_opts()) -> {'ok',scavenge_result()} | 
+src/reckon_db_scavenge.erl	ffcdebc6d6c5	Type specification reckon_db_scavenge:delete_event_versions(atom(),binary(),non_neg_integer(),non_neg_integer(
+src/reckon_db_schema.erl	c3da5dd193c2	The call reckon_db_schema:emit_telemetry(StoreId::atom() | binary() | [atom() | binary() | char() | {'if_all' 
+src/reckon_db_schema.erl	edfa4118bc81	The specification for reckon_db_schema:unregister/2 states that the function might also return 'ok' but the in
+src/reckon_db_snapshots.erl	2f2248e5292e	Type specification reckon_db_snapshots:estimate_size(term()) -> non_neg_integer() is a supertype of the succes
+src/reckon_db_snapshots.erl	6c5119fef65f	Type specification reckon_db_snapshots:load(atom(),binary()) -> {'ok',snapshot()} | {'error','not_found'} | {'
+src/reckon_db_snapshots.erl	abfe8a4728cb	The variable Data can never match since previous clauses completely covered the type binary() | map()
+src/reckon_db_snapshots.erl	af1380e8a207	Type specification reckon_db_snapshots:load_at(atom(),binary(),non_neg_integer()) -> {'ok',snapshot()} | {'err
+src/reckon_db_snapshots.erl	c33da95727fc	Type specification reckon_db_snapshots:apply_snapshot_integrity(atom(),binary(),non_neg_integer(),snapshot()) 
+src/reckon_db_snapshots_store.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
+src/reckon_db_store_coordinator.erl	2805a0116d51	Guard test is_list(M::{'error',_}) can never succeed
+src/reckon_db_store_coordinator.erl	3075b7d6ead5	The specification for reckon_db_store_coordinator:handle_cluster_nodes/3 states that the function might also r
+src/reckon_db_store_coordinator.erl	3b64fb6245fb	The variable _ can never match since previous clauses completely covered the type [{atom(),atom()},...]
+src/reckon_db_store_coordinator.erl	4a2e5a3da699	The pattern <'waiting', State> can never match the type <'failed' | 'no_nodes',_>
+src/reckon_db_store_coordinator.erl	82e6b3f11457	Type specification reckon_db_store_coordinator:has_persisted_cluster(term()) -> boolean() is a supertype of th
+src/reckon_db_store_coordinator.erl	8ee1960a0ae0	Type specification reckon_db_store_coordinator:store_runner_nodes(atom(),[node()]) -> [node()] is a supertype 
+src/reckon_db_store_coordinator.erl	c663ffbec1b1	The specification for reckon_db_store_coordinator:do_join_cluster/1 states that the function might also return
+src/reckon_db_store_coordinator.erl	ea321f99b83f	The specification for reckon_db_store_coordinator:handle_no_existing_clusters/2 states that the function might
+src/reckon_db_store_coordinator.erl	fa87e4c971df	The pattern <_, State> can never match since previous clauses completely covered the type <'coordinator' | 'fa
+src/reckon_db_store.erl	a95bd2591a00	Type specification reckon_db_store:await_store_ready(atom(),non_neg_integer()) -> 'ok' | {'error','timeout'} i
+src/reckon_db_store.erl	c531c45855b8	The pattern {'ok', _, _} can never match the type {'error',_} | {'timeout',{atom(),atom()}}
+src/reckon_db_store_healer.erl	0f9eadeb22f8	Type specification reckon_db_store_healer:classify(atom(),map()) -> 'healthy' | 'orphaned' | 'wedged_local' | 
+src/reckon_db_store_healer.erl	4e486933e130	Type specification reckon_db_store_healer:heal_if_safe('auto' | 'alarm_only',boolean(),map(),#state{}) -> #sta
+src/reckon_db_store_healer.erl	4edc41d6386a	Type specification reckon_db_store_healer:gather_facts(atom()) -> map() is a supertype of the success typing: 
+src/reckon_db_store_healer.erl	85ff7e9f1292	Type specification reckon_db_store_healer:safe_to_reset(map()) -> boolean() is a supertype of the success typi
+src/reckon_db_store_healer.erl	89fda3e75fef	Type specification reckon_db_store_healer:act_on('healthy' | 'orphaned' | 'wedged_local' | 'drift',map(),#stat
+src/reckon_db_store_healer.erl	95e03104891b	Type specification reckon_db_store_healer:verify_rejoined(atom(),node()) -> 'ok' | {'error',term()} is a super
+src/reckon_db_store_healer.erl	9a1d83a60dc1	Type specification reckon_db_store_healer:reset_and_rejoin(atom(),node()) -> 'ok' | {'error',term()} is a supe
+src/reckon_db_store_healer.erl	bf2f9b85cac6	Type specification reckon_db_store_healer:do_heal(map(),#state{}) -> #state{} is a supertype of the success ty
+src/reckon_db_store_healer.erl	ce7ed2d225ab	Type specification reckon_db_store_healer:bounded(fun(() -> term())) -> {'ok',term()} | {'error',term()} is a 
+src/reckon_db_store_healer.erl	d845dd221a5e	Type specification reckon_db_store_healer:self_status(map()) -> 'healthy' | 'no_leader' is a supertype of the 
+src/reckon_db_store_healer.erl	dfbedc41ea42	Type specification reckon_db_store_healer:is_orphan(map()) -> boolean() is a supertype of the success typing: 
+src/reckon_db_store_inspector.erl	1c51d463caf5	Function stream_info/2 has no local return
+src/reckon_db_store_inspector.erl	20f6c5461b00	The pattern {'ok', Version} can never match the type integer()
+src/reckon_db_store_inspector.erl	20f6c5461b00	The pattern {'ok', Version} can never match the type integer()
+src/reckon_db_store_inspector.erl	23bec6199ac7	Invalid type specification for function reckon_db_store_inspector:stream_info/2. The success typing is (_,_) -
+src/reckon_db_store_inspector.erl	29722630e9b2	The specification for reckon_db_store_inspector:store_stats/1 states that the function might also return {'err
+src/reckon_db_store_inspector.erl	2d6c3eb41a7b	Function snapshot_coverage/2 will never be called
+src/reckon_db_store_inspector.erl	374ad831ba70	The specification for reckon_db_store_inspector:list_all_snapshots/1 states that the function might also retur
+src/reckon_db_store_inspector.erl	409a179ac26c	Type specification reckon_db_store_inspector:subscription_lag(atom(),binary()) -> {'ok',map()} | {'error',term
+src/reckon_db_store_inspector.erl	61cc6a460969	Function get_event_timestamp/3 will never be called
+src/reckon_db_store_inspector.erl	62db868079e6	The pattern Err = {'error', _} can never match the type integer()
+src/reckon_db_store_inspector.erl	7a72a77ffee9	Function extract_timestamp/1 will never be called
+src/reckon_db_store_inspector.erl	80191ac12125	The variable _ can never match since previous clauses completely covered the type #{'subscriber_pid'=>binary()
+src/reckon_db_store_inspector.erl	9b9c428b0f3d	The pattern <StreamId, Map = #{'version':=V}> can never match the type <binary(),#snapshot{stream_id::binary()
+src/reckon_db_store_inspector.erl	9bfec6d1fe47	The specification for reckon_db_store_inspector:event_type_summary/1 states that the function might also retur
+src/reckon_db_store_inspector.erl	ae4b3b4bb209	Function latest_snap_version/1 will never be called
+src/reckon_db_store_inspector.erl	af48fa18f1cc	Guard test is_list(Subs::{'error',_}) can never succeed
+src/reckon_db_store_inspector.erl	b3f9414ef9dc	The pattern <StreamId, _> can never match since previous clauses completely covered the type <binary(),#snapsh
+src/reckon_db_store_inspector.erl	f6fcb808e4c0	The specification for reckon_db_store_inspector:list_subscriptions/1 states that the function might also retur
+src/reckon_db_streams.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
+src/reckon_db_streams.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
+src/reckon_db_streams.erl	0d2296c883b7	The variable _ can never match since previous clauses completely covered the type []
+src/reckon_db_streams.erl	0e48154b7c5e	The specification for reckon_db_streams:maybe_verify_events/6 states that the function might also return {'err
+src/reckon_db_streams.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
+src/reckon_db_streams.erl	28d0a137f178	Expression produces a value of type atom() | ets:tid(), but this value is unmatched
+src/reckon_db_streams.erl	6050fabc909a	The pattern Violation = {'integrity_violation', _} can never match the type {'ok',[{_,_,_,_,_,_,_,_,_,_,_,_,_,
+src/reckon_db_streams.erl	67d0e6a9564f	The pattern <Other, _StoreId, _StreamId, _StartVersion, _Direction, _Opts> can never match since previous clau
+src/reckon_db_streams.erl	7bfe9b04e074	Unknown type khepri:condition/0
+src/reckon_db_streams.erl	7bfe9b04e074	Unknown type khepri:condition/0
+src/reckon_db_streams.erl	7da8dbd5a7aa	The specification for reckon_db_streams:verify_in_direction/6 states that the function might also return {'err
+src/reckon_db_streams.erl	9441d1d5795b	The specification for reckon_db_streams:verify_events_forward/5 states that the function might also return {'e
+src/reckon_db_streams.erl	958a0fcfb1d5	Unknown type reckon_gater_types:seq_cutoff/0
+src/reckon_db_streams.erl	af7a0dcf7bdf	Record construction #event{event_id::'_',stream_id::'_',version::'_',data::'_',metadata::'_',tags::'_',timesta
+src/reckon_db_streams.erl	b1d3dacbe5bd	Type specification reckon_db_streams:warn_unindexed(atom(),index_decl()) -> 'ok' is a supertype of the success
+src/reckon_db_streams.erl	b52d9de6c8fb	The pattern [SingleCondition] can never match the type []
+src/reckon_db_streams.erl	cc3c36522356	The pattern Violation = {'integrity_violation', _} can never match the type {'ok',[#event{event_id::binary(),e
+src/reckon_db_streams.erl	db3918da04e2	The pattern Error = {'error', _} can never match the type {'ok',non_neg_integer()}
+src/reckon_db_streams.erl	ef9d2229aeec	The pattern 'ok' can never match the type {'error',_} | {'ok',_}
+src/reckon_db_subscription_health.erl	40d783a36299	The variable _ can never match since previous clauses completely covered the type 'undefined' | pid()
+src/reckon_db_subscription_health.erl	91066c59e846	Expression produces a value of type 'ok' | {'error','not_found' | 'restarting' | 'running' | 'simple_one_for_o
+src/reckon_db_subscription_health.erl	98c0b1f9e2e8	The variable _ can never match since previous clauses completely covered the type map()
+src/reckon_db_subscriptions.erl	2a93e022f4b4	Expression produces a value of type 'ok' | {'subscription_error',{'integrity_violation',map()}}, but this valu
+src/reckon_db_subscriptions.erl	3266d84d11e5	The call khepri:register_trigger(StoreId::atom(), TriggerId::atom(), Filter::{'evf_tree',[atom() | binary() | 
+src/reckon_db_subscriptions.erl	763691bb9e8e	The call reckon_db_filters:by_tags(Tags::binary() | map()) will never return since the success typing is (mayb
+src/reckon_db_subscriptions.erl	7783afbc9cc8	Expression produces a value of type 'ok' | {'error','no_emitters'}, but this value is unmatched
+src/reckon_db_subscriptions.erl	879272e112d9	Function activate_trigger/4 has no local return
+src/reckon_db_subscriptions.erl	8ce3739c1777	The specification for reckon_db_subscriptions:register_trigger/3 states that the function might also return 'o
+src/reckon_db_subscriptions.erl	958f68a2522f	Type specification reckon_db_subscriptions:create_filter(subscription_type(),binary() | map()) -> term() is a 
+src/reckon_db_subscriptions.erl	aadbff993aa9	The pattern 'ok' can never match the type {'error',_}
+src/reckon_db_subscriptions.erl	aadbff993aa9	The pattern 'ok' can never match the type {'error',_}
+src/reckon_db_subscriptions.erl	db98fa36c4cb	Type specification reckon_db_subscriptions:do_catchup(atom(),pid(),non_neg_integer(),atom(),binary() | map() |
+src/reckon_db_subscriptions.erl	e05bb023d959	Type specification reckon_db_subscriptions:setup_event_notification(atom(),binary(),term(),subscription()) -> 
+src/reckon_db_subscriptions_store.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
+src/reckon_db_subscriptions_store.erl	b705958c9d29	The pattern 'undefined' can never match the type binary()
+src/reckon_db_sup.erl	2ba0d00c2991	Type specification reckon_db_sup:stop_store(atom()) -> 'ok' | {'error',term()} is a supertype of the success t
+src/reckon_db_temporal.erl	2f5ca8195afe	Type specification reckon_db_temporal:version_at(atom(),binary(),timestamp()) -> {'ok',integer()} | {'error',t
+src/reckon_db_temporal.erl	f3b254b45d3e	Type specification reckon_db_temporal:emit_telemetry(atom(),atom(),binary(),term(),term(),integer()) -> 'ok' i

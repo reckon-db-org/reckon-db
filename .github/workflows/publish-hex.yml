@@ -1,0 +1,162 @@
+# Publishes exactly a pushed release tag to hex.pm.
+#
+# Ported from reckon-db-org/evoq's workflow of the same name, itself a port of
+# macula-services/mcl-om's, which has published a real release (v1.23.4)
+# through this shape. Copied rather than redesigned. Only this header and the
+# NIF step below are reckon-db's own.
+#
+# - A pushed tag vX.Y.Z runs `verify', then `publish'. THE TAG PUBLISHES.
+#   There is no second human step, by design (see below).
+# - A manual dispatch is a dry run: it runs `verify' and never publishes.
+#
+# TAG-TO-RELEASE IS THE DESIGN, NOT A MISSING GATE. Raf, 2026-09-22: "I WANT
+# tag-to-release". The `hex-publish' environment here carries only a `v*.*.*'
+# branch policy and NO required reviewer, measured through
+# `gh api repos/.../environments/hex-publish', and that is deliberate: the
+# approval point is the PUSH OF THE TAG, which already goes to Raf under the
+# push gate. A second human gate after it would duplicate that one.
+#
+# ⛔ DO NOT ADD A REQUIRED REVIEWER HERE, and do not write a comment claiming
+# one exists. A comment describing a safeguard that is not there is worse than
+# no comment: it is the failure this project has hit before, where the text
+# said a check ran and nothing did. HEX_API_KEY is present as an environment
+# secret, so a pushed tag does publish.
+#
+# ⚠ THE NIF STEP IS NOT DECORATION. reckon-db embeds five Rust crates under
+# native/ and builds them through a rebar.config pre_hook. rebar3_hex reads
+# `files' from src/reckon_db.app.src, NOT from rebar.config's `{hex, ...}'
+# block, and that list names each crate by hand. v2.3.0 was published with the
+# default glob and shipped NO native/ and NO priv/build-nifs.sh at all:
+# consumers got the pure-Erlang fallbacks with nothing but a build warning to
+# say so. v2.3.1 fixed it. `scripts/does_package_carry_the_nifs.sh' compares
+# the crates in git against the crates in the built tarball, so a crate added
+# later and forgotten in `files' fails the build rather than shipping hollow.
+#
+# Note that a package with no `.so' in it is CORRECT: rebar3_hex strips
+# compiled objects. Measured on 5.11.9: 0 `.so', 5 Cargo.toml, 1 build-nifs.sh.
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to dry-run, vX.Y.Z. Never publishes.'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  OTP_VERSION: '28.4.2'
+  REBAR3_VERSION: '3.27.0'
+  RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+
+concurrency:
+  group: publish-hex-${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Guard and build the package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The guard comes from this workflow's own commit, so a dry run can
+      # check a tag cut before the guard existed. On a tag push this commit
+      # is the tag itself.
+      - name: Check out the workflow's own commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: ci
+
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          path: pkg
+
+      - name: Set up Erlang/OTP and rebar3
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+          version-type: strict
+
+      - name: Refuse unless this is the clean, pushed release tag
+        run: bash ci/scripts/is_checkout_publishable.sh "$GITHUB_WORKSPACE/pkg"
+
+      - name: Build the package and docs
+        working-directory: pkg
+        run: rebar3 hex build
+
+      # The v2.3.0 defect, as a check rather than a comment.
+      - name: Check the package carries the NIF sources
+        run: bash ci/scripts/does_package_carry_the_nifs.sh "$GITHUB_WORKSPACE/pkg"
+
+      # The publish job's command as a dry run, with a placeholder key. It
+      # fails here, before anyone is asked to approve, if the command does
+      # not read a key from HEX_API_KEY; it cannot tell whether the real key
+      # works. The dead API URL keeps the placeholder away from hex.pm.
+      - name: Dry-run the publish command
+        working-directory: pkg
+        env:
+          HEX_API_KEY: placeholder-not-a-real-key
+          HEX_API_URL: http://127.0.0.1:9
+        run: rebar3 hex publish --repo hexpm --yes --dry-run
+
+  publish:
+    name: Publish to hex.pm
+    needs: verify
+    # Only a pushed release tag publishes, whatever the triggers above say.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: hex-publish
+    steps:
+      - name: Refuse unless this run is a pushed release tag
+        run: |
+          case "$GITHUB_EVENT_NAME:$GITHUB_REF" in
+            push:refs/tags/v*) ;;
+            *) echo "::error::publish runs only for a pushed release tag, not $GITHUB_EVENT_NAME $GITHUB_REF"
+               exit 1 ;;
+          esac
+
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Set up Erlang/OTP and rebar3
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+          version-type: strict
+
+      - name: Refuse unless this is the clean, pushed release tag
+        run: bash scripts/is_checkout_publishable.sh
+
+      # rebar3_hex reads HEX_API_KEY only for a named repository: without
+      # --repo it takes the default hexpm config, finds no write key and
+      # stops with "No write key found for user".
+      - name: Publish the package and docs
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: rebar3 hex publish --repo hexpm --yes
+
+      - name: Check that hex serves the tagged code
+        run: |
+          VSN="${RELEASE_TAG#v}"
+          for attempt in 1 2 3 4 5; do
+            if bash scripts/is_hex_serving_what_git_says.sh "$VSN" "$RELEASE_TAG"; then
+              exit 0
+            fi
+            echo "Attempt $attempt: not confirmed yet, retrying in 30 seconds"
+            sleep 30
+          done
+          echo "::error::hex.pm does not serve the code tagged $RELEASE_TAG"
+          exit 1
