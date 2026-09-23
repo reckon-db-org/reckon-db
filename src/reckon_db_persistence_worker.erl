@@ -121,14 +121,16 @@ init(#store_config{store_id = StoreId} = Config) ->
 
 %% @private
 handle_call(force_persistence, _From, State) ->
-    StartTime = erlang:system_time(millisecond),
+    T0 = erlang:monotonic_time(),
     PendingCount = sets:size(State#state.pending_stores),
 
     %% Immediately persist all pending stores
     Result = persist_pending_stores(State#state.pending_stores),
 
+    %% `duration' is native units like every reckon_db duration; EndTime is
+    %% the wall-clock time this worker records as its last persistence.
+    Duration = erlang:monotonic_time() - T0,
     EndTime = erlang:system_time(millisecond),
-    Duration = EndTime - StartTime,
 
     %% Emit telemetry
     telemetry:execute(
@@ -159,7 +161,7 @@ handle_cast(_Msg, State) ->
 
 %% @private
 handle_info(persist_data, State) ->
-    StartTime = erlang:system_time(millisecond),
+    T0 = erlang:monotonic_time(),
     PendingCount = sets:size(State#state.pending_stores),
 
     %% Persist any pending stores
@@ -168,8 +170,8 @@ handle_info(persist_data, State) ->
         false -> ok
     end,
 
+    Duration = erlang:monotonic_time() - T0,
     EndTime = erlang:system_time(millisecond),
-    Duration = EndTime - StartTime,
 
     %% Emit telemetry
     telemetry:execute(

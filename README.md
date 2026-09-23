@@ -277,6 +277,11 @@ reckon_db_telemetry:detach(HandlerId) -> ok.
 
 ## Telemetry Events
 
+Every `duration` measurement is in **native** time units (`erlang:monotonic_time/0`
+arithmetic, the unit `telemetry:span/3` reports): convert with
+`erlang:convert_time_unit(D, native, microsecond)`. A measurement in another unit
+names it (`duration_us`, `uptime_ms`).
+
 | Event | Measurements | Metadata |
 |-------|--------------|----------|
 | `[reckon_db, stream, write, start]` | system_time | store_id, stream_id, event_count |

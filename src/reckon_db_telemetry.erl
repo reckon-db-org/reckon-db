@@ -13,7 +13,14 @@
 %%   ok = reckon_db_telemetry:attach(my_handler, fun my_module:handle/4, #{}).
 %%
 %% Emit an event:
-%%   reckon_db_telemetry:emit(?STREAM_WRITE_STOP, #{duration => 1000}, #{store_id => my_store}).
+%%   reckon_db_telemetry:emit(?STREAM_WRITE_STOP,
+%%                            #{duration => erlang:monotonic_time() - T0},
+%%                            #{store_id => my_store}).
+%%
+%% UNITS: every `duration' measurement is in NATIVE time units
+%% (erlang:monotonic_time/0 arithmetic, as telemetry:span/3 reports it).
+%% Convert with erlang:convert_time_unit(D, native, Unit). A measurement
+%% in another unit carries it in its name (duration_us, uptime_ms).
 %%
 %% @author rgfaber
 
@@ -96,7 +103,7 @@ handle_event(?STREAM_WRITE_START, #{system_time := _Time}, Meta, _Config) ->
     ok;
 
 handle_event(?STREAM_WRITE_STOP, Measurements, Meta, _Config) ->
-    Duration = maps:get(duration, Measurements, 0),
+    Duration = duration_us(Measurements),
     Count = maps:get(event_count, Measurements, 0),
     #{store_id := StoreId, stream_id := StreamId} = Meta,
     logger:debug("Stream write completed: store=~p stream=~s events=~p duration=~pus",
@@ -104,7 +111,7 @@ handle_event(?STREAM_WRITE_STOP, Measurements, Meta, _Config) ->
     ok;
 
 handle_event(?STREAM_WRITE_ERROR, Measurements, Meta, _Config) ->
-    Duration = maps:get(duration, Measurements, 0),
+    Duration = duration_us(Measurements),
     #{store_id := StoreId, stream_id := StreamId, reason := Reason} = Meta,
     logger:warning("Stream write failed: store=~p stream=~s reason=~p duration=~pus",
                   [StoreId, StreamId, Reason, Duration]),
@@ -116,7 +123,7 @@ handle_event(?STREAM_READ_START, #{system_time := _Time}, Meta, _Config) ->
     ok;
 
 handle_event(?STREAM_READ_STOP, Measurements, Meta, _Config) ->
-    Duration = maps:get(duration, Measurements, 0),
+    Duration = duration_us(Measurements),
     Count = maps:get(event_count, Measurements, 0),
     #{store_id := StoreId, stream_id := StreamId} = Meta,
     logger:debug("Stream read completed: store=~p stream=~s events=~p duration=~pus",
@@ -138,7 +145,7 @@ handle_event(?SUBSCRIPTION_DELETED, _Measurements, Meta, _Config) ->
     ok;
 
 handle_event(?SUBSCRIPTION_EVENT_DELIVERED, Measurements, Meta, _Config) ->
-    Duration = maps:get(duration, Measurements, 0),
+    Duration = duration_us(Measurements),
     #{store_id := StoreId, subscription_id := SubId} = Meta,
     EventId = maps:get(event_id, Meta, undefined),
     logger:debug("Event delivered: store=~p subscription=~s event=~p duration=~pus",
@@ -148,14 +155,14 @@ handle_event(?SUBSCRIPTION_EVENT_DELIVERED, Measurements, Meta, _Config) ->
 %% Snapshot events
 handle_event(?SNAPSHOT_CREATED, Measurements, Meta, _Config) ->
     SizeBytes = maps:get(size_bytes, Measurements, 0),
-    Duration = maps:get(duration, Measurements, 0),
+    Duration = duration_us(Measurements),
     #{store_id := StoreId, stream_id := StreamId, version := Version} = Meta,
     logger:info("Snapshot created: store=~p stream=~s version=~p size=~p bytes duration=~pus",
                [StoreId, StreamId, Version, SizeBytes, Duration]),
     ok;
 
 handle_event(?SNAPSHOT_READ, Measurements, Meta, _Config) ->
-    Duration = maps:get(duration, Measurements, 0),
+    Duration = duration_us(Measurements),
     SizeBytes = maps:get(size_bytes, Measurements, 0),
     #{store_id := StoreId, stream_id := StreamId, version := Version} = Meta,
     logger:debug("Snapshot read: store=~p stream=~s version=~p size=~p bytes duration=~pus",
@@ -210,7 +217,7 @@ handle_event(?STORE_STOPPED, Measurements, Meta, _Config) ->
 
 %% Emitter events
 handle_event(?EMITTER_BROADCAST, Measurements, Meta, _Config) ->
-    Duration = maps:get(duration, Measurements, 0),
+    Duration = duration_us(Measurements),
     #{store_id := StoreId, subscription_id := SubId} = Meta,
     RecipientCount = maps:get(recipient_count, Meta, 0),
     logger:debug("Emitter broadcast: store=~p subscription=~s recipients=~p duration=~pus",
@@ -261,3 +268,11 @@ all_events() ->
         ?EMITTER_BROADCAST,
         ?EMITTER_POOL_CREATED
     ].
+
+%% @private Every `duration' reckon_db emits is erlang:monotonic_time/0
+%% arithmetic, i.e. NATIVE time units (nanoseconds on Linux), the same unit
+%% telemetry:span/3 reports. The log lines say `us', so convert: this printed
+%% the native value raw, and every logged duration was 1000x too large.
+-spec duration_us(map()) -> integer().
+duration_us(Measurements) ->
+    erlang:convert_time_unit(maps:get(duration, Measurements, 0), native, microsecond).

@@ -4,6 +4,11 @@
 -ifndef(RECKON_DB_TELEMETRY_HRL).
 -define(RECKON_DB_TELEMETRY_HRL, true).
 
+%% UNITS: every `duration' measurement below is in NATIVE time units
+%% (erlang:monotonic_time/0 arithmetic, the unit telemetry:span/3 reports):
+%% nanoseconds on Linux. Convert with erlang:convert_time_unit(D, native, U).
+%% A measurement in another unit names it: duration_us, uptime_ms.
+
 %%====================================================================
 %% Stream Telemetry Events
 %%====================================================================
