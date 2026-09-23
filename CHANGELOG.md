@@ -5,6 +5,23 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed: the Dockerfile and the relx release sections
+
+reckon-db is a library, published to hex, not a standalone service. The
+Dockerfile and the release configuration (the relx-only `prod` profile and
+the top-level `relx`) described a service that could never be built: both
+named `config/sys.config` and `config/vm.args`, which have never existed in
+this repository, and the Dockerfile copied `rebar.lock`, which is not
+tracked. Nothing referenced either. Applications embed reckon_db as a
+dependency and run it in their own release.
+
+### Changed: CI and publishing on OTP 28.4.3, with the project plugins pinned
+
+OTP 28.4.3 is the team standard. The plugins were unpinned; `rebar3_hex`
+is now pinned to 7.2.0, because 7.3.0 cannot publish from CI.
+
 ## [5.11.9] - 2026-09-11
 
 ### Fixed: the events of one append could replay out of order
