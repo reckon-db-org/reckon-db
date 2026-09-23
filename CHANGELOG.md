@@ -5,7 +5,24 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [5.11.10] - 2026-09-23
+
+### Fixed: logged durations were 1000x too large
+
+Every `duration` measurement is in native time units (nanoseconds on Linux),
+and the default log handler printed it raw with a `us` suffix, so a read that
+took 34 ms was logged as taking 34 s. The handler now converts to
+microseconds. The unit is documented in the event definitions and the
+README: `duration` is native; a measurement in another unit names it
+(`duration_us`, `uptime_ms`). The persistence worker's `duration` was
+milliseconds of wall-clock time and is now native monotonic time like the
+rest.
+
+### Changed: the publish preflight asks whether the key may write
+
+It asked `/api/users/me`, which answers 404 for an organisation key and so
+refused keys that could publish. It now asks
+`/api/auth?domain=api&resource=write`.
 
 ### Removed: the Dockerfile and the relx release sections
 
