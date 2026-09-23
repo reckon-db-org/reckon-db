@@ -58,7 +58,7 @@ permissions:
 
 env:
   # From .tool-versions, which is what a developer's shell resolves here.
-  OTP_VERSION: '28.4.2'
+  OTP_VERSION: '28.4.3'
   REBAR3_VERSION: '3.27.0'
   REBAR3_SHA256: 'af85aab41f9fd74bdd6341ebdf6fe9c88077aab9f8eac82371583fa02f2b0bdf'
 
@@ -70,7 +70,7 @@ concurrency:
 
 jobs:
   check:
-    name: compile + NIFs + xref + lint + eunit + ct + proper + dialyzer (OTP 28.4.2)
+    name: compile + NIFs + xref + lint + eunit + ct + proper + dialyzer (OTP 28.4.3)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
