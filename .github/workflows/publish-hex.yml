@@ -97,7 +97,7 @@ jobs:
         run: bash ci/scripts/does_package_carry_the_nifs.sh "$GITHUB_WORKSPACE/pkg"
 
       # The publish job's command as a dry run, with a placeholder key. It
-      # fails here, before anyone is asked to approve, if the command does
+      # fails here, before the publish job starts, if the command does
       # not read a key from HEX_API_KEY; it cannot tell whether the real key
       # works. The dead API URL keeps the placeholder away from hex.pm.
       - name: Dry-run the publish command

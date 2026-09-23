@@ -9,14 +9,12 @@
 # would happily publish a dirty checkout of an arbitrary commit under whatever
 # version src/reckon_db.app.src happened to name.
 #
-# The release path is .github/workflows/publish-hex.yml, armed by pushing the
-# tag. Its verify job repeats these checks on a clean runner, and its publish
-# job then WAITS in the `hex-publish' environment for a required reviewer
-# before anything is sent. A gate is only worth as much as the absence of a
-# way around it, and a script on a maintainer's machine that publishes without
-# that reviewer is a way around it: two paths to one version, one of them
-# unreviewed. That mattered especially here, because reckon-db's gate is new and
-# has never been exercised, so its first real test is a release.
+# The release path is .github/workflows/publish-hex.yml. Pushing the tag IS
+# the release: its verify job repeats these checks on a clean runner and its
+# publish job then publishes, with no reviewer after the tag, by design (Raf,
+# 2026-09-22: tag-to-release; the approval point is the push of the tag). A
+# script on a maintainer's machine that published would be a second path to
+# one version, skipping both the tag and the clean-runner checks.
 #
 # So this is now the local half of that workflow: everything up to, and
 # including, the dry run. Run it before pushing a tag, to find out on your own
@@ -63,8 +61,8 @@ cat <<EOF
 To release it:
   git push origin v${RECKON_DB_VERSION}
 
-That arms .github/workflows/publish-hex.yml. Its publish job waits for its
-required reviewer; approving that run is what publishes.
+That IS the release: .github/workflows/publish-hex.yml verifies the tag and
+publishes it, with no further approval.
 
 Afterwards, to check hex serves the tagged code rather than assuming it:
   scripts/is_hex_serving_what_git_says.sh ${RECKON_DB_VERSION}
