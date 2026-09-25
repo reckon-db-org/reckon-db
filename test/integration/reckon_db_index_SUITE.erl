@@ -28,7 +28,9 @@
     dcb_event_visible_via_indexed_read_by_event_types/1,
     dcb_event_visible_via_indexed_read_by_metadata/1,
     dcb_events_written_before_the_fix_are_reindexed_once/1,
-    concurrent_reindex_runs_stay_correct/1
+    concurrent_reindex_runs_stay_correct/1,
+    dcb_event_visible_via_indexed_read_on_an_integrity_store/1,
+    forced_reindex_picks_up_events_the_marker_missed/1
 ]).
 
 suite() -> [{timetrap, {seconds, 30}}].
@@ -47,7 +49,9 @@ all() ->
      dcb_event_visible_via_indexed_read_by_event_types,
      dcb_event_visible_via_indexed_read_by_metadata,
      dcb_events_written_before_the_fix_are_reindexed_once,
-     concurrent_reindex_runs_stay_correct].
+     concurrent_reindex_runs_stay_correct,
+     dcb_event_visible_via_indexed_read_on_an_integrity_store,
+     forced_reindex_picks_up_events_the_marker_missed].
 
 %%====================================================================
 %% CT boilerplate
@@ -338,3 +342,47 @@ concurrent_reindex_runs_stay_correct(Config) ->
     ?assertEqual(600, length(ByTag)),
     ?assertEqual(600, length(lists:usort([E#event.event_id || E <- ByTag]))),
     ?assertMatch({ok, #{reindexed := 0}}, reckon_db_dcb_reindex:run(StoreId)).
+
+%% Integrity-on stores write DCB events with pre-assigned sequence numbers
+%% (write_on/3). Their index entries come from the same function, inside the
+%% same transaction, and sit outside the MAC and chain.
+dcb_event_visible_via_indexed_read_on_an_integrity_store(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    persistent_term:put({reckon_db, integrity_key, StoreId}, crypto:strong_rand_bytes(32)),
+    persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
+    try
+        declare(StoreId, [tags]),
+        ok = dcb_append(StoreId, <<"sealed_dcb_v1">>, [<<"sealed">>], #{}),
+        ok = dcb_append(StoreId, <<"sealed_dcb_v1">>, [<<"sealed">>], #{}),
+        {ok, Events} = reckon_db_streams:read_by_tags(StoreId, [<<"sealed">>], any, 10),
+        ?assertEqual(2, length(Events)),
+        %% Sealed on the integrity-on path: a versioned MAC and a chain link.
+        ?assert(lists:all(fun(#event{mac = {_Vsn, Mac}, prev_event_hash = Prev}) ->
+                                  is_binary(Mac) andalso is_binary(Prev);
+                             (_) -> false
+                          end, Events))
+    after
+        reckon_db_integrity_key:clear(StoreId)
+    end.
+
+%% DCB events that got in without entries after the marker was written (a
+%% member still on 5.11.10 during a rolling upgrade appends them; here a
+%% store with nothing declared stands in for it) are invisible to a plain
+%% run, which trusts the marker. A forced run ignores it.
+forced_reindex_picks_up_events_the_marker_missed(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    declare(StoreId, [tags]),
+    ok = dcb_append(StoreId, <<"late_dcb_v1">>, [<<"late">>], #{}),
+    ?assertMatch({ok, #{}}, reckon_db_dcb_reindex:run(StoreId)),
+
+    declare(StoreId, []),
+    ok = dcb_append(StoreId, <<"late_dcb_v1">>, [<<"late">>], #{}),
+    declare(StoreId, [tags]),
+    {ok, Before} = reckon_db_streams:read_by_tags(StoreId, [<<"late">>], any, 10),
+    ?assertEqual(1, length(Before)),
+    ?assertMatch({ok, #{reindexed := 0}}, reckon_db_dcb_reindex:run(StoreId)),
+
+    ?assertMatch({ok, #{reindexed := 2, kinds := [tags]}},
+                 reckon_db_dcb_reindex:run(StoreId, #{force => true})),
+    {ok, After} = reckon_db_streams:read_by_tags(StoreId, [<<"late">>], any, 10),
+    ?assertEqual(2, length(After)).

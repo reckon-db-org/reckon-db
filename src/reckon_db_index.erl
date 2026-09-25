@@ -75,6 +75,8 @@ is_entry_kind(_) -> false.
 %% indexes. Each entry is a `{Path, EventRef}' the caller writes
 %% transactionally with the event. Empty when no declared index applies.
 -spec entries(event(), [index_decl()]) -> [{khepri_path:native_path(), event_ref()}].
+entries(#event{}, []) ->
+    [];
 entries(#event{} = Event, Declared) ->
     OrderKey = order_key(Event),
     Ref = event_ref(Event),

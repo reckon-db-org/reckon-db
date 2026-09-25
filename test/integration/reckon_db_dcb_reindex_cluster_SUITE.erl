@@ -14,9 +14,10 @@
 
 -export([all/0, suite/0, init_per_testcase/2, end_per_testcase/2]).
 -export([only_the_leader_reindexes/1,
-         leader_activation_reindexes/1]).
+         leader_activation_reindexes/1,
+         leader_answers_while_a_large_reindex_runs/1]).
 %% Run ON the peer nodes via peer:call/4,5
--export([boot_store/2, append_dcb/1, declare/1]).
+-export([boot_store/2, append_dcb/1, declare/1, slow_reindex/1]).
 
 -define(STORE, dcb_reindex_store).
 -define(COOKIE, "reckon_db_dcb_reindex").
@@ -26,7 +27,8 @@ suite() ->
     [{timetrap, {minutes, 3}}].
 
 all() ->
-    [only_the_leader_reindexes, leader_activation_reindexes].
+    [only_the_leader_reindexes, leader_activation_reindexes,
+     leader_answers_while_a_large_reindex_runs].
 
 init_per_testcase(_TestCase, Config) ->
     Rand = integer_to_list(erlang:unique_integer([positive])),
@@ -82,6 +84,29 @@ leader_activation_reindexes(Config) ->
                     30000),
     ?assertMatch({ok, #{reindexed := 0}}, peer:call(Leader, reckon_db_dcb_reindex, run, [?STORE])).
 
+%% @doc GIVEN the same cluster, with the re-index made slow (3 s) on the
+%%      leader (its leader check sleeps)
+%%      WHEN the leader activates
+%%      THEN its leader worker keeps answering is_active/1 promptly while
+%%      the re-index runs: the node monitor calls it every tick with a 5 s
+%%      timeout, and a worker blocked in a long run made that call time out
+%%      and the monitor crash, taking the gateway pool with it
+leader_answers_while_a_large_reindex_runs(Config) ->
+    Leader = ?config(leader, Config),
+    ok = peer:call(Leader, ?MODULE, slow_reindex, [3000]),
+    ok = peer:call(Leader, reckon_db_leader, activate, [?STORE]),
+    Probes = [begin
+                  timer:sleep(300),
+                  {Us, true} = timer:tc(fun() -> peer:call(Leader, reckon_db_leader,
+                                                           is_active, [?STORE], 30000) end),
+                  Us
+              end || _ <- lists:seq(1, 5)],
+    ct:pal("is_active probes while re-indexing (us): ~p", [Probes]),
+    %% The run was still going when the probes ran: nothing tagged yet.
+    ?assertEqual(0, tagged(Leader)),
+    lists:foreach(fun(Us) -> ?assert(Us < 1000000) end, Probes),
+    ok = wait_until(fun() -> tagged(Leader) =:= ?EVENTS end, 30000).
+
 %%====================================================================
 %% Peer-side helpers
 %%====================================================================
@@ -108,6 +133,15 @@ append_dcb(N) ->
                 [#{event_type => <<"reidx_v1">>, data => #{n => N}, tags => [<<"reidx">>]}]),
     ok.
 
+%% Make the re-index slow: the leader check its run/1 starts with sleeps
+%% first. (Not run/1 itself: Horus cannot extract the transaction funs of a
+%% meck-renamed module.) no_link: the mock must outlive the peer:call
+%% process that creates it.
+slow_reindex(Ms) ->
+    ok = meck:new(reckon_db_store_coordinator, [passthrough, no_link]),
+    ok = meck:expect(reckon_db_store_coordinator, is_leader,
+                     fun(StoreId) -> timer:sleep(Ms), meck:passthrough([StoreId]) end).
+
 declare(Indexes) ->
     reckon_db_index_config:load(#store_config{store_id = ?STORE, indexes = Indexes}).
 
@@ -116,7 +150,11 @@ declare(Indexes) ->
 %%====================================================================
 
 tagged(Peer) ->
-    case peer:call(Peer, reckon_db_streams, read_by_tags, [?STORE, [<<"reidx">>], any, 100]) of
+    tagged(Peer, 100).
+
+tagged(Peer, Limit) ->
+    case peer:call(Peer, reckon_db_streams, read_by_tags, [?STORE, [<<"reidx">>], any, Limit],
+                   60000) of
         {ok, Events} -> length(Events);
         _ -> -1
     end.

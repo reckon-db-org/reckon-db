@@ -23,8 +23,9 @@ reads returned `{ok, []}` for a just-appended DCB event.
 - The DCB append now writes the entries from `reckon_db_index:entries/2`, the
   same function the stream append uses, in its transaction.
 - A DCB entry's reference resolves to the event in the `_dcb` pseudo-stream
-  (`reckon_db_dcb_paths:event_path/1`); resolution used the stream layout
-  and would have found nothing.
+  (`reckon_db_dcb_paths:event_path/1`). Resolution used the stream layout,
+  which rejects `<<"_dcb">>` as a stream id and raises
+  `{invalid_stream_id, <<"_dcb">>}`.
 
 ### Added: a one-time re-index of DCB events written before 5.11.11
 
@@ -37,15 +38,35 @@ is one read, and a kind declared later is re-indexed on its own.
 It runs through the Ra leader only: `run/1` answers `{ok, not_leader}` on any
 other member, and `reckon_db_leader` runs it on activation, which the node
 monitor does on the leader after every start and leadership change, in single
-and cluster mode alike. A failure is logged as an error and retried with
-backoff (5 s doubling to 5 min) without failing activation. A successful run
-logs the count, the kinds and the duration. Until it has run, indexed reads
-still miss the older DCB events.
+and cluster mode alike. It runs in a monitored process of its own, one at a
+time, so the leader worker keeps answering while a large DCB log is
+re-indexed. A failure, or `not_leader` during an election, is logged and
+retried with backoff (5 s doubling to 5 min) without failing activation. A
+successful run logs the count, the kinds and the duration. Until it has run,
+indexed reads still miss the older DCB events.
+
+`run(StoreId, #{force => true})` ignores the marker and re-indexes every
+declared kind. Run it once after a rolling upgrade of a cluster if any DCB
+append reached a member still on 5.11.10 after the first 5.11.11 leader
+activated (such events land without entries, after the marker), or after
+undeclaring and re-declaring a kind.
+
+### Rolling back to 5.11.10 or earlier is not safe once a DCB event is indexed
+
+The first DCB append under 5.11.11, or the re-index, writes `[idx]` entries
+that point into the `_dcb` pseudo-stream. 5.11.10 resolves every index entry
+through the stream layout, which raises `{invalid_stream_id, <<"_dcb">>}`, so
+on 5.11.10 any indexed `read_by_tags`, `read_by_event_types` or
+`read_by_metadata` that reaches a DCB event crashes the read. Do not pin a
+store with declared indexes back below 5.11.11 after it has run 5.11.11 with
+DCB events, unless those `[idx]` entries are removed first.
 
 Proved with two real peers: when both members run it at once, the follower
 writes nothing and the leader re-indexes each event once; leader activation
 alone re-indexes. Concurrent runs on one store stay correct (entries are keyed
-by path, the marker is a union), and each scans the DCB log once.
+by path, the marker is a union), and each scans the DCB log once. A third peer case holds the run for 3 s and
+checks the leader worker answers `is_active/1` in under a millisecond
+throughout; with the run inline in the worker, the first probe took 2.7 s.
 
 ## [5.11.10] - 2026-09-23
 

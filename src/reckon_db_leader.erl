@@ -29,7 +29,11 @@
 -record(state, {
     store_id :: atom(),
     config :: store_config(),
-    active :: boolean()
+    active :: boolean(),
+    %% The DCB re-index in flight: its process, monitor, and the backoff for
+    %% a retry. At most one at a time, run in its own process so this loop
+    %% keeps answering is_active/1 (see reindex_dcb/2).
+    reindex = undefined :: {pid(), reference(), pos_integer()} | undefined
 }).
 
 %%====================================================================
@@ -109,9 +113,13 @@ handle_cast({activate, StoreId}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({reindex_dcb, StoreId, Backoff}, #state{active = true} = State) ->
-    reindex_dcb(StoreId, Backoff),
-    {noreply, State};
+handle_info({reindex_dcb, Backoff}, #state{active = true} = State) ->
+    {noreply, reindex_dcb(State, Backoff)};
+handle_info({dcb_reindexed, Pid, Result}, #state{reindex = {Pid, Ref, Backoff}} = State) ->
+    erlang:demonitor(Ref, [flush]),
+    {noreply, reindexed(Result, Backoff, State#state{reindex = undefined})};
+handle_info({'DOWN', Ref, process, _Pid, Reason}, #state{reindex = {_, Ref, Backoff}} = State) ->
+    {noreply, reindexed({error, {crashed, Reason}}, Backoff, State#state{reindex = undefined})};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -146,27 +154,37 @@ activate_leadership(StoreId, State) ->
           subscription_count => SubscriptionCount}
     ),
 
-    reindex_dcb(StoreId, ?DCB_REINDEX_FIRST_RETRY_MS),
-
     logger:info("Leadership activation complete (store: ~p)", [StoreId]),
-    {noreply, State#state{active = true}}.
+    {noreply, reindex_dcb(State#state{active = true}, ?DCB_REINDEX_FIRST_RETRY_MS)}.
 
 %% @private Give DCB events written before 5.11.11 their secondary-index
 %% entries, once (reckon_db_dcb_reindex). Runs here because activation
 %% happens on the Ra leader only, after every start and leadership change;
-%% with its marker in place it is one read. A failure is logged loudly by
-%% the re-index and retried with backoff instead of failing activation:
-%% subscriptions and emitters do not depend on it.
-reindex_dcb(StoreId, Backoff) ->
-    case reckon_db_dcb_reindex:run(StoreId) of
-        {ok, _} ->
-            ok;
-        {error, _} ->
-            erlang:send_after(Backoff, self(),
-                              {reindex_dcb, StoreId,
-                               min(Backoff * 2, ?DCB_REINDEX_MAX_RETRY_MS)}),
-            ok
-    end.
+%% with its marker in place it is one read.
+%%
+%% It runs in a monitored process of its own: on a large DCB log it takes
+%% long enough that running it in this loop blocked is_active/1, the node
+%% monitor's call timed out every tick, and its crash restarted the gateway
+%% pool (rest_for_one). One run at a time: an activation while one is in
+%% flight starts nothing. A failure (logged loudly by the re-index) or a
+%% not_leader answer during an election is retried with backoff; activation
+%% itself never waits for it, since subscriptions and emitters do not depend
+%% on it.
+reindex_dcb(#state{reindex = {_InFlight, _, _}} = State, _NewBackoff) ->
+    State;
+reindex_dcb(#state{store_id = StoreId} = State, Backoff) ->
+    Self = self(),
+    {Pid, Ref} = spawn_monitor(fun() ->
+                                   Self ! {dcb_reindexed, self(), reckon_db_dcb_reindex:run(StoreId)}
+                               end),
+    State#state{reindex = {Pid, Ref, Backoff}}.
+
+reindexed({ok, #{}}, _Backoff, State) ->
+    State;
+reindexed(_NotDone, Backoff, State) ->
+    erlang:send_after(Backoff, self(),
+                      {reindex_dcb, min(Backoff * 2, ?DCB_REINDEX_MAX_RETRY_MS)}),
+    State.
 
 %%====================================================================
 %% Internal functions
