@@ -33,7 +33,10 @@
     %% The DCB re-index in flight: its process, monitor, and the backoff for
     %% a retry. At most one at a time, run in its own process so this loop
     %% keeps answering is_active/1 (see reindex_dcb/2).
-    reindex = undefined :: {pid(), reference(), pos_integer()} | undefined
+    reindex = undefined :: {pid(), reference(), pos_integer()} | undefined,
+    %% The pending retry of a re-index that did not finish, if any. One at a
+    %% time: a new run cancels it, so retries never multiply into chains.
+    reindex_retry = undefined :: reference() | undefined
 }).
 
 %%====================================================================
@@ -173,18 +176,26 @@ activate_leadership(StoreId, State) ->
 reindex_dcb(#state{reindex = {_InFlight, _, _}} = State, _NewBackoff) ->
     State;
 reindex_dcb(#state{store_id = StoreId} = State, Backoff) ->
+    cancel_retry(State#state.reindex_retry),
     Self = self(),
-    {Pid, Ref} = spawn_monitor(fun() ->
-                                   Self ! {dcb_reindexed, self(), reckon_db_dcb_reindex:run(StoreId)}
-                               end),
-    State#state{reindex = {Pid, Ref, Backoff}}.
+    %% Linked as well as monitored: the worker traps exits (its normal
+    %% 'EXIT' falls to the catch-all), and a worker that stops takes the run
+    %% with it instead of leaving it writing beside the next one.
+    Pid = spawn_link(fun() ->
+                         Self ! {dcb_reindexed, self(), reckon_db_dcb_reindex:run(StoreId)}
+                     end),
+    Ref = erlang:monitor(process, Pid),
+    State#state{reindex = {Pid, Ref, Backoff}, reindex_retry = undefined}.
+
+cancel_retry(undefined) -> ok;
+cancel_retry(TRef) -> _ = erlang:cancel_timer(TRef), ok.
 
 reindexed({ok, #{}}, _Backoff, State) ->
     State;
 reindexed(_NotDone, Backoff, State) ->
-    erlang:send_after(Backoff, self(),
-                      {reindex_dcb, min(Backoff * 2, ?DCB_REINDEX_MAX_RETRY_MS)}),
-    State.
+    TRef = erlang:send_after(Backoff, self(),
+                             {reindex_dcb, min(Backoff * 2, ?DCB_REINDEX_MAX_RETRY_MS)}),
+    State#state{reindex_retry = TRef}.
 
 %%====================================================================
 %% Internal functions

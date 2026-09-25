@@ -57,16 +57,24 @@ The first DCB append under 5.11.11, or the re-index, writes `[idx]` entries
 that point into the `_dcb` pseudo-stream. 5.11.10 resolves every index entry
 through the stream layout, which raises `{invalid_stream_id, <<"_dcb">>}`, so
 on 5.11.10 any indexed `read_by_tags`, `read_by_event_types` or
-`read_by_metadata` that reaches a DCB event crashes the read. Do not pin a
-store with declared indexes back below 5.11.11 after it has run 5.11.11 with
-DCB events, unless those `[idx]` entries are removed first.
+`read_by_metadata` that reaches a DCB event crashes the read. To roll a
+store back below 5.11.11 after it has run 5.11.11 with DCB events, remove
+`tags`, `event_type` and every `{meta, _}` from its `indexes` for the
+rollback: with nothing declared, 5.11.10 answers those reads by scanning
+`[streams, ...]` and the `_dcb` subtree and never resolves an `[idx]` entry
+(DCB payload indexes live under their own roots and are unaffected). After
+returning to 5.11.11 or later and declaring them again, run
+`reckon_db_dcb_reindex:run(StoreId, #{force => true})` once for the DCB
+events appended in between; stream events appended in between follow the
+no-backfill rule, as before.
 
 Proved with two real peers: when both members run it at once, the follower
 writes nothing and the leader re-indexes each event once; leader activation
 alone re-indexes. Concurrent runs on one store stay correct (entries are keyed
 by path, the marker is a union), and each scans the DCB log once. A third peer case holds the run for 3 s and
-checks the leader worker answers `is_active/1` in under a millisecond
-throughout; with the run inline in the worker, the first probe took 2.7 s.
+checks the leader worker answers `is_active/1` in under a second throughout
+(measured well under a millisecond); with the run inline in the worker, the
+first probe took 2.7 s.
 
 ## [5.11.10] - 2026-09-23
 

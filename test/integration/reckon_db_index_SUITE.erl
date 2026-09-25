@@ -357,7 +357,7 @@ dcb_event_visible_via_indexed_read_on_an_integrity_store(Config) ->
         {ok, Events} = reckon_db_streams:read_by_tags(StoreId, [<<"sealed">>], any, 10),
         ?assertEqual(2, length(Events)),
         %% Sealed on the integrity-on path: a versioned MAC and a chain link.
-        ?assert(lists:all(fun(#event{mac = {_Vsn, Mac}, prev_event_hash = Prev}) ->
+        ?assert(lists:all(fun(#event{mac = {_KeyId, Mac}, prev_event_hash = Prev}) ->
                                   is_binary(Mac) andalso is_binary(Prev);
                              (_) -> false
                           end, Events))
