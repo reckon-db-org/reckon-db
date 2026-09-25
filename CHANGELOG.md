@@ -5,6 +5,48 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.11] - 2026-09-26
+
+### Fixed: DCB events were invisible to indexed reads (reckon-db #2)
+
+The DCB append (`reckon_db_dcb:append_if_no_tag_matches/4`) wrote its own
+`by_tag`, `by_event_type` and payload entries but never the `[idx]` entries
+of the secondary index. On a store declaring `tags`, `event_type` or
+`{meta, Key}`, the indexed `read_by_tags`, `read_by_event_types` and
+`read_by_metadata` walk only `[idx]`, so they returned no DCB event, against
+`guides/dcb.md`. An evoq decision reading its context that way saw an empty
+context on such a store, and the complete append check then refused every
+command into a boundary that already had a matching event: it ended in
+`retry_budget_exhausted`, never committing. Reproduced before the fix: both
+reads returned `{ok, []}` for a just-appended DCB event.
+
+- The DCB append now writes the entries from `reckon_db_index:entries/2`, the
+  same function the stream append uses, in its transaction.
+- A DCB entry's reference resolves to the event in the `_dcb` pseudo-stream
+  (`reckon_db_dcb_paths:event_path/1`); resolution used the stream layout
+  and would have found nothing.
+
+### Added: a one-time re-index of DCB events written before 5.11.11
+
+`reckon_db_dcb_reindex:run/1` gives the DCB log the entries of the declared
+kinds it lacks, in transactions of 500 events, and records the kinds covered
+in a marker at `[metadata, index, dcb_indexed]`, written last. A run that
+dies half way leaves no marker and is redone; with the marker in place a run
+is one read, and a kind declared later is re-indexed on its own.
+
+It runs through the Ra leader only: `run/1` answers `{ok, not_leader}` on any
+other member, and `reckon_db_leader` runs it on activation, which the node
+monitor does on the leader after every start and leadership change, in single
+and cluster mode alike. A failure is logged as an error and retried with
+backoff (5 s doubling to 5 min) without failing activation. A successful run
+logs the count, the kinds and the duration. Until it has run, indexed reads
+still miss the older DCB events.
+
+Proved with two real peers: when both members run it at once, the follower
+writes nothing and the leader re-indexes each event once; leader activation
+alone re-indexes. Concurrent runs on one store stay correct (entries are keyed
+by path, the marker is a union), and each scans the DCB log once.
+
 ## [5.11.10] - 2026-09-23
 
 ### Fixed: logged durations were 1000x too large

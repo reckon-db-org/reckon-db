@@ -23,7 +23,12 @@
     index_matches_scan_parity/1,
     unindexed_store_falls_back_to_scan/1,
     multi_event_batch_fully_indexed/1,
-    one_append_reads_back_in_version_order/1
+    one_append_reads_back_in_version_order/1,
+    dcb_event_visible_via_indexed_read_by_tags/1,
+    dcb_event_visible_via_indexed_read_by_event_types/1,
+    dcb_event_visible_via_indexed_read_by_metadata/1,
+    dcb_events_written_before_the_fix_are_reindexed_once/1,
+    concurrent_reindex_runs_stay_correct/1
 ]).
 
 suite() -> [{timetrap, {seconds, 30}}].
@@ -37,7 +42,12 @@ all() ->
      index_matches_scan_parity,
      unindexed_store_falls_back_to_scan,
      multi_event_batch_fully_indexed,
-     one_append_reads_back_in_version_order].
+     one_append_reads_back_in_version_order,
+     dcb_event_visible_via_indexed_read_by_tags,
+     dcb_event_visible_via_indexed_read_by_event_types,
+     dcb_event_visible_via_indexed_read_by_metadata,
+     dcb_events_written_before_the_fix_are_reindexed_once,
+     concurrent_reindex_runs_stay_correct].
 
 %%====================================================================
 %% CT boilerplate
@@ -243,3 +253,88 @@ one_append_reads_back_in_version_order(Config) ->
     ?assertEqual(Expected, Versions(ByAnyTag)),
     {ok, ByAllTags} = reckon_db_streams:read_by_tags(StoreId, [<<"g">>, <<"h">>], all, 1000),
     ?assertEqual(Expected, Versions(ByAllTags)).
+
+%%====================================================================
+%% DCB events under declared indexes (reckon-db #2)
+%%====================================================================
+%%
+%% guides/dcb.md promises DCB events appear on every read path. With the
+%% tags / event_type / {meta, Key} index declared, those reads walk the
+%% [idx] subtree, which the DCB append never wrote: a DCB-context decision
+%% on such a store saw an empty context and could never commit into a
+%% non-empty boundary.
+
+dcb_append(StoreId, EventType, Tags, Metadata) ->
+    {ok, _} = reckon_db_dcb:append_if_no_tag_matches(
+                StoreId, {any_of, [<<"never-matches">>]}, -1,
+                [#{event_type => EventType, data => #{}, tags => Tags,
+                   metadata => Metadata}]),
+    ok.
+
+dcb_event_visible_via_indexed_read_by_tags(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    declare(StoreId, [tags]),
+    ok = dcb_append(StoreId, <<"dcb_tagged_v1">>, [<<"dcb-t">>], #{}),
+    {ok, Events} = reckon_db_streams:read_by_tags(StoreId, [<<"dcb-t">>], any, 10),
+    ?assertEqual([<<"dcb_tagged_v1">>], types(Events)).
+
+dcb_event_visible_via_indexed_read_by_event_types(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    declare(StoreId, [event_type]),
+    ok = dcb_append(StoreId, <<"dcb_typed_v1">>, [<<"x">>], #{}),
+    {ok, Events} = reckon_db_streams:read_by_event_types(StoreId, [<<"dcb_typed_v1">>], 10),
+    ?assertEqual([<<"dcb_typed_v1">>], types(Events)).
+
+dcb_event_visible_via_indexed_read_by_metadata(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    declare(StoreId, [{meta, <<"correlation_id">>}]),
+    ok = dcb_append(StoreId, <<"dcb_meta_v1">>, [<<"x">>], #{<<"correlation_id">> => <<"c-1">>}),
+    {ok, Events} = reckon_db_streams:read_by_metadata(StoreId, <<"correlation_id">>, <<"c-1">>),
+    ?assertEqual([<<"dcb_meta_v1">>], types(Events)).
+
+%% A store written before the fix has DCB events without [idx] entries. The
+%% re-index gives them their entries once, for the kinds declared and not
+%% yet covered, and records that in a marker: a second run touches nothing,
+%% and a kind declared later is re-indexed on its own.
+dcb_events_written_before_the_fix_are_reindexed_once(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    declare(StoreId, []),
+    [ok = dcb_append(StoreId, <<"old_dcb_v1">>, [<<"old">>], #{<<"cid">> => <<"c">>})
+     || _ <- lists:seq(1, 3)],
+
+    declare(StoreId, [tags, event_type]),
+    ?assertEqual({ok, []}, reckon_db_streams:read_by_tags(StoreId, [<<"old">>], any, 10)),
+    ?assertMatch({ok, #{reindexed := 3, kinds := [event_type, tags]}},
+                 reckon_db_dcb_reindex:run(StoreId)),
+    {ok, ByTag} = reckon_db_streams:read_by_tags(StoreId, [<<"old">>], any, 10),
+    {ok, ByType} = reckon_db_streams:read_by_event_types(StoreId, [<<"old_dcb_v1">>], 10),
+    ?assertEqual(3, length(ByTag)),
+    ?assertEqual(3, length(ByType)),
+
+    ?assertMatch({ok, #{reindexed := 0, kinds := []}}, reckon_db_dcb_reindex:run(StoreId)),
+
+    declare(StoreId, [tags, event_type, {meta, <<"cid">>}]),
+    ?assertMatch({ok, #{reindexed := 3, kinds := [{meta, <<"cid">>}]}},
+                 reckon_db_dcb_reindex:run(StoreId)),
+    {ok, ByMeta} = reckon_db_streams:read_by_metadata(StoreId, <<"cid">>, <<"c">>),
+    ?assertEqual(3, length(ByMeta)).
+
+%% Runs that overlap (a leadership change during a re-index) stay correct:
+%% entries are keyed by path, so a second writer puts the same value, and
+%% the marker is a union. Each run scans the log once, so N runs cost N scans.
+concurrent_reindex_runs_stay_correct(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    declare(StoreId, []),
+    [ok = dcb_append(StoreId, <<"conc_dcb_v1">>, [<<"conc">>], #{}) || _ <- lists:seq(1, 600)],
+    declare(StoreId, [tags]),
+
+    Self = self(),
+    Pids = [spawn(fun() -> Self ! {self(), reckon_db_dcb_reindex:run(StoreId)} end)
+            || _ <- lists:seq(1, 4)],
+    Results = [receive {P, R} -> R after 30000 -> timeout end || P <- Pids],
+    lists:foreach(fun(R) -> ?assertMatch({ok, #{}}, R) end, Results),
+
+    {ok, ByTag} = reckon_db_streams:read_by_tags(StoreId, [<<"conc">>], any, 1000),
+    ?assertEqual(600, length(ByTag)),
+    ?assertEqual(600, length(lists:usort([E#event.event_id || E <- ByTag]))),
+    ?assertMatch({ok, #{reindexed := 0}}, reckon_db_dcb_reindex:run(StoreId)).

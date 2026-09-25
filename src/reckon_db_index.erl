@@ -43,6 +43,7 @@
 
 -export([
     entries/2,
+    entry_kinds/1,
     order_key/1,
     sort_in_global_order/1,
     event_ref/1,
@@ -57,6 +58,18 @@
 %%====================================================================
 %% Write-path entry construction
 %%====================================================================
+
+%% @doc The declared kinds this module keeps entries for (tags,
+%% event_type, {meta, Key}); the payload kinds are DCB-scoped and written by
+%% reckon_db_dcb under their own paths.
+-spec entry_kinds([index_decl()]) -> [index_decl()].
+entry_kinds(Declared) ->
+    [D || D <- Declared, is_entry_kind(D)].
+
+is_entry_kind(tags) -> true;
+is_entry_kind(event_type) -> true;
+is_entry_kind({meta, _}) -> true;
+is_entry_kind(_) -> false.
 
 %% @doc The index entries an event produces under a store's declared
 %% indexes. Each entry is a `{Path, EventRef}' the caller writes
@@ -255,12 +268,19 @@ resolve_sorted(StoreId, Refs) ->
     sort_in_global_order(lists:filtermap(fun(Ref) -> resolve(StoreId, Ref) end, Refs)).
 
 -spec resolve(atom(), event_ref()) -> {true, event()} | false.
-resolve(StoreId, #{stream_id := StreamId, version := Version}) ->
-    Path = reckon_db_stream_path:event_path(StreamId, pad(Version, ?VERSION_PADDING)),
-    case khepri:get(StoreId, Path) of
+resolve(StoreId, #{stream_id := StreamId} = Ref) ->
+    case khepri:get(StoreId, event_location(Ref)) of
         {ok, #event{} = Event} -> {true, Event#event{stream_id = StreamId}};
         _ -> false
     end.
+
+%% @private Where the event a ref points at lives. A DCB event sits in the
+%% `_dcb' pseudo-stream at its sequence number, not under the stream layout
+%% (reckon_db_dcb_paths:event_path/1), so its ref resolves there.
+event_location(#{stream_id := ?DCB_STREAM, version := Seq}) ->
+    reckon_db_dcb_paths:event_path(Seq);
+event_location(#{stream_id := StreamId, version := Version}) ->
+    reckon_db_stream_path:event_path(StreamId, pad(Version, ?VERSION_PADDING)).
 
 %%====================================================================
 %% Internal — padding

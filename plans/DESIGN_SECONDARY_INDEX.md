@@ -218,6 +218,14 @@ is a genuine eventual need — but only once reckon-db runs in production with d
 worth preserving. It is **out of scope** until then; do not build the
 marker / dual-state machinery now.
 
+**One exception, for the DCB log only (5.11.11, reckon-db #2).** The DCB append
+did not write `[idx]` entries up to 5.11.10, so DCB events on an index-declaring
+store were missing from the index through no choice of the operator.
+`reckon_db_dcb_reindex` gives the DCB log its entries once, on the Ra leader,
+recorded in a marker at `[metadata, index, dcb_indexed]` (the kinds covered);
+with the marker in place a run is one read. Stream events are not backfilled:
+the rule above still holds for them.
+
 ---
 
 ## 11. Costs

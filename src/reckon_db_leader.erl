@@ -23,6 +23,9 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
+-define(DCB_REINDEX_FIRST_RETRY_MS, 5000).
+-define(DCB_REINDEX_MAX_RETRY_MS, 300000).
+
 -record(state, {
     store_id :: atom(),
     config :: store_config(),
@@ -106,6 +109,9 @@ handle_cast({activate, StoreId}, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+handle_info({reindex_dcb, StoreId, Backoff}, #state{active = true} = State) ->
+    reindex_dcb(StoreId, Backoff),
+    {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -140,8 +146,27 @@ activate_leadership(StoreId, State) ->
           subscription_count => SubscriptionCount}
     ),
 
+    reindex_dcb(StoreId, ?DCB_REINDEX_FIRST_RETRY_MS),
+
     logger:info("Leadership activation complete (store: ~p)", [StoreId]),
     {noreply, State#state{active = true}}.
+
+%% @private Give DCB events written before 5.11.11 their secondary-index
+%% entries, once (reckon_db_dcb_reindex). Runs here because activation
+%% happens on the Ra leader only, after every start and leadership change;
+%% with its marker in place it is one read. A failure is logged loudly by
+%% the re-index and retried with backoff instead of failing activation:
+%% subscriptions and emitters do not depend on it.
+reindex_dcb(StoreId, Backoff) ->
+    case reckon_db_dcb_reindex:run(StoreId) of
+        {ok, _} ->
+            ok;
+        {error, _} ->
+            erlang:send_after(Backoff, self(),
+                              {reindex_dcb, StoreId,
+                               min(Backoff * 2, ?DCB_REINDEX_MAX_RETRY_MS)}),
+            ok
+    end.
 
 %%====================================================================
 %% Internal functions

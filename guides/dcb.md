@@ -150,9 +150,15 @@ Filter = {and_, [
 ## The DCB pseudo-stream
 
 DCB events live under the pseudo-stream id `<<"_dcb">>`. They are
-real events — they appear in `read_all_global`, `read_by_event_types`,
-subscription deliveries, the gateway gRPC surface, every existing
-read path — but the consistency-check semantics only apply to
+real events — they appear in `read_all_global`, `read_by_tags`,
+`read_by_event_types`, `read_by_metadata`, subscription deliveries, the
+gateway gRPC surface, every existing read path — whether or not the store
+declares the `tags`, `event_type` or `{meta, Key}` index. (Up to 5.11.10
+the DCB append did not write those index entries, so on a store that
+declared them the indexed reads missed every DCB event. 5.11.11 writes
+them, and re-indexes the DCB events written before it once, on the Ra
+leader, the first time the leader activates; see `reckon_db_dcb_reindex`.)
+The consistency-check semantics only apply to
 events written *through* `append_if_no_tag_matches/4`. Direct
 `append/4,5` to the `_dcb` stream is not a meaningful operation
 and should be avoided.

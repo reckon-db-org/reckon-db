@@ -177,10 +177,14 @@ append_if_no_tag_matches(_StoreId, _TagFilter, _SeqCutoff, []) ->
 append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events)
   when is_list(Events), is_integer(SeqCutoff) ->
     PayloadDecls = reckon_db_index_config:declared_dcb_payload(StoreId),
+    %% The store's secondary ([idx]) indexes: a DCB event gets the same
+    %% entries a stream event does (reckon_db_index:entries/2), or indexed
+    %% read_by_tags / read_by_event_types / read_by_metadata never see it.
+    IdxDecls = reckon_db_index:entry_kinds(reckon_db_index_config:declared(StoreId)),
     ProcessedFilter = reckon_db_ccc_filter:preprocess_filter(TagFilter),
     IntegrityCtx = setup_integrity_ctx(StoreId),
     try_append(StoreId, ProcessedFilter, SeqCutoff, Events, IntegrityCtx,
-               PayloadDecls, ?INTEGRITY_RETRY_BUDGET).
+               {PayloadDecls, IdxDecls}, ?INTEGRITY_RETRY_BUDGET).
 
 %%====================================================================
 %% Outer retry loop (chain-tip / counter races on integrity-on stores)
@@ -188,12 +192,13 @@ append_if_no_tag_matches(StoreId, TagFilter, SeqCutoff, Events)
 
 try_append(_StoreId, _TF, _SC, _Events, _Ctx, _PD, 0) ->
     {error, dcb_concurrent_writer_exhausted};
-try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx, PayloadDecls, Retries) ->
+try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx,
+           {PayloadDecls, IdxDecls} = Decls, Retries) ->
     Now = erlang:system_time(millisecond),
     EpochUs = erlang:system_time(microsecond),
     Snapshot = take_snapshot(StoreId, IntegrityCtx),
     {Stamped, FinalTip} = stamp_events(Events, Now, EpochUs, Snapshot, PayloadDecls),
-    case run_tx(StoreId, TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip) of
+    case run_tx(StoreId, TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip, IdxDecls) of
         {ok, LastSeq} when is_integer(LastSeq) ->
             {ok, LastSeq};
         %% Khepri 0.17.x catch-all wraps process_command errors as {ok, Err}
@@ -204,16 +209,16 @@ try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx, PayloadDecls, Re
             {error, Reason};
         {error, {dcb_state_changed, _}} ->
             try_append(StoreId, TagFilter, SeqCutoff, Events, IntegrityCtx,
-                       PayloadDecls, Retries - 1);
+                       Decls, Retries - 1);
         {error, _} = Error ->
             Error
     end.
 
 %% @private Run the DCB write as a Khepri transaction.
-run_tx(StoreId, TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip) ->
+run_tx(StoreId, TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip, IdxDecls) ->
     khepri:transaction(
       StoreId,
-      fun() -> tx_body(TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip) end).
+      fun() -> tx_body(TagFilter, SeqCutoff, Stamped, Snapshot, FinalTip, IdxDecls) end).
 
 %%====================================================================
 %% Outside transaction: integrity context + state snapshot
@@ -301,13 +306,13 @@ stamp_chain([EM | Rest], Seq, Now, EpochUs, Key, Tip, PayloadDecls, Acc) ->
 %% arrive ready to write; we verify state pre-conditions and commit.
 
 %% Integrity-OFF path. The transaction picks seqs from the live counter.
-tx_body(TagFilter, SeqCutoff, Stamped, disabled, _FinalTip) ->
+tx_body(TagFilter, SeqCutoff, Stamped, disabled, _FinalTip, IdxDecls) ->
     case reckon_db_ccc_filter:match_any_above_cutoff(TagFilter, SeqCutoff) of
         {true, MaxSeq} ->
             khepri_tx:abort({context_changed, MaxSeq});
         false ->
             BaseSeq = next_base_seq_in_tx(),
-            LastSeq = write_off(Stamped, BaseSeq),
+            LastSeq = write_off(Stamped, BaseSeq, IdxDecls),
             ok = khepri_tx:put(?DCB_SEQ_COUNTER_PATH, LastSeq),
             LastSeq
     end;
@@ -317,9 +322,9 @@ tx_body(TagFilter, SeqCutoff, Stamped,
         #{expected_counter := ExpectedCounter,
           expected_tip     := ExpectedTip,
           next_seq         := StartSeq},
-        FinalTip) ->
+        FinalTip, IdxDecls) ->
     tx_body_on(verify_counter(ExpectedCounter), ExpectedTip, TagFilter, SeqCutoff,
-               Stamped, StartSeq, FinalTip).
+               Stamped, StartSeq, {FinalTip, IdxDecls}).
 
 %% @private Counter verified -> proceed to chain-tip verification.
 tx_body_on({error, Actual}, _ExpectedTip, _TagFilter, _SeqCutoff, _Stamped, _StartSeq, _FinalTip) ->
@@ -337,47 +342,52 @@ tx_body_tip(ok, TagFilter, SeqCutoff, Stamped, StartSeq, FinalTip) ->
 %% @private Filter clear -> write events, bump counter + chain tip.
 tx_body_write({true, MaxSeq}, _Stamped, _StartSeq, _FinalTip) ->
     khepri_tx:abort({context_changed, MaxSeq});
-tx_body_write(false, Stamped, StartSeq, FinalTip) ->
-    LastSeq = write_on(Stamped, StartSeq),
+tx_body_write(false, Stamped, StartSeq, {FinalTip, IdxDecls}) ->
+    LastSeq = write_on(Stamped, StartSeq, IdxDecls),
     ok = khepri_tx:put(?DCB_SEQ_COUNTER_PATH, LastSeq),
     ok = khepri_tx:put(?DCB_CHAIN_TIP_PATH, FinalTip),
     LastSeq.
 
 %% Integrity-off write: live counter assigns seqs, stamp the seq into
 %% the record and write at the right path.
-write_off([], LastSeq) ->
+write_off([], LastSeq, _IdxDecls) ->
     LastSeq;
-write_off([{undefined, Record0, PayloadEntries} | Rest], Seq) ->
+write_off([{undefined, Record0, PayloadEntries} | Rest], Seq, IdxDecls) ->
     Record = Record0#event{version = Seq},
-    write_one_record(Record, Seq, PayloadEntries),
+    write_one_record(Record, Seq, PayloadEntries, IdxDecls),
     case Rest of
         [] -> Seq;
-        _  -> write_off(Rest, Seq + 1)
+        _  -> write_off(Rest, Seq + 1, IdxDecls)
     end.
 
 %% Integrity-on write: records already carry the right version (Seq).
-write_on([], LastSeq) ->
+write_on([], LastSeq, _IdxDecls) ->
     LastSeq;
-write_on([{Seq, Record, PayloadEntries} | Rest], ExpectedSeq) ->
+write_on([{Seq, Record, PayloadEntries} | Rest], ExpectedSeq, IdxDecls) ->
     %% Pre-assigned seq must equal the expected position in the chain.
     %% If these diverge, our snapshot was inconsistent — but the
     %% counter+tip verification already prevents that.
-    write_on_check(Seq =:= ExpectedSeq, Seq, Record, PayloadEntries, Rest, ExpectedSeq).
+    write_on_check(Seq =:= ExpectedSeq, Seq, Record, PayloadEntries, Rest, ExpectedSeq,
+                   IdxDecls).
 
 %% @private
-write_on_check(true, Seq, Record, PayloadEntries, Rest, ExpectedSeq) ->
-    write_one_record(Record, Seq, PayloadEntries),
-    write_on_next(Rest, Seq, ExpectedSeq);
-write_on_check(false, Seq, _Record, _PayloadEntries, _Rest, ExpectedSeq) ->
+write_on_check(true, Seq, Record, PayloadEntries, Rest, ExpectedSeq, IdxDecls) ->
+    write_one_record(Record, Seq, PayloadEntries, IdxDecls),
+    write_on_next(Rest, Seq, ExpectedSeq, IdxDecls);
+write_on_check(false, Seq, _Record, _PayloadEntries, _Rest, ExpectedSeq, _IdxDecls) ->
     khepri_tx:abort({dcb_state_changed, {seq_skew, Seq, ExpectedSeq}}).
 
 %% @private
-write_on_next([], Seq, _ExpectedSeq) -> Seq;
-write_on_next(Rest, _Seq, ExpectedSeq) -> write_on(Rest, ExpectedSeq + 1).
+write_on_next([], Seq, _ExpectedSeq, _IdxDecls) -> Seq;
+write_on_next(Rest, _Seq, ExpectedSeq, IdxDecls) -> write_on(Rest, ExpectedSeq + 1, IdxDecls).
 
 write_one_record(#event{event_type = EventType, tags = Tags} = Record, Seq,
-                 PayloadEntries) ->
+                 PayloadEntries, IdxDecls) ->
     ok = khepri_tx:put(reckon_db_dcb_paths:event_path(Seq), Record),
+    %% The secondary-index entries a stream event gets, from the same
+    %% function the stream append uses, so the two paths cannot drift.
+    lists:foreach(fun({Path, Ref}) -> ok = khepri_tx:put(Path, Ref) end,
+                  reckon_db_index:entries(Record, IdxDecls)),
     TagList = case Tags of
                   undefined     -> [];
                   L when is_list(L) -> L
