@@ -32,11 +32,11 @@ See [WORKLOADS.md](WORKLOADS.md).
 
 ## Methodology
 
-Shared methodology lives in [reckon-bench-harness/METHODOLOGY.md](https://github.com/reckon-db-org/reckon-bench-harness/blob/main/METHODOLOGY.md). Publication policy, regression detection, statistical rigour, and the what-to-do-when-numbers-disappoint pre-commit are all authoritative there.
+Shared methodology lives in reckon-bench-harness's METHODOLOGY.md, which is not published yet. Publication policy, regression detection, statistical rigour, and the what-to-do-when-numbers-disappoint pre-commit are all authoritative there.
 
 ## Hardware profiles
 
-Shared profiles live in [reckon-bench-harness/hardware_profiles/](https://github.com/reckon-db-org/reckon-bench-harness/blob/main/hardware_profiles/). Supported: `local-dev`, `nanode-2gb`, `linode-8gb`, `hetzner-cx32`, `bare-metal-i9`.
+Shared profiles live in reckon-bench-harness's hardware_profiles/, which is not published yet. Supported: `local-dev`, `nanode-2gb`, `linode-8gb`, `hetzner-cx32`, `bare-metal-i9`.
 
 ## Slice pattern
 
