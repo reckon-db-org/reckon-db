@@ -5,6 +5,39 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.12] - 2026-10-20
+
+### Fixed: a malformed stream id hung the caller instead of returning an error (reckon-db #4)
+
+A read naming a stream id that does not match the grammar raised inside the
+gateway worker. The worker died, the gater's retry layer read the process exit
+as transient and re-dispatched the same call, and the caller waited out the
+backoff for an id the store could never serve.
+
+- `reckon_db_stream_path:validate/1` is the boundary check, and `read/6` and
+  `delete/2` answer `{error, {invalid_stream_id, Reason, Id}}` before any path
+  is built. That is the shape `append/5` has always returned, which the retry
+  layer already classifies as permanent, so the caller sees the error on the
+  first attempt rather than at the end of the ladder.
+- `handle_call/3` and `handle_cast/2` translate that one raise at the process
+  boundary, for the clauses that take a stream id but have no error channel of
+  their own (`get_version`, `scavenge`, the snapshot calls, `read_until`,
+  `read_range`, `version_at`, `stream_info`). Any other raise still crashes the
+  worker.
+- A `by_stream` subscription whose selector is malformed used to raise after the
+  record had been written, so the cleanup branch never ran and the poisoned
+  subscription stayed in the store, showing up in `list` and raising again on
+  the next restore. `reckon_db_filters:by_stream/1` returns that error now and
+  the caller gets `{invalid_filter, {invalid_stream_id, ...}}`.
+
+### Changed: the end-to-end suites run in the gate (reckon-db #5)
+
+`ct_opts` covered `test/integration` only, so `test/e2e` never ran and had
+rotted against the stream-id grammar its fixtures could no longer produce: a red
+suite under a green CI. Both directories are the gate now, the fixtures use
+`reckon_gater_stream_id:new/1`, and the assertions match the gater's current
+reply shapes.
+
 ## [5.11.11] - 2026-09-26
 
 ### Fixed: DCB events were invisible to indexed reads (reckon-db #2)
