@@ -69,6 +69,29 @@ stream_id_from_path_dcb_test() ->
     ?assertEqual(<<"_dcb">>, reckon_db_stream_path:stream_id_from_path(
         [streams, <<"_dcb">>, <<"00000000000000000007">>])).
 
+%%====================================================================
+%% validate/1: the boundary check (reckon-db#4)
+%%====================================================================
+
+validate_accepts_every_accepted_shape_test() ->
+    ?assertEqual(ok, reckon_db_stream_path:validate(?USER)),
+    ?assertEqual(ok, reckon_db_stream_path:validate(?SYS)).
+
+validate_rejects_with_the_reason_and_the_id_test() ->
+    %% The 40-hex suffix gater 2.2.0 stopped accepting, as a consumer
+    %% that has not moved yet would send it.
+    Old = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
+    ?assertEqual({error, {invalid_stream_id, malformed_user_id, Old}},
+        reckon_db_stream_path:validate(Old)),
+    ?assertEqual({error, {invalid_stream_id, malformed_user_id, <<"nope">>}},
+        reckon_db_stream_path:validate(<<"nope">>)),
+    ?assertEqual({error, {invalid_stream_id, malformed_system_id, <<"$a b">>}},
+        reckon_db_stream_path:validate(<<"$a b">>)),
+    ?assertEqual({error, {invalid_stream_id, empty, <<>>}},
+        reckon_db_stream_path:validate(<<>>)),
+    ?assertEqual({error, {invalid_stream_id, not_binary, 42}},
+        reckon_db_stream_path:validate(42)).
+
 roundtrip_user_test() ->
     Id = reckon_gater_stream_id:new(<<"vehicle">>),
     Path = reckon_db_stream_path:event_path(Id, <<"000000000042">>),

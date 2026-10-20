@@ -198,6 +198,18 @@ read(StoreId, StreamId, StartVersion, Count, Direction) ->
     atom(), binary(), non_neg_integer(), pos_integer(), direction(), read_opts()
 ) -> {ok, [event()]} | {error, term()}.
 read(StoreId, StreamId, StartVersion, Count, Direction, Opts) ->
+    %% Stream-id format gate, the read-side twin of append/5's. A
+    %% malformed id is answered here rather than raised from a path
+    %% builder deep inside a gateway worker, where the raise killed the
+    %% worker and the retry layer re-dispatched the same hopeless read
+    %% until the caller's own timeout (reckon-db#4).
+    case reckon_db_stream_path:validate(StreamId) of
+        ok -> read_validated(StoreId, StreamId, StartVersion, Count, Direction, Opts);
+        {error, _} = Invalid -> Invalid
+    end.
+
+%% @private The read itself, past the stream-id gate.
+read_validated(StoreId, StreamId, StartVersion, Count, Direction, Opts) ->
     StartTime = erlang:monotonic_time(),
 
     %% Emit start telemetry
@@ -826,6 +838,16 @@ is_dcb_path(_) -> false.
 %% @doc Delete a stream and all its events
 -spec delete(atom(), binary()) -> ok | {error, term()}.
 delete(StoreId, StreamId) ->
+    %% Same gate as read/6: a malformed id is the caller's mistake and
+    %% must come back as an error, not as a dead gateway worker
+    %% (reckon-db#4).
+    case reckon_db_stream_path:validate(StreamId) of
+        ok -> delete_validated(StoreId, StreamId);
+        {error, _} = Invalid -> Invalid
+    end.
+
+%% @private The delete itself, past the stream-id gate.
+delete_validated(StoreId, StreamId) ->
     Path = reckon_db_stream_path:stream_path(StreamId),
     case khepri:delete(StoreId, Path) of
         ok -> ok;

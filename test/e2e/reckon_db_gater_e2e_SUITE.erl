@@ -52,7 +52,8 @@
     gater_stream_backward_test/1,
     gater_get_version_test/1,
     gater_get_streams_test/1,
-    gater_wrong_version_test/1
+    gater_wrong_version_test/1,
+    gater_invalid_stream_id_test/1
 ]).
 
 %% Test cases - Subscription operations via gater
@@ -113,7 +114,8 @@ groups() ->
             gater_stream_backward_test,
             gater_get_version_test,
             gater_get_streams_test,
-            gater_wrong_version_test
+            gater_wrong_version_test,
+            gater_invalid_stream_id_test
         ]},
         {subscription_operations, [sequence], [
             gater_save_subscription_test,
@@ -506,6 +508,30 @@ gater_wrong_version_test(Config) ->
     %% Try to append with wrong version
     {ok, Result} = reckon_gater_api:append_events(StoreId, StreamId, 99, Events),
     ?assertMatch({error, {wrong_expected_version, _}}, Result),
+
+    gen_server:stop(Worker),
+    ok.
+
+%% @doc A malformed stream id reaches the caller as an error and leaves
+%% the gateway worker running (reckon-db#4).
+%%
+%% Before the fix the id raised inside handle_call, the worker died, the
+%% retry layer read the exit as transient and re-dispatched it, and the
+%% caller waited out the backoff for an id that could never be served.
+gater_invalid_stream_id_test(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
+    Expected = {error, {invalid_stream_id, malformed_user_id, BadId}},
+
+    Worker = start_gateway_worker(StoreId, Config),
+    timer:sleep(200),
+
+    ?assertEqual(Expected, reckon_gater_api:get_events(StoreId, BadId, 0, 10, forward)),
+
+    %% Still the store's gateway: one bad id must not cost every other
+    %% caller a supervisor restart.
+    ?assert(is_process_alive(Worker)),
+    {ok, _} = reckon_gater_api:get_version(StoreId, reckon_gater_stream_id:new(<<"e2e">>)),
 
     gen_server:stop(Worker),
     ok.

@@ -43,6 +43,7 @@
     read_backward/1,
     read_with_count/1,
     read_from_nonexistent_stream/1,
+    read_rejects_invalid_stream_id/1,
     read_empty_result/1,
 
     %% Stream metadata tests
@@ -55,6 +56,8 @@
 
     %% Delete tests
     delete_stream/1,
+    delete_rejects_invalid_stream_id/1,
+    worker_answers_invalid_stream_id/1,
     delete_nonexistent_stream/1,
 
     %% read_all_global / cache tests
@@ -101,6 +104,7 @@ groups() ->
             read_backward,
             read_with_count,
             read_from_nonexistent_stream,
+            read_rejects_invalid_stream_id,
             read_empty_result
         ]},
         {metadata_tests, [sequence], [
@@ -113,6 +117,8 @@ groups() ->
         ]},
         {delete_tests, [sequence], [
             delete_stream,
+            delete_rejects_invalid_stream_id,
+            worker_answers_invalid_stream_id,
             delete_nonexistent_stream
         ]},
         {read_all_global_tests, [sequence], [
@@ -363,6 +369,21 @@ read_from_nonexistent_stream(Config) ->
     ?assertMatch({error, {stream_not_found, StreamId}}, Result),
     ok.
 
+%% @doc A stream id that does not match the grammar is answered, not
+%% raised: the read boundary validates before any path is built, so no
+%% caller is left waiting on a store that can never serve the id
+%% (reckon-db#4).
+read_rejects_invalid_stream_id(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
+    Expected = {error, {invalid_stream_id, malformed_user_id, BadId}},
+
+    ?assertEqual(Expected, reckon_db_streams:read(StoreId, BadId, 0, 10, forward)),
+    ?assertEqual(Expected, reckon_db_streams:read_all(StoreId, BadId, 10, forward)),
+    ?assertEqual(Expected,
+        reckon_db_streams:read(StoreId, BadId, 0, 10, forward, #{verify => strict})),
+    ok.
+
 %% @doc Test reading from position beyond stream length
 read_empty_result(Config) ->
     StoreId = proplists:get_value(store_id, Config),
@@ -470,6 +491,35 @@ delete_stream(Config) ->
     ok = reckon_db_streams:delete(StoreId, StreamId),
 
     ?assertEqual(false, reckon_db_streams:exists(StoreId, StreamId)),
+    ok.
+
+%% @doc The gateway worker answers a malformed id instead of dying on
+%% it.
+%%
+%% get_version has no gate of its own (it returns an integer, so it has
+%% no error channel), which is exactly why the worker boundary has one:
+%% without it the raise killed the process, the gater read the exit as
+%% transient and re-dispatched the same hopeless call (reckon-db#4).
+%%
+%% The worker itself is not started here: init/1 registers with the
+%% gater, and this suite has no gater. The record is the two fields
+%% dispatch reads, {state, StoreId, Config}; only store_id is used.
+worker_answers_invalid_stream_id(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
+    State = {state, StoreId, undefined},
+
+    ?assertEqual({reply, {error, {invalid_stream_id, malformed_user_id, BadId}}, State},
+        reckon_db_gateway_worker:handle_call({get_version, StoreId, BadId}, self(), State)),
+    ok.
+
+%% @doc A malformed id on delete is answered, not raised (reckon-db#4).
+delete_rejects_invalid_stream_id(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
+
+    ?assertEqual({error, {invalid_stream_id, malformed_user_id, BadId}},
+        reckon_db_streams:delete(StoreId, BadId)),
     ok.
 
 %% @doc Test deleting a non-existent stream (should not error)

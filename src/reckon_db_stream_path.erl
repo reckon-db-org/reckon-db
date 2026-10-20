@@ -33,9 +33,13 @@
 -module(reckon_db_stream_path).
 
 -include("reckon_db.hrl").
+
+-type validation_error() ::
+    {invalid_stream_id, reckon_gater_stream_id:validation_error(), term()}.
 -include_lib("khepri/include/khepri.hrl").
 
 -export([
+    validate/1,
     event_path/2,
     stream_path/1,
     versions_pattern/1,
@@ -44,6 +48,33 @@
     stream_id_from_path/1,
     type_of/1
 ]).
+
+-export_type([validation_error/0]).
+
+%%====================================================================
+%% The boundary check
+%%====================================================================
+
+%% @doc Does this stream id decompose into path segments?
+%%
+%% Call this BEFORE any builder below. The builders raise
+%% `{invalid_stream_id, StreamId}' (they have no error channel of their
+%% own), and that raise used to fire inside a gateway worker: the worker
+%% died, the retry layer read the exit as transient, and the caller
+%% waited out the backoff for an id the store could never serve
+%% (reckon-db#4). A caller that validates first turns a malformed id
+%% into an answer.
+%%
+%% The reason is `reckon_gater_stream_id:validate/1''s own:
+%% `empty', `not_binary', `malformed_user_id', `malformed_system_id'.
+%% so the shape matches the one `reckon_db_streams:append/5' already
+%% returns, which the gater's retry layer classifies as permanent.
+-spec validate(term()) -> ok | {error, validation_error()}.
+validate(StreamId) ->
+    case reckon_gater_stream_id:validate(StreamId) of
+        ok -> ok;
+        {error, Reason} -> {error, {invalid_stream_id, Reason, StreamId}}
+    end.
 
 %%====================================================================
 %% Path builders

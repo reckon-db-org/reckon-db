@@ -126,9 +126,9 @@ src/reckon_db_resource_monitor.erl	18b05e4be6c0	The variable _ can never match s
 src/reckon_db_resource_monitor.erl	3678e6a165c5	Expression produces a value of type 'false' | non_neg_integer(), but this value is unmatched
 src/reckon_db_revocation.erl	28d0a137f178	Expression produces a value of type atom() | ets:tid(), but this value is unmatched
 src/reckon_db_revocation.erl	28d0a137f178	Expression produces a value of type atom() | ets:tid(), but this value is unmatched
-src/reckon_db_scavenge.erl	24e0786fa64e	Type specification reckon_db_scavenge:emit_telemetry(atom(),binary(),term(),integer()) -> 'ok' is a supertype 
+src/reckon_db_scavenge.erl	3ed34bb177fc	Type specification reckon_db_scavenge:emit_telemetry(atom(),binary(),term(),integer()) -> 'ok' is a supertype 
+src/reckon_db_scavenge.erl	8d5e6d893c24	Type specification reckon_db_scavenge:scavenge(atom(),binary(),scavenge_opts()) -> {'ok',scavenge_result()} | 
 src/reckon_db_scavenge.erl	ec67d48ef23f	The call reckon_db_scavenge:do_scavenge(StoreId::atom(), StreamId::binary(), #{'archived_key':=binary(), 'befo
-src/reckon_db_scavenge.erl	f7dd930bba77	Type specification reckon_db_scavenge:scavenge(atom(),binary(),scavenge_opts()) -> {'ok',scavenge_result()} | 
 src/reckon_db_scavenge.erl	ffcdebc6d6c5	Type specification reckon_db_scavenge:delete_event_versions(atom(),binary(),non_neg_integer(),non_neg_integer(
 src/reckon_db_schema.erl	c3da5dd193c2	The call reckon_db_schema:emit_telemetry(StoreId::atom() | binary() | [atom() | binary() | char() | {'if_all' 
 src/reckon_db_schema.erl	edfa4118bc81	The specification for reckon_db_schema:unregister/2 states that the function might also return 'ok' but the in
