@@ -335,8 +335,7 @@ gater_append_events_test(Config) ->
     timer:sleep(200),
 
     %% Append via gater API
-    {ok, Result} = reckon_gater_api:append_events(StoreId, StreamId, Events),
-    {ok, Version} = Result,
+    {ok, Version} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     ?assertEqual(2, Version),
 
@@ -354,11 +353,11 @@ gater_append_with_version_test(Config) ->
     timer:sleep(200),
 
     %% First append
-    {ok, {ok, V1}} = reckon_gater_api:append_events(StoreId, StreamId, -1, Events1),
+    {ok, V1} = reckon_gater_api:append_events(StoreId, StreamId, -1, Events1),
     ?assertEqual(1, V1),
 
     %% Second append with correct version
-    {ok, {ok, V2}} = reckon_gater_api:append_events(StoreId, StreamId, V1, Events2),
+    {ok, V2} = reckon_gater_api:append_events(StoreId, StreamId, V1, Events2),
     ?assertEqual(3, V2),
 
     gen_server:stop(Worker),
@@ -377,7 +376,7 @@ gater_get_events_forward_test(Config) ->
     {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% Read forward
-    {ok, {ok, ReadEvents}} = reckon_gater_api:get_events(StoreId, StreamId, 0, 10, forward),
+    {ok, ReadEvents} = reckon_gater_api:get_events(StoreId, StreamId, 0, 10, forward),
 
     ?assertEqual(5, length(ReadEvents)),
 
@@ -400,7 +399,7 @@ gater_get_events_backward_test(Config) ->
     {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% Read backward from version 4
-    {ok, {ok, ReadEvents}} = reckon_gater_api:get_events(StoreId, StreamId, 4, 5, backward),
+    {ok, ReadEvents} = reckon_gater_api:get_events(StoreId, StreamId, 4, 5, backward),
 
     ?assertEqual(5, length(ReadEvents)),
 
@@ -423,7 +422,7 @@ gater_stream_forward_test(Config) ->
     {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% Stream forward from version 5, count 3
-    {ok, {ok, ReadEvents}} = reckon_gater_api:stream_forward(StoreId, StreamId, 5, 3),
+    {ok, ReadEvents} = reckon_gater_api:stream_forward(StoreId, StreamId, 5, 3),
 
     ?assertEqual(3, length(ReadEvents)),
     Versions = [E#event.version || E <- ReadEvents],
@@ -444,7 +443,7 @@ gater_stream_backward_test(Config) ->
     {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% Stream backward from version 7, count 3
-    {ok, {ok, ReadEvents}} = reckon_gater_api:stream_backward(StoreId, StreamId, 7, 3),
+    {ok, ReadEvents} = reckon_gater_api:stream_backward(StoreId, StreamId, 7, 3),
 
     ?assertEqual(3, length(ReadEvents)),
     Versions = [E#event.version || E <- ReadEvents],
@@ -485,7 +484,7 @@ gater_get_streams_test(Config) ->
     {ok, _} = reckon_gater_api:append_events(StoreId, Stream1, Events),
     {ok, _} = reckon_gater_api:append_events(StoreId, Stream2, Events),
 
-    {ok, {ok, Streams}} = reckon_gater_api:get_streams(StoreId),
+    {ok, Streams} = reckon_gater_api:get_streams(StoreId),
 
     ?assert(lists:member(Stream1, Streams)),
     ?assert(lists:member(Stream2, Streams)),
@@ -506,8 +505,9 @@ gater_wrong_version_test(Config) ->
     {ok, _} = reckon_gater_api:append_events(StoreId, StreamId, Events),
 
     %% Try to append with wrong version
-    {ok, Result} = reckon_gater_api:append_events(StoreId, StreamId, 99, Events),
-    ?assertMatch({error, {wrong_expected_version, _}}, Result),
+    %% Three fields: the expected version, and the one the stream is at.
+    ?assertMatch({error, {wrong_expected_version, 99, _}},
+        reckon_gater_api:append_events(StoreId, StreamId, 99, Events)),
 
     gen_server:stop(Worker),
     ok.
@@ -531,7 +531,7 @@ gater_invalid_stream_id_test(Config) ->
     %% Still the store's gateway: one bad id must not cost every other
     %% caller a supervisor restart.
     ?assert(is_process_alive(Worker)),
-    {ok, _} = reckon_gater_api:get_version(StoreId, reckon_gater_stream_id:new(<<"e2e">>)),
+    {ok, _} = reckon_gater_api:get_version(StoreId, reckon_gater_stream_id:new(<<"test">>)),
 
     gen_server:stop(Worker),
     ok.
@@ -549,8 +549,8 @@ gater_save_subscription_test(Config) ->
     Worker = start_gateway_worker(StoreId, Config),
     timer:sleep(200),
 
-    %% Save subscription (cast - always returns ok)
-    ok = reckon_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
+    %% Save subscription (synchronous since the gater made it a call)
+    {ok, _Key} = reckon_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
 
     %% Give time for cast to complete
     timer:sleep(100),
@@ -568,7 +568,7 @@ gater_get_subscriptions_test(Config) ->
     timer:sleep(200),
 
     %% Save subscription
-    ok = reckon_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
+    {ok, _Key} = reckon_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
     timer:sleep(100),
 
     %% Get subscriptions
@@ -587,11 +587,11 @@ gater_remove_subscription_test(Config) ->
     timer:sleep(200),
 
     %% Save subscription
-    ok = reckon_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
+    {ok, _Key} = reckon_gater_api:save_subscription(StoreId, stream, StreamId, SubName, 0, self()),
     timer:sleep(100),
 
     %% Remove subscription
-    ok = reckon_gater_api:remove_subscription(StoreId, stream, StreamId, SubName),
+    {ok, _} = reckon_gater_api:remove_subscription(StoreId, stream, StreamId, SubName),
     timer:sleep(100),
 
     gen_server:stop(Worker),
@@ -600,20 +600,28 @@ gater_remove_subscription_test(Config) ->
 %% @doc Test acknowledging an event via gater
 gater_ack_event_test(Config) ->
     StoreId = proplists:get_value(store_id, Config),
+    StreamId = generate_stream_id(),
     SubName = <<"test_subscription_ack">>,
 
     Worker = start_gateway_worker(StoreId, Config),
     timer:sleep(200),
 
-    %% Create a mock event
+    %% The subscription has to exist first: acking a subscription that is
+    %% not there is a caller error the gater surfaces as
+    %% {subscription_not_found, Name}, not a no-op, so the old version of
+    %% this test was asserting ack syntax against nothing at all.
+    {ok, _Key} = reckon_gater_api:save_subscription(
+        StoreId, stream, StreamId, SubName, 0, self()),
+    timer:sleep(100),
+
     Event = #{
-        stream_id => <<"test_stream">>,
+        stream_id => StreamId,
         version => 5,
         event_type => <<"test_event">>
     },
 
-    %% Ack event (cast - always returns ok)
-    ok = reckon_gater_api:ack_event(StoreId, SubName, self(), Event),
+    %% Ack event (synchronous since the gater made it a call)
+    {ok, _} = reckon_gater_api:ack_event(StoreId, SubName, self(), Event),
 
     gen_server:stop(Worker),
     ok.
@@ -735,7 +743,7 @@ gater_load_balance_test(Config) ->
     end, lists:seq(1, 10)),
 
     %% Verify all appends succeeded by reading
-    {ok, {ok, ReadEvents}} = reckon_gater_api:get_events(StoreId, StreamId, 0, 100, forward),
+    {ok, ReadEvents} = reckon_gater_api:get_events(StoreId, StreamId, 0, 100, forward),
     ?assertEqual(10, length(ReadEvents)),
 
     gen_server:stop(Worker1),
@@ -814,8 +822,11 @@ mock_worker_loop(StoreId) ->
 
 %% @private Generate a unique stream ID
 generate_stream_id() ->
-    Uuid = generate_uuid(),
-    <<"e2e_test$", Uuid/binary>>.
+    %% The grammar is [a-z]{1,32}-[a-f0-9]{32} (reckon_gater_stream_id).
+    %% The old e2e_test$<uuid> shape stopped being accepted when the
+    %% regex was tightened, and this suite is skipped by default, so it
+    %% rotted silently (reckon-db#5).
+    reckon_gater_stream_id:new(<<"test">>).
 
 %% @private Generate a test event
 generate_event(EventType) ->
