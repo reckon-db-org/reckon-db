@@ -107,9 +107,17 @@ jobs:
           HEX_API_URL: http://127.0.0.1:9
         run: rebar3 hex publish --repo hexpm --yes --dry-run
 
+  # The whole of lint-and-test.yml, on the tagged commit (a called workflow checks
+  # out the caller's github.sha, which on a tag push is the tag). A dispatch
+  # is a dry run of `verify' and skips it: it would test the branch, not the tag.
+  test:
+    name: Test the release commit
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/lint-and-test.yml
+
   publish:
     name: Publish to hex.pm
-    needs: verify
+    needs: [verify, test]
     # Only a pushed release tag publishes, whatever the triggers above say.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest

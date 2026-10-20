@@ -52,6 +52,9 @@ on:
       - 'assets/**'
       - 'doc/**'
   workflow_dispatch:
+  # publish-hex.yml runs this on the tagged commit and publishes only when it
+  # is green (mcl-om#34).
+  workflow_call:
 
 permissions:
   contents: read
@@ -65,7 +68,9 @@ env:
 # A newer push to the same branch supersedes a running check, except on main,
 # where every commit keeps its own result.
 concurrency:
-  group: lint-and-test-${{ github.ref }}
+  # github.workflow is the CALLER's name in a called run, so the run
+  # publish-hex calls never shares a group with this workflow's own run.
+  group: ${{ github.workflow }}-tests-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
