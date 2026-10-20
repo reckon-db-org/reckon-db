@@ -22,7 +22,7 @@
 ]).
 
 %% @doc Aggregate statistics for a store.
--spec store_stats(atom()) -> {ok, map()} | {error, term()}.
+-spec store_stats(atom()) -> {ok, map()}.
 store_stats(StoreId) ->
     StreamIds = list_streams_safe(StoreId),
     StreamCount = length(StreamIds),
@@ -39,7 +39,7 @@ store_stats(StoreId) ->
     }}.
 
 %% @doc List all snapshots across all streams in a store.
--spec list_all_snapshots(atom()) -> {ok, [map()]} | {error, term()}.
+-spec list_all_snapshots(atom()) -> {ok, [map()]}.
 list_all_snapshots(StoreId) ->
     StreamIds = list_streams_safe(StoreId),
     Snapshots = lists:flatmap(fun(StreamId) -> snapshots_for_stream(StoreId, StreamId) end, StreamIds),
@@ -47,14 +47,14 @@ list_all_snapshots(StoreId) ->
     {ok, Sorted}.
 
 %% @doc List all subscriptions for a store with their current state.
--spec list_subscriptions(atom()) -> {ok, [map()]} | {error, term()}.
+-spec list_subscriptions(atom()) -> {ok, [map()]}.
 list_subscriptions(StoreId) ->
     Subs = list_subs_safe(StoreId),
     SubMaps = lists:filtermap(fun safe_subscription_summary/1, Subs),
     {ok, SubMaps}.
 
 %% @doc Calculate lag for a specific subscription.
--spec subscription_lag(atom(), binary()) -> {ok, map()} | {error, term()}.
+-spec subscription_lag(atom(), binary()) -> {ok, map()} | {error, not_found}.
 subscription_lag(StoreId, SubscriptionName) ->
     %% find_by_name returns {ok, Key, Sub} — the previous {ok, Sub}
     %% match crashed the worker with case_clause on every successful
@@ -75,7 +75,7 @@ subscription_lag(StoreId, SubscriptionName) ->
     end.
 
 %% @doc Summary of event types in the store.
--spec event_type_summary(atom()) -> {ok, [map()]} | {error, term()}.
+-spec event_type_summary(atom()) -> {ok, [map()]}.
 event_type_summary(StoreId) ->
     StreamIds = list_streams_safe(StoreId),
     TypeCounts = lists:foldl(fun(StreamId, Acc) -> count_types_in_stream(StoreId, StreamId, Acc) end, #{}, StreamIds),
@@ -83,10 +83,17 @@ event_type_summary(StoreId) ->
     {ok, TypeList}.
 
 %% @doc Detailed info for a single stream.
--spec stream_info(atom(), binary()) -> {ok, map()} | {error, term()}.
+-spec stream_info(atom(), binary()) ->
+    {ok, map()} | {error, {stream_not_found, binary()}}.
 stream_info(StoreId, StreamId) ->
+    %% get_version/2 returns the version itself, or ?NO_STREAM for a
+    %% stream that is not there. Matching {ok, Version} here made every
+    %% call a case_clause, and through the gateway worker that meant a
+    %% dead process and a retry cycle for every stream id (reckon-db#6).
     case reckon_db_streams:get_version(StoreId, StreamId) of
-        {ok, Version} ->
+        ?NO_STREAM ->
+            {error, {stream_not_found, StreamId}};
+        Version ->
             {ok, #{
                 stream_id => StreamId,
                 version => Version,
@@ -94,9 +101,7 @@ stream_info(StoreId, StreamId) ->
                 first_event_at => get_event_timestamp(StoreId, StreamId, 0),
                 last_event_at => get_event_timestamp(StoreId, StreamId, Version),
                 snapshots => snapshot_coverage(StoreId, StreamId)
-            }};
-        {error, _} = Err ->
-            Err
+            }}
     end.
 
 %%====================================================================
@@ -112,7 +117,6 @@ list_streams_safe(StoreId) ->
 list_subs_safe(StoreId) ->
     case reckon_db_subscriptions_store:list(StoreId) of
         {ok, Subs} -> Subs;
-        Subs when is_list(Subs) -> Subs;
         _ -> []
     end.
 
@@ -120,9 +124,13 @@ sum_events(StoreId, StreamIds) ->
     lists:foldl(fun(StreamId, Acc) -> Acc + stream_event_count(StoreId, StreamId) end, 0, StreamIds).
 
 stream_event_count(StoreId, StreamId) ->
+    %% Same shape as stream_info/2. The old fallback matched nothing that
+    %% get_version/2 returns for a real stream, so this answered 0 for
+    %% every stream and every total built on it (store_stats total_events,
+    %% subscription_lag) was always zero (reckon-db#6).
     case reckon_db_streams:get_version(StoreId, StreamId) of
-        {ok, Version} -> Version + 1;
-        _ -> 0
+        ?NO_STREAM -> 0;
+        Version -> Version + 1
     end.
 
 %%====================================================================
@@ -138,12 +146,11 @@ snapshots_for_stream(StoreId, StreamId) ->
         _ -> []
     end.
 
+%% The snapshot store hands back #snapshot{} records. The map and
+%% catch-all clauses that used to sit here could not match, so dialyzer
+%% reports them the moment this module is reachable (reckon-db#6).
 snapshot_summary(StreamId, #snapshot{version = V, metadata = M, timestamp = T}) ->
-    #{stream_id => StreamId, version => V, timestamp => T, metadata => M};
-snapshot_summary(StreamId, #{version := V} = Map) ->
-    #{stream_id => StreamId, version => V, timestamp => maps:get(timestamp, Map, undefined), metadata => maps:get(metadata, Map, #{})};
-snapshot_summary(StreamId, _) ->
-    #{stream_id => StreamId, version => unknown, timestamp => undefined, metadata => #{}}.
+    #{stream_id => StreamId, version => V, timestamp => T, metadata => M}.
 
 snapshot_coverage(StoreId, StreamId) ->
     case reckon_db_snapshots_store:list(StoreId, StreamId) of
@@ -152,19 +159,14 @@ snapshot_coverage(StoreId, StreamId) ->
         _ -> #{count => 0, latest_version => undefined}
     end.
 
-latest_snap_version(#snapshot{version = V}) -> V;
-latest_snap_version(#{version := V}) -> V;
-latest_snap_version(_) -> undefined.
+latest_snap_version(#snapshot{version = V}) -> V.
 
 %%====================================================================
 %% Internal: Subscriptions
 %%====================================================================
 
 safe_subscription_summary(Sub) ->
-    case subscription_summary(Sub) of
-        #{} = Map -> {true, Map};
-        _ -> false
-    end.
+    {true, subscription_summary(Sub)}.
 
 subscription_summary(#subscription{} = Sub) ->
     #{
@@ -177,9 +179,7 @@ subscription_summary(#subscription{} = Sub) ->
         subscriber_pid => format_pid(Sub#subscription.subscriber_pid)
     };
 subscription_summary(#{subscription_name := _} = Map) ->
-    Map#{subscriber_pid => format_pid(maps:get(subscriber_pid, Map, undefined))};
-subscription_summary(_) ->
-    #{}.
+    Map#{subscriber_pid => format_pid(maps:get(subscriber_pid, Map, undefined))}.
 
 extract_checkpoint(#subscription{checkpoint = CP}) when is_integer(CP) -> CP;
 extract_checkpoint(_) -> -1.
@@ -218,12 +218,13 @@ maps_to_sorted_list(TypeCounts) ->
 %% Internal: Timestamps
 %%====================================================================
 
+%% A read returns #event{} records, never maps. This used to route
+%% through extract_timestamp/1, whose map clause could not match and
+%% whose catch-all could not either once that was gone; dialyzer only
+%% said so after stream_info/2 stopped being a case_clause and the call
+%% became reachable (reckon-db#6).
 get_event_timestamp(StoreId, StreamId, Version) ->
     case reckon_db_streams:read(StoreId, StreamId, Version, 1, forward) of
-        {ok, [Event | _]} -> extract_timestamp(Event);
+        {ok, [#event{timestamp = T} | _]} -> T;
         _ -> undefined
     end.
-
-extract_timestamp(#event{timestamp = T}) -> T;
-extract_timestamp(#{timestamp := T}) -> T;
-extract_timestamp(_) -> undefined.

@@ -221,8 +221,12 @@ event_types_with_events() ->
 %%====================================================================
 
 stream_info_found() ->
+    %% get_version/2 returns the version itself, not {ok, Version}. The
+    %% old stub returned a tuple the real function never produces, which
+    %% is why this test passed while stream_info raised case_clause on
+    %% every real call (reckon-db#6).
     meck:expect(reckon_db_streams, get_version,
-        fun(?STORE, <<"s1">>) -> {ok, 10} end),
+        fun(?STORE, <<"s1">>) -> 10 end),
     meck:expect(reckon_db_streams, read,
         fun(?STORE, <<"s1">>, 0, 1, forward) ->
                 {ok, [#event{timestamp = 1000}]};
@@ -241,8 +245,8 @@ stream_info_found() ->
 
 stream_info_not_found() ->
     meck:expect(reckon_db_streams, get_version,
-        fun(?STORE, <<"missing">>) -> {error, not_found} end),
-    ?assertEqual({error, not_found},
+        fun(?STORE, <<"missing">>) -> ?NO_STREAM end),
+    ?assertEqual({error, {stream_not_found, <<"missing">>}},
         reckon_db_store_inspector:stream_info(?STORE, <<"missing">>)).
 
 %%====================================================================
@@ -257,8 +261,8 @@ mock_streams(StreamIds) ->
     meck:expect(reckon_db_streams, get_version,
         fun(?STORE, Id) ->
             case maps:find(Id, get(mock_versions)) of
-                {ok, V} -> {ok, V};
-                error -> {ok, 0}
+                {ok, V} -> V;
+                error -> ?NO_STREAM
             end
         end),
     meck:expect(reckon_db_snapshots_store, list,

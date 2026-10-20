@@ -1,5 +1,5 @@
 # Known dialyzer findings, recorded as a ratchet. See scripts/dialyzer_ratchet.sh.
-# dialyzer reported 214 when this was written (files for lint, warnings for dialyzer).
+# dialyzer reported 199 when this was written (files for lint, warnings for dialyzer).
 # A new finding fails CI. A fixed finding should have its line deleted here.
 src/reckon_db_app.erl	229929d0a14f	Expression produces a value of type 'ok' | {'error','already_exists'}, but this value is unmatched
 src/reckon_db_app.erl	f0ceac231f4c	The specification for reckon_db_app:start/0 states that the function might also return {'ok',pid()} but the in
@@ -160,24 +160,9 @@ src/reckon_db_store_healer.erl	bf2f9b85cac6	Type specification reckon_db_store_h
 src/reckon_db_store_healer.erl	ce7ed2d225ab	Type specification reckon_db_store_healer:bounded(fun(() -> term())) -> {'ok',term()} | {'error',term()} is a 
 src/reckon_db_store_healer.erl	d845dd221a5e	Type specification reckon_db_store_healer:self_status(map()) -> 'healthy' | 'no_leader' is a supertype of the 
 src/reckon_db_store_healer.erl	dfbedc41ea42	Type specification reckon_db_store_healer:is_orphan(map()) -> boolean() is a supertype of the success typing: 
-src/reckon_db_store_inspector.erl	1c51d463caf5	Function stream_info/2 has no local return
-src/reckon_db_store_inspector.erl	20f6c5461b00	The pattern {'ok', Version} can never match the type integer()
-src/reckon_db_store_inspector.erl	20f6c5461b00	The pattern {'ok', Version} can never match the type integer()
-src/reckon_db_store_inspector.erl	23bec6199ac7	Invalid type specification for function reckon_db_store_inspector:stream_info/2. The success typing is (_,_) -
-src/reckon_db_store_inspector.erl	29722630e9b2	The specification for reckon_db_store_inspector:store_stats/1 states that the function might also return {'err
-src/reckon_db_store_inspector.erl	2d6c3eb41a7b	Function snapshot_coverage/2 will never be called
-src/reckon_db_store_inspector.erl	374ad831ba70	The specification for reckon_db_store_inspector:list_all_snapshots/1 states that the function might also retur
-src/reckon_db_store_inspector.erl	409a179ac26c	Type specification reckon_db_store_inspector:subscription_lag(atom(),binary()) -> {'ok',map()} | {'error',term
-src/reckon_db_store_inspector.erl	61cc6a460969	Function get_event_timestamp/3 will never be called
-src/reckon_db_store_inspector.erl	62db868079e6	The pattern Err = {'error', _} can never match the type integer()
-src/reckon_db_store_inspector.erl	7a72a77ffee9	Function extract_timestamp/1 will never be called
-src/reckon_db_store_inspector.erl	80191ac12125	The variable _ can never match since previous clauses completely covered the type #{'subscriber_pid'=>binary()
-src/reckon_db_store_inspector.erl	9b9c428b0f3d	The pattern <StreamId, Map = #{'version':=V}> can never match the type <binary(),#snapshot{stream_id::binary()
-src/reckon_db_store_inspector.erl	9bfec6d1fe47	The specification for reckon_db_store_inspector:event_type_summary/1 states that the function might also retur
-src/reckon_db_store_inspector.erl	ae4b3b4bb209	Function latest_snap_version/1 will never be called
-src/reckon_db_store_inspector.erl	af48fa18f1cc	Guard test is_list(Subs::{'error',_}) can never succeed
-src/reckon_db_store_inspector.erl	b3f9414ef9dc	The pattern <StreamId, _> can never match since previous clauses completely covered the type <binary(),#snapsh
-src/reckon_db_store_inspector.erl	f6fcb808e4c0	The specification for reckon_db_store_inspector:list_subscriptions/1 states that the function might also retur
+src/reckon_db_store_inspector.erl	2286084d229f	Type specification reckon_db_store_inspector:store_stats(atom()) -> {'ok',map()} is a supertype of the success
+src/reckon_db_store_inspector.erl	544df15cd910	Type specification reckon_db_store_inspector:subscription_lag(atom(),binary()) -> {'ok',map()} | {'error','not
+src/reckon_db_store_inspector.erl	697419a8bc8e	Type specification reckon_db_store_inspector:stream_info(atom(),binary()) -> {'ok',map()} | {'error',{'stream_
 src/reckon_db_streams.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
 src/reckon_db_streams.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
 src/reckon_db_streams.erl	0d2296c883b7	The variable _ can never match since previous clauses completely covered the type []
