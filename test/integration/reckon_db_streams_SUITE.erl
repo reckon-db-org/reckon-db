@@ -12,6 +12,9 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
+%% For #retry_config{}, to keep a regression off the default backoff
+%% ladder. Both headers guard DEFAULT_TIMEOUT, so order does not matter.
+-include_lib("reckon_gater/include/reckon_gater.hrl").
 -include("reckon_db.hrl").
 
 %% CT callbacks
@@ -58,6 +61,7 @@
     delete_stream/1,
     delete_rejects_invalid_stream_id/1,
     worker_answers_invalid_stream_id/1,
+    invalid_stream_id_is_not_retried/1,
     delete_nonexistent_stream/1,
 
     %% read_all_global / cache tests
@@ -119,6 +123,7 @@ groups() ->
             delete_stream,
             delete_rejects_invalid_stream_id,
             worker_answers_invalid_stream_id,
+            invalid_stream_id_is_not_retried,
             delete_nonexistent_stream
         ]},
         {read_all_global_tests, [sequence], [
@@ -511,6 +516,33 @@ worker_answers_invalid_stream_id(Config) ->
 
     ?assertEqual({reply, {error, {invalid_stream_id, malformed_user_id, BadId}}, State},
         reckon_db_gateway_worker:handle_call({get_version, StoreId, BadId}, self(), State)),
+    ok.
+
+%% @doc The worker's answer for a bad id is a shape the gater's retry
+%% layer treats as permanent, so the caller gets it on the first attempt
+%% rather than at the end of the backoff ladder (reckon-db#4).
+%%
+%% This is the property the issue is about: not just "an error comes
+%% back", but "it comes back once".
+invalid_stream_id_is_not_retried(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
+    State = {state, StoreId, undefined},
+    Counter = counters:new(1, []),
+
+    Attempt = fun() ->
+        counters:add(Counter, 1, 1),
+        {reply, Reply, _} =
+            reckon_db_gateway_worker:handle_call({get_version, StoreId, BadId}, self(), State),
+        Reply
+    end,
+    %% 1ms delays: a regression fails in milliseconds instead of sitting
+    %% in the default 100ms-to-30s ladder.
+    RetryConfig = #retry_config{base_delay_ms = 1, max_delay_ms = 1, max_retries = 3},
+
+    ?assertEqual({error, {invalid_stream_id, malformed_user_id, BadId}},
+        reckon_gater_retry:with_retry(StoreId, Attempt, RetryConfig)),
+    ?assertEqual(1, counters:get(Counter, 1)),
     ok.
 
 %% @doc A malformed id on delete is answered, not raised (reckon-db#4).

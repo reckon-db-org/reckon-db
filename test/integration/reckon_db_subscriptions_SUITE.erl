@@ -31,6 +31,7 @@
 -export([
     %% Subscribe/Unsubscribe tests
     subscribe_to_stream/1,
+    subscribe_rejects_malformed_stream_id/1,
     subscribe_to_event_type/1,
     subscribe_to_event_pattern/1,
     subscribe_with_pool_size/1,
@@ -67,6 +68,7 @@ groups() ->
     [
         {subscribe_tests, [sequence], [
             subscribe_to_stream,
+            subscribe_rejects_malformed_stream_id,
             subscribe_to_event_type,
             subscribe_to_event_pattern,
             subscribe_with_pool_size,
@@ -179,6 +181,29 @@ subscribe_to_stream(Config) ->
 
     %% Cleanup
     ok = reckon_db_subscriptions:unsubscribe(StoreId, Key),
+    ok.
+
+%% @doc A stream subscription whose selector is not a stream id is
+%% refused, and does not survive in the store (reckon-db#4).
+%%
+%% The filter raised on the malformed id after the subscription record
+%% had already been written, so the cleanup branch in
+%% finalize_subscription never ran: the caller saw a dead worker, the
+%% poisoned record stayed in the store, showed up in list, and raised
+%% again on the next restore or trigger re-register.
+subscribe_rejects_malformed_stream_id(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
+    Name = <<"poisoned_subscription">>,
+
+    ?assertMatch(
+        {error, {invalid_filter, {invalid_stream_id, malformed_user_id, BadId}}},
+        reckon_db_subscriptions:subscribe(StoreId, stream, BadId, Name)),
+
+    {ok, Subscriptions} = reckon_db_subscriptions:list(StoreId),
+    Stored = [S#subscription.subscription_name || S <- Subscriptions,
+                                                 is_record(S, subscription)],
+    ?assertEqual(false, lists:member(Name, Stored)),
     ok.
 
 %% @doc Test subscribing to an event type

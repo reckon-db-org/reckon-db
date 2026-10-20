@@ -498,7 +498,8 @@ match_subscription(Type, SubscriptionName, Subscriptions) ->
 %% Supports both evoq-style types (stream, event_type, etc.) and
 %% gater-style types (by_stream, by_event_type, etc.) for compatibility
 %% with the reckon_evoq_adapter translation layer.
--spec create_filter(subscription_type(), binary() | map()) -> term().
+-spec create_filter(subscription_type(), binary() | map()) ->
+    khepri_evf:tree_event_filter() | {error, term()}.
 create_filter(stream, StreamId) ->
     reckon_db_filters:by_stream(StreamId);
 create_filter(by_stream, StreamId) ->

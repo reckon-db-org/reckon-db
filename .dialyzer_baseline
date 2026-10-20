@@ -1,5 +1,5 @@
 # Known dialyzer findings, recorded as a ratchet. See scripts/dialyzer_ratchet.sh.
-# dialyzer reported 215 when this was written (files for lint, warnings for dialyzer).
+# dialyzer reported 214 when this was written (files for lint, warnings for dialyzer).
 # A new finding fails CI. A fixed finding should have its line deleted here.
 src/reckon_db_app.erl	229929d0a14f	Expression produces a value of type 'ok' | {'error','already_exists'}, but this value is unmatched
 src/reckon_db_app.erl	f0ceac231f4c	The specification for reckon_db_app:start/0 states that the function might also return {'ok',pid()} but the in
@@ -206,7 +206,6 @@ src/reckon_db_subscriptions.erl	763691bb9e8e	The call reckon_db_filters:by_tags(
 src/reckon_db_subscriptions.erl	7783afbc9cc8	Expression produces a value of type 'ok' | {'error','no_emitters'}, but this value is unmatched
 src/reckon_db_subscriptions.erl	879272e112d9	Function activate_trigger/4 has no local return
 src/reckon_db_subscriptions.erl	8ce3739c1777	The specification for reckon_db_subscriptions:register_trigger/3 states that the function might also return 'o
-src/reckon_db_subscriptions.erl	958f68a2522f	Type specification reckon_db_subscriptions:create_filter(subscription_type(),binary() | map()) -> term() is a 
 src/reckon_db_subscriptions.erl	aadbff993aa9	The pattern 'ok' can never match the type {'error',_}
 src/reckon_db_subscriptions.erl	aadbff993aa9	The pattern 'ok' can never match the type {'error',_}
 src/reckon_db_subscriptions.erl	db98fa36c4cb	Type specification reckon_db_subscriptions:do_catchup(atom(),pid(),non_neg_integer(),atom(),binary() | map() |

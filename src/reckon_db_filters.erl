@@ -53,12 +53,18 @@
 %% The `$' namespace is only special at the sentinel level
 %% (`$all').
 %%
-%% Returns `{error, empty_selector}' for an empty binary; every
-%% other input builds a filter. Append-time validation of the
-%% user-stream-id shape lives in {@link reckon_db_streams} (and
-%% is currently advisory; a strict-rejection mode is a follow-up).
--spec by_stream(binary()) ->
-    khepri_evf:tree_event_filter() | {error, empty_selector}.
+%% Returns `{error, empty_selector}' for an empty binary, and
+%% `reckon_db_stream_path:validate/1''s error for an id the grammar
+%% rejects; every other input builds a filter.
+%%
+%% The malformed case used to raise from the path builder, and it raised
+%% after the subscription record had already been written: the caller's
+%% cleanup branch never ran, so a poisoned subscription stayed in the
+%% store and raised again on the next restore or trigger re-register
+%% (reckon-db#4). Returning the error lets that branch delete it.
+-spec by_stream(term()) ->
+    khepri_evf:tree_event_filter()
+    | {error, empty_selector | reckon_db_stream_path:validation_error()}.
 by_stream(<<"$all">>) ->
     %% Model C layout: [streams, Type, Id, Version]. The $all selector
     %% matches every regular event leaf across all aggregate types.
@@ -74,20 +80,26 @@ by_stream(<<"$all">>) ->
     );
 by_stream(<<>>) ->
     {error, empty_selector};
-by_stream(Stream) when is_binary(Stream) ->
-    %% A literal stream id is split into its structural {Type, Id} path
-    %% segments so the trigger watches exactly [streams, Type, Id, *].
-    [streams, Type, Id] = reckon_db_stream_path:stream_path(Stream),
-    khepri_evf:tree(
-        [streams,
-         Type,
-         Id,
-         #if_all{conditions = [
-             #if_path_matches{regex = any},
-             #if_has_data{has_data = true}
-         ]}],
-        #{on_actions => [create]}
-    ).
+by_stream(Stream) ->
+    case reckon_db_stream_path:validate(Stream) of
+        ok ->
+            %% A literal stream id is split into its structural {Type, Id}
+            %% path segments so the trigger watches exactly
+            %% [streams, Type, Id, *].
+            [streams, Type, Id] = reckon_db_stream_path:stream_path(Stream),
+            khepri_evf:tree(
+                [streams,
+                 Type,
+                 Id,
+                 #if_all{conditions = [
+                     #if_path_matches{regex = any},
+                     #if_has_data{has_data = true}
+                 ]}],
+                #{on_actions => [create]}
+            );
+        {error, _} = Invalid ->
+            Invalid
+    end.
 
 %% @doc Create a filter for events of a specific type
 %%

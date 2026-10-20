@@ -529,8 +529,28 @@ dispatch(_Request, _From, State) ->
 %% Snapshot Operations (handle_cast)
 %%====================================================================
 
+%% @private The cast-side twin of the handle_call boundary.
+%%
+%% A cast has no caller to answer, so a malformed stream id is logged and
+%% dropped instead of killing the worker. record_snapshot is where this
+%% bites: save/5 reaches event_path, which raises for an id that does not
+%% decompose, and the death cost every in-flight call a retry cycle
+%% (reckon-db#4, second half).
+%%
+%% Only that one raise is translated; anything else still crashes the
+%% worker.
+handle_cast(Msg, State) ->
+    try
+        dispatch_cast(Msg, State)
+    catch
+        error:{invalid_stream_id, StreamId} ->
+            logger:warning("Dropped ~p cast: invalid stream id ~p",
+                           [msg_tag(Msg), StreamId]),
+            {noreply, State}
+    end.
+
 %% Record snapshot
-handle_cast({record_snapshot, _StoreId, _SourceUuid, StreamUuid, Version, SnapshotRecord}, State) ->
+dispatch_cast({record_snapshot, _StoreId, _SourceUuid, StreamUuid, Version, SnapshotRecord}, State) ->
     #state{store_id = StoreId} = State,
     %% The gateway wraps the payload as #{data, metadata, version}. Unwrap it so
     %% data and metadata land in their own snapshot fields (save/5) instead of
@@ -542,7 +562,7 @@ handle_cast({record_snapshot, _StoreId, _SourceUuid, StreamUuid, Version, Snapsh
     {noreply, State};
 
 %% Delete snapshot
-handle_cast({delete_snapshot, _StoreId, _SourceUuid, StreamUuid, Version}, State) ->
+dispatch_cast({delete_snapshot, _StoreId, _SourceUuid, StreamUuid, Version}, State) ->
     #state{store_id = StoreId} = State,
     reckon_db_snapshots:delete_at(StoreId, StreamUuid, Version),
     {noreply, State};
@@ -552,13 +572,13 @@ handle_cast({delete_snapshot, _StoreId, _SourceUuid, StreamUuid, Version}, State
 %%====================================================================
 
 %% Register schema
-handle_cast({register_schema, _StoreId, EventType, Schema}, State) ->
+dispatch_cast({register_schema, _StoreId, EventType, Schema}, State) ->
     #state{store_id = StoreId} = State,
     reckon_db_schema:register(StoreId, EventType, Schema),
     {noreply, State};
 
 %% Unregister schema
-handle_cast({unregister_schema, _StoreId, EventType}, State) ->
+dispatch_cast({unregister_schema, _StoreId, EventType}, State) ->
     #state{store_id = StoreId} = State,
     reckon_db_schema:unregister(StoreId, EventType),
     {noreply, State};
@@ -568,31 +588,31 @@ handle_cast({unregister_schema, _StoreId, EventType}, State) ->
 %%====================================================================
 
 %% Create link
-handle_cast({create_link, _StoreId, LinkSpec}, State) ->
+dispatch_cast({create_link, _StoreId, LinkSpec}, State) ->
     #state{store_id = StoreId} = State,
     reckon_db_links:create(StoreId, LinkSpec),
     {noreply, State};
 
 %% Delete link
-handle_cast({delete_link, _StoreId, LinkName}, State) ->
+dispatch_cast({delete_link, _StoreId, LinkName}, State) ->
     #state{store_id = StoreId} = State,
     reckon_db_links:delete(StoreId, LinkName),
     {noreply, State};
 
 %% Start link
-handle_cast({start_link, _StoreId, LinkName}, State) ->
+dispatch_cast({start_link, _StoreId, LinkName}, State) ->
     #state{store_id = StoreId} = State,
     reckon_db_links:start(StoreId, LinkName),
     {noreply, State};
 
 %% Stop link
-handle_cast({stop_link, _StoreId, LinkName}, State) ->
+dispatch_cast({stop_link, _StoreId, LinkName}, State) ->
     #state{store_id = StoreId} = State,
     reckon_db_links:stop(StoreId, LinkName),
     {noreply, State};
 
 %% Unknown cast
-handle_cast(_Msg, State) ->
+dispatch_cast(_Msg, State) ->
     {noreply, State}.
 
 %%====================================================================
@@ -615,6 +635,12 @@ terminate(_Reason, #state{store_id = StoreId}) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+%% @private The tag of a cast message, so a dropped cast can be logged by
+%% name without dumping a term that may be large.
+-spec msg_tag(term()) -> term().
+msg_tag(Msg) when is_tuple(Msg), tuple_size(Msg) > 0 -> element(1, Msg);
+msg_tag(Msg) -> Msg.
 
 %% @private Find subscription by name across all types
 -spec find_subscription_by_name(atom(), binary()) -> {ok, map()} | {error, not_found}.
