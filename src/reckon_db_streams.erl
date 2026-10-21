@@ -1705,17 +1705,50 @@ check_expected_version(ExpectedVersion, CurrentVersion) ->
     {ok, non_neg_integer()} | {error, term()}.
 append_events_to_stream(StoreId, StreamId, CurrentVersion, CounterExisted,
                         ExpectedVersion, Events) ->
-    Now = erlang:system_time(millisecond),
-    EpochUs = erlang:system_time(microsecond),
-
     %% Resolve the tamper-resistance context for this batch. For
     %% stores with integrity disabled (the default and only mode
     %% pre-2.1) this is a constant `disabled` pass-through. For
     %% integrity-enabled stores we load the HMAC key, ensure the
     %% per-stream watermark exists, and resolve the initial chain
     %% tip — all once, before the per-event loop.
-    IntegrityCtx = setup_integrity(StoreId, StreamId, CurrentVersion),
-    InitialTip = resolve_initial_tip(StoreId, StreamId, CurrentVersion + 1, IntegrityCtx),
+    %%
+    %% Either step can refuse the batch: a watermark that is not sealed, or
+    %% one that sits above the version this append would write, is reported
+    %% as {error, _} and nothing is written. Failing the append loudly is the
+    %% point - the alternative is stamping a chain onto a stream whose start
+    %% the store cannot vouch for.
+    case setup_integrity(StoreId, StreamId, CurrentVersion) of
+        {error, _} = SetupError ->
+            SetupError;
+        IntegrityCtx ->
+            append_stamped(StoreId, StreamId, CurrentVersion, CounterExisted,
+                           ExpectedVersion, Events, IntegrityCtx)
+    end.
+
+%% @private The batch, once the integrity context is known.
+-spec append_stamped(atom(), binary(), integer(), boolean(), integer(),
+                     [new_event()], integrity_ctx()) ->
+    {ok, non_neg_integer()} | {error, term()}.
+append_stamped(StoreId, StreamId, CurrentVersion, CounterExisted,
+               ExpectedVersion, Events, IntegrityCtx) ->
+    case resolve_initial_tip(StoreId, StreamId, CurrentVersion + 1,
+                             IntegrityCtx) of
+        {error, _} = TipError ->
+            TipError;
+        InitialTip ->
+            append_batch(StoreId, StreamId, CurrentVersion, CounterExisted,
+                         ExpectedVersion, Events, IntegrityCtx, InitialTip)
+    end.
+
+%% @private Build and write the batch.
+-spec append_batch(atom(), binary(), integer(), boolean(), integer(),
+                   [new_event()], integrity_ctx(),
+                   binary() | undefined) ->
+    {ok, non_neg_integer()} | {error, term()}.
+append_batch(StoreId, StreamId, CurrentVersion, CounterExisted,
+             ExpectedVersion, Events, IntegrityCtx, InitialTip) ->
+    Now = erlang:system_time(millisecond),
+    EpochUs = erlang:system_time(microsecond),
 
     %% Build the event records AND their secondary-index entries OUTSIDE
     %% the transaction. Integrity stamping (HMAC + chain) reads the HMAC
@@ -1973,17 +2006,47 @@ bump_global_event_count(N) ->
     disabled |
     {enabled, Key :: binary(), ChainStart :: non_neg_integer()}.
 
--spec setup_integrity(atom(), binary(), integer()) -> integrity_ctx().
+-spec setup_integrity(atom(), binary(), integer()) ->
+    integrity_ctx()
+        | {error, {chain_start_unauthenticated, non_neg_integer()}
+                 | {integrity_enabled_without_key, atom()}}.
 setup_integrity(StoreId, StreamId, CurrentVersion) ->
     case reckon_db_integrity_key:is_enabled(StoreId) of
         false ->
             disabled;
         true ->
-            NextVersion = CurrentVersion + 1,
-            {ok, ChainStart} = reckon_db_chain_watermark:set_if_absent(
-                StoreId, StreamId, NextVersion),
-            Key = reckon_db_integrity_key:get(StoreId),
-            {enabled, Key, ChainStart}
+            setup_integrity_enabled(StoreId, StreamId, CurrentVersion + 1)
+    end.
+
+%% @private The watermark, or the reason this batch cannot be stamped.
+%%
+%% An unsealed watermark is an error and is left alone: only `seal_all/1'
+%% seals, as an upgrade step the operator runs deliberately. An append that
+%% sealed whatever bare integer it found would launder a forged chain start
+%% into an authenticated one, and every event below it would read as legacy.
+%%
+%% A store with integrity enabled and no key cannot stamp anything either;
+%% that is a configuration fault, answered rather than crashed on.
+-spec setup_integrity_enabled(atom(), binary(), non_neg_integer()) ->
+    {enabled, binary(), non_neg_integer()}
+        | {error, {chain_start_unauthenticated, non_neg_integer()}
+                 | {integrity_enabled_without_key, atom()}}.
+setup_integrity_enabled(StoreId, StreamId, NextVersion) ->
+    case reckon_db_chain_watermark:set_if_absent(StoreId, StreamId, NextVersion) of
+        {ok, ChainStart} ->
+            enabled_ctx(StoreId, ChainStart);
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private
+-spec enabled_ctx(atom(), non_neg_integer()) ->
+    {enabled, binary(), non_neg_integer()}
+        | {error, {integrity_enabled_without_key, atom()}}.
+enabled_ctx(StoreId, ChainStart) ->
+    case reckon_db_integrity_key:get(StoreId) of
+        Key when is_binary(Key) -> {enabled, Key, ChainStart};
+        _ -> {error, {integrity_enabled_without_key, StoreId}}
     end.
 
 %% @private Resolve the chain-tip value that the FIRST event in this
@@ -1994,11 +2057,21 @@ setup_integrity(StoreId, StreamId, CurrentVersion) ->
 %%   tip is the genesis 32-zero-byte value.
 %% Enabled, later batch (NextVersion > ChainStart):
 %%   tip is computed from the predecessor event on disk.
+%%
+%% A watermark ABOVE the version this batch would write is an error, not a
+%% crash: the watermark is a tree node, and one written past the stream by
+%% hand (or sealed there by an operator) must fail the append with a reason
+%% the caller can report, not take the gateway worker down with it.
 -spec resolve_initial_tip(
     atom(), binary(), non_neg_integer(), integrity_ctx()
-) -> binary() | undefined.
+) -> binary() | undefined | {error, term()}.
 resolve_initial_tip(_StoreId, _StreamId, _NextVersion, disabled) ->
     undefined;
+resolve_initial_tip(_StoreId, _StreamId, NextVersion,
+                    {enabled, _Key, ChainStart})
+        when NextVersion < ChainStart ->
+    {error, {chain_start_ahead_of_append,
+             #{next_version => NextVersion, chain_start => ChainStart}}};
 resolve_initial_tip(_StoreId, _StreamId, NextVersion,
                     {enabled, _Key, ChainStart})
         when NextVersion =:= ChainStart ->
@@ -2016,13 +2089,13 @@ resolve_initial_tip(StoreId, StreamId, NextVersion,
         Other ->
             %% Invariant violation: stream's watermark says the
             %% predecessor should be integrity-bearing, but we cannot
-            %% find a usable predecessor. Surface fast — replay
-            %% won't be able to verify anyway.
-            erlang:error({integrity_setup_failed,
-                          #{stream_id => StreamId,
-                            looking_for_version => PrevVersion,
-                            chain_start => ChainStart,
-                            got => Other}})
+            %% find a usable predecessor. Answered as an error, so the
+            %% caller reports it instead of the append dying mid-way.
+            {error, {integrity_setup_failed,
+                     #{stream_id => StreamId,
+                       looking_for_version => PrevVersion,
+                       chain_start => ChainStart,
+                       got => Other}}}
     end.
 
 %% @private Compute and attach the integrity fields for one event.
@@ -2220,15 +2293,21 @@ verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode, Key, Limit) ->
 %% violation rather than a skip.
 -spec legacy_limit(atom(), binary(), reckon_db_chain_watermark:watermark(),
                    [event()]) -> {ok, non_neg_integer() | undefined} | {error, map()}.
+legacy_limit(_StoreId, _StreamId, _Watermark, []) ->
+    {ok, undefined};
 legacy_limit(StoreId, StreamId, {sealed, Version}, _Events) ->
     _ = StoreId,
     _ = StreamId,
     {ok, Version};
 legacy_limit(_StoreId, _StreamId, {unsealed, Version}, Events) ->
-    case any_chain_bearing(Events) of
-        false -> {ok, Version};
-        true -> {error, unauthenticated_watermark(Events, Version)}
-    end;
+    %% Never believed, whatever the batch carries. A bare integer (or a
+    %% sealed record whose MAC does not verify) is a node anybody who can
+    %% write the tree can put there, and `seal_all/1' is the documented
+    %% upgrade step that replaces it. Trusting it whenever this particular
+    %% batch happens not to carry a chain is the whole attack: clear the
+    %% integrity fields off every event, write a large bare number, and the
+    %% store hands the tampered stream back unverified.
+    {error, unauthenticated_watermark(Events, Version)};
 legacy_limit(_StoreId, _StreamId, undefined, Events) ->
     case any_chain_bearing(Events) of
         false -> {ok, undefined};

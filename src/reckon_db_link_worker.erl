@@ -114,9 +114,27 @@ init_link(StoreId, Name, Link) ->
     %% Subscribing first is what closes the window between "the store starts
     %% delivering" and "the fence is known". Everything delivered from here
     %% until the fences are taken waits in the mailbox and is at or below them.
-    case subscribe(StoreId, Link, Name) of
+    %% A raise is folded into the same failure path as a returned error, so a
+    %% link that cannot start stops once instead of restart-looping.
+    case subscribe_caught(StoreId, Link, Name) of
         {ok, Key} -> start_subscribed(StoreId, Name, Link, Key);
         {error, Reason} -> fail(StoreId, Name, {link_subscribe_failed, Reason})
+    end.
+
+%% @private A link that RAISES fails the way one that returns {error, _} does.
+%%
+%% A raise inside a gen_server callback takes the child down abnormally, and a
+%% transient child is restarted at once: a link whose input makes it raise
+%% would crash-loop, trip links_sup's intensity and restart the links
+%% supervisor with every other link under it. Folding the exception into the
+%% ordinary failure path stops it at that link, with its status and the reason
+%% recorded. Errors and throws are folded; exits still propagate, so a process
+%% being shut down is not turned into a link failure.
+subscribe_caught(StoreId, Link, Name) ->
+    try subscribe(StoreId, Link, Name)
+    catch
+        error:Reason:Stack -> {error, {link_raised, Reason, Stack}};
+        throw:Reason -> {error, {link_raised, {throw, Reason}}}
     end.
 
 %% @private A link that cannot do its job stops, and says so in the store.
@@ -140,12 +158,23 @@ record_failure(StoreId, Name, Reason) ->
 %% @private Deliveries are already stacking up in the mailbox; the fences are
 %% taken now and the backfill runs behind them.
 start_subscribed(StoreId, Name, Link, Key) ->
-    Fences = take_fences(StoreId, Link),
-    State = #state{store_id = StoreId, name = Name, link = Link,
-                   key = Key, fences = Fences},
-    case backfill(State) of
+    case take_fences_and_backfill(StoreId, Name, Link, Key) of
         {ok, State1} -> {ok, State1};
         {error, Reason} -> fail(StoreId, Name, Reason)
+    end.
+
+%% @private A raise here is a link failure, not a supervisor event (see
+%% subscribe_caught/3).
+-spec take_fences_and_backfill(atom(), term(), term(), binary()) ->
+    {ok, #state{}} | {error, term()}.
+take_fences_and_backfill(StoreId, Name, Link, Key) ->
+    try
+        Fences = take_fences(StoreId, Link),
+        backfill(#state{store_id = StoreId, name = Name, link = Link,
+                        key = Key, fences = Fences})
+    catch
+        error:Reason:Stack -> {error, {link_raised, Reason, Stack}};
+        throw:Reason -> {error, {link_raised, {throw, Reason}}}
     end.
 
 %% @private
@@ -156,7 +185,7 @@ handle_cast(_Request, State) -> {noreply, State}.
 
 %% @private The live path: what the store's emitter delivers, above the fence.
 handle_info({events, Events}, State) ->
-    case link_live(Events, State) of
+    case link_live_caught(Events, State) of
         {ok, State1} ->
             {noreply, State1};
         {error, Reason} ->
@@ -166,6 +195,15 @@ handle_info({events, Events}, State) ->
     end;
 handle_info(_Info, State) ->
     {noreply, State}.
+
+%% @private
+-spec link_live_caught([term()], #state{}) -> {ok, #state{}} | {error, term()}.
+link_live_caught(Events, State) ->
+    try link_live(Events, State)
+    catch
+        error:Reason:Stack -> {error, {link_raised, Reason, Stack}};
+        throw:Reason -> {error, {link_raised, {throw, Reason}}}
+    end.
 
 %% @private
 terminate(_Reason, #state{store_id = StoreId, key = Key}) when is_binary(Key) ->

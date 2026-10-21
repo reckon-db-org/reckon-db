@@ -77,6 +77,14 @@ emitter pool or subscription record behind.
 tree, every event appended through the public API, nothing posted to the
 worker. All six cases fail on the previous tip.
 
+A link that RAISES fails the way one that returns `{error, _}` does. A raise
+inside a gen_server callback took the child down abnormally, and a transient
+child is restarted at once, so a link whose input made it raise crash-looped
+until `links_sup` tripped its intensity and restarted every other link under
+it. Errors and throws are folded into the ordinary failure path now, which
+records the status and the reason and stops that one link; exits still
+propagate, so a process being shut down is not turned into a link failure.
+
 ### Fixed: an integrity read fails closed on a missing predecessor
 
 The read path anchored a batch on whatever `prev_event_hash` its first event
@@ -447,6 +455,22 @@ in the authenticated shape with the value it already had, and answers how many
 it sealed. Reads of that stream answer
 `{integrity_violation, #{kind := missing_integrity,
 context := #{detail := chain_start_unauthenticated}}}` until it runs.
+
+**Only `seal_all/1` seals.** An append never does: a bare-integer watermark
+found by the write path stops the append with
+`{error, {chain_start_unauthenticated, Value}}` and leaves it exactly as it
+was. Before this, an append sealed whatever value was there, outside its own
+transaction, so one ordinary append after a forged watermark was written
+laundered the forgery into an authenticated one and the tampered stream read
+back clean. The same batch also answered a watermark that sits above the
+stream with `{error, {chain_start_ahead_of_append, _}}` instead of crashing in
+`resolve_initial_tip/4`.
+
+**An unsealed watermark is never believed, whatever the batch carries.** The
+read path used to trust one when no event in the batch happened to carry a
+chain, which is exactly the shape of the attack: clear the integrity fields
+off every event, write a large bare number, and the stream came back
+unverified. It is now refused in every case.
 
 ### Fixed: a wildcard link no longer links its own output
 

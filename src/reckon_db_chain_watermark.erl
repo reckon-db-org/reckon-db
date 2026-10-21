@@ -99,28 +99,33 @@ sealed_shape(StoreId, StreamId, Version, Mac) ->
 %% present (a concurrent call set it first).
 %%
 %% This function intentionally tolerates write-write races: multiple
-%% writers attempting to set the same watermark all converge on the
-%% same outcome, because the writer's "next version about to write"
+%% writers attempting to set the same watermark all converge on
+%% the same outcome, because the writer's "next version about to write"
 %% is itself serialized by reckon-db's per-stream append ordering.
 %% If two concurrent writers somehow both reach this code path with
 %% the same NextVersion, the watermark ends up equal to NextVersion
 %% regardless of who won.
+%%
+%% An UNSEALED watermark is an error, never something to seal. Sealing is
+%% `seal_all/1', run once per store as an upgrade step; an append that sealed
+%% a bare integer would turn whatever is written there into the point where
+%% the store vouches the chain begins. So a bare integer found here stops the
+%% append with `{chain_start_unauthenticated, Value}' and leaves it unsealed,
+%% for the operator to seal or reject deliberately.
 -spec set_if_absent(
     StoreId :: atom(),
     StreamId :: binary(),
     Version :: non_neg_integer()
-) -> {ok, RecordedVersion :: non_neg_integer()}.
+) -> {ok, RecordedVersion :: non_neg_integer()}
+   | {error, {chain_start_unauthenticated, non_neg_integer()}}.
 set_if_absent(StoreId, StreamId, Version)
         when is_integer(Version), Version >= 0 ->
     case lookup(StoreId, StreamId) of
         {ok, {sealed, Existing}} ->
             {ok, Existing};
         {ok, {unsealed, Existing}} ->
-            %% Written before watermarks were authenticated: seal it at the
-            %% value it already has rather than minting a second one.
-            ok = khepri:put(StoreId, ?INTEGRITY_CHAIN_START_PATH ++ [StreamId],
-                            sealed_record(StoreId, StreamId, Existing)),
-            {ok, Existing};
+            %% Only seal/1 and seal_all/1 may seal a bare integer.
+            {error, {chain_start_unauthenticated, Existing}};
         {ok, undefined} ->
             Path = ?INTEGRITY_CHAIN_START_PATH ++ [StreamId],
             ok = khepri:put(StoreId, Path, sealed_record(StoreId, StreamId, Version)),
@@ -135,7 +140,10 @@ set_if_absent(StoreId, StreamId, Version)
 %% lookup should not be undefined immediately after a put).
 recorded_or_version(undefined, Version) -> {ok, Version};
 recorded_or_version({sealed, Recorded}, _Version) -> {ok, Recorded};
-recorded_or_version({unsealed, Recorded}, _Version) -> {ok, Recorded}.
+recorded_or_version({unsealed, Recorded}, _Version) ->
+    %% A concurrent writer put a bare integer between our write and our
+    %% read: it is not ours to seal, and it is not to be believed.
+    {error, {chain_start_unauthenticated, Recorded}}.
 
 %% @doc Delete a stream's watermark.
 %%
