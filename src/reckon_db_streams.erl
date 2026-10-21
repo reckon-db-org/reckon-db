@@ -341,9 +341,21 @@ from_the_live_end(StoreId, StreamId, BatchSize, Direction, End) ->
 %% For the callers that want every event rather than a page: a bulk backfill
 %% or an operator report. One batch is held at a time, so a stream of any size
 %% costs one `BatchSize' read rather than a list of everything, and the cursor
-%% is a version: each batch after the first starts at the version one past the
-%% last event the previous one returned, past the versions a scavenge removed
-%% and past a batch that is not full at the far end.
+%% is a version: each batch after the first starts at the version one step
+%% past the previous one's far end.
+%%
+%% Where it stops is the newest version the stream had when the fold started,
+%% not the first batch that came back short. A scavenge deletes a prefix
+%% without renumbering, and it can run while this does: the fold reads
+%% 0..9999 in full, a scavenge removes 0..15000, and the next window answers
+%% 15001..19999 - a short batch over a stream that goes on to 25000. Ending
+%% there would hand back a partial answer that looks complete, which for a
+%% link backfill is worse than not running at all. So the cursor is compared
+%% against the newest version, an empty window inside the stream is read as a
+%% hole and jumped, and only a cursor past the end stops the fold.
+%%
+%% Events appended after the fold started are not visited: this is a pass over
+%% the stream as it was, and a caller that needs those wants a subscription.
 %%
 %% Direction is the order the batches are visited in, and each batch is
 %% returned in that direction too, as `read/5' returns it.
@@ -351,54 +363,94 @@ from_the_live_end(StoreId, StreamId, BatchSize, Direction, End) ->
     atom(), binary(), pos_integer(), direction(),
     fun(([event()], Acc) -> Acc), Acc) -> {ok, Acc} | {error, term()} when Acc :: term().
 fold_event_batches(StoreId, StreamId, BatchSize, Direction, Fun, Acc0) ->
-    case read_all(StoreId, StreamId, BatchSize, Direction) of
-        {ok, []} ->
+    case newest_event_version(StoreId, StreamId) of
+        {ok, Newest} when Newest < 0 ->
             {ok, Acc0};
-        {ok, Events} ->
-            continue_fold(StoreId, StreamId, BatchSize, Direction, Fun,
-                          Fun(Events, Acc0), Events);
+        {ok, Newest} ->
+            fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun,
+                      Acc0, live_end);
         {error, _} = Error ->
             Error
+    end.
+
+%% @private The first batch comes from the live end, so a stream whose prefix
+%% was scavenged before the fold started begins at the first event still there.
+%% After that the cursor is a version, and the fold goes on while it is still
+%% inside the stream.
+fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, live_end) ->
+    fold_batch(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, live_end,
+               read_all(StoreId, StreamId, BatchSize, Direction));
+fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, {at, Start}) ->
+    case inside_the_stream(Start, Newest, Direction) of
+        true ->
+            fold_batch(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc,
+                       {at, Start},
+                       read(StoreId, StreamId, Start, BatchSize, Direction));
+        false ->
+            {ok, Acc}
     end.
 
 %% @private
-fold_batches_from(StoreId, StreamId, BatchSize, Direction, Fun, Acc, Start) ->
-    case read(StoreId, StreamId, Start, BatchSize, Direction) of
-        {ok, []} ->
-            {ok, Acc};
-        {ok, Events} ->
-            continue_fold(StoreId, StreamId, BatchSize, Direction, Fun,
-                          Fun(Events, Acc), Events);
-        {error, _} = Error ->
-            Error
-    end.
-
-%% @private Go on from the batch just folded. A batch that is shorter than the
-%% batch size is the end of the stream in that direction - read_all/4 starts at
-%% the live end, so there is nothing below it - and otherwise the next batch
-%% starts at the version one step past this one's far end.
-continue_fold(_StoreId, _StreamId, BatchSize, _Direction, _Fun, Acc, Events)
-        when length(Events) < BatchSize ->
+fold_batch(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, _Cursor,
+           {ok, [_ | _] = Events}) ->
+    fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun,
+              Fun(Events, Acc), {at, next_start(Events, Direction)});
+fold_batch(_StoreId, _StreamId, _BatchSize, _Direction, _Newest, _Fun, Acc,
+           live_end, {ok, []}) ->
+    %% No event anywhere: there is nothing to fold.
     {ok, Acc};
-continue_fold(StoreId, StreamId, BatchSize, Direction, Fun, Acc, Events) ->
-    case next_batch_start(Events, Direction) of
-        done       -> {ok, Acc};
-        {ok, Start} -> fold_batches_from(StoreId, StreamId, BatchSize,
-                                         Direction, Fun, Acc, Start)
-    end.
+fold_batch(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc,
+           {at, Start}, {ok, []}) ->
+    %% Still inside the stream and the window holds nothing: a scavenge took
+    %% these versions while the fold was running. Ask the tree where the live
+    %% events are now and jump there.
+    reanchor(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc,
+             next_live_version(StoreId, StreamId, Direction, Start));
+fold_batch(_StoreId, _StreamId, _BatchSize, _Direction, _Newest, _Fun, _Acc,
+           _Cursor, {error, _} = Error) ->
+    Error.
 
-%% @private The version one past the batch just visited, or done when there is
-%% no version left on that side of the stream.
-next_batch_start(Events, forward) ->
+%% @private
+reanchor(_StoreId, _StreamId, _BatchSize, _Direction, _Newest, _Fun, Acc, none) ->
+    {ok, Acc};
+reanchor(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, {ok, Start}) ->
+    fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, {at, Start});
+reanchor(_StoreId, _StreamId, _BatchSize, _Direction, _Newest, _Fun, _Acc,
+         {error, _} = Error) ->
+    Error.
+
+%% @private Whether a cursor is still inside the stream, in the direction the
+%% fold is travelling.
+inside_the_stream(Start, Newest, forward) -> Start =< Newest;
+inside_the_stream(Start, _Newest, backward) -> Start >= 0.
+
+%% @private The version one step past the batch just visited.
+next_start(Events, forward) ->
     %% Read forward, the batch ends at its highest version.
-    {ok, (lists:last(Events))#event.version + 1};
-next_batch_start(Events, backward) ->
+    (lists:last(Events))#event.version + 1;
+next_start(Events, backward) ->
     %% Read backward, the batch begins at its highest version and ends at its
     %% lowest, which is where the next batch below it starts.
-    case lists:last(Events) of
-        #event{version = 0}      -> done;
-        #event{version = Lowest} -> {ok, Lowest - 1}
+    (lists:last(Events))#event.version - 1.
+
+%% @private The nearest live version on the cursor's side of a hole: the
+%% smallest at or after it going forward, the largest at or before it going
+%% backward. `none' when the hole runs to the end of the stream.
+next_live_version(StoreId, StreamId, Direction, Start) ->
+    case version_nodes(StoreId, StreamId, #{favor => consistency}) of
+        {ok, Versions} -> live_version(Versions, Direction, Start);
+        {error, _} = Error -> Error
     end.
+
+%% @private
+live_version(Versions, forward, Start) ->
+    nearest([V || V <- Versions, V >= Start], fun lists:min/1);
+live_version(Versions, backward, Start) ->
+    nearest([V || V <- Versions, V =< Start], fun lists:max/1).
+
+%% @private
+nearest([], _End) -> none;
+nearest(Versions, End) -> {ok, End(Versions)}.
 
 %% @doc Read all events across all streams in global order.
 %%

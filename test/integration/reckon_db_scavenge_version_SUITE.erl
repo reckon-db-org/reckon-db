@@ -37,6 +37,7 @@
     a_counter_below_the_tree_is_not_the_newest_version/1,
     read_all_answers_from_the_end_it_is_asked_from/1,
     read_all_folds_from_the_live_end_after_a_scavenge/1,
+    read_all_follows_the_stream_through_a_mid_fold_scavenge/1,
     deleting_a_stream_resets_its_versions/1
 ]).
 
@@ -51,6 +52,7 @@ all() ->
      a_counter_below_the_tree_is_not_the_newest_version,
      read_all_answers_from_the_end_it_is_asked_from,
      read_all_folds_from_the_live_end_after_a_scavenge,
+     read_all_follows_the_stream_through_a_mid_fold_scavenge,
      deleting_a_stream_resets_its_versions].
 
 init_per_suite(Config) ->
@@ -295,6 +297,36 @@ read_all_folds_from_the_live_end_after_a_scavenge(Config) ->
     ?assertEqual({ok, [13, 14, 15]}, versions(fold_all(StoreId, StreamId, 3, forward))),
     ?assertEqual({ok, [15, 14, 13]}, versions(fold_all(StoreId, StreamId, 3, backward))).
 
+%% @doc GIVEN a stream longer than two batches
+%%      WHEN a scavenge deletes a prefix of it between the first and the
+%%           second batch
+%%      THEN the fold carries on past the short batch and visits every event
+%%           that is still there
+%%
+%% A short batch is not the end of the stream. Before this case's fix the fold
+%% read 0..49, the scavenge removed 0..74, the next window answered 75..99 -
+%% twenty-five events where fifty were asked for - and the fold stopped there,
+%% dropping 100..149 with nothing said. A link backfill and an event-type
+%% summary both ride on this fold, and both would have answered a partial
+%% result that looked complete.
+read_all_follows_the_stream_through_a_mid_fold_scavenge(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"scavver-008">>),
+    {ok, 149} = reckon_db_streams:append(StoreId, StreamId, -2,
+                                         [event(T) || T <- typed(<<"walked_">>, 150)]),
+
+    Step = fun(Events, {Seen, Scavenged}) ->
+                   {Seen ++ [E#event.version || E <- Events],
+                    scavenge_once(StoreId, StreamId, Scavenged)}
+           end,
+    {ok, {Seen, true}} =
+        reckon_db_streams:fold_event_batches(StoreId, StreamId, 50, forward,
+                                             Step, {[], false}),
+
+    %% 50..74 were deleted before the fold reached them; everything else is
+    %% visited, in order, once.
+    ?assertEqual(lists:seq(0, 49) ++ lists:seq(75, 149), Seen).
+
 %% @doc GIVEN a stream and then no stream
 %%      WHEN it is deleted and appended to again under the same id
 %%      THEN it starts at version 0, not after the deleted stream's last
@@ -329,6 +361,15 @@ fold_all(StoreId, StreamId, BatchSize, Direction) ->
     Collect = fun(Events, Acc) -> Acc ++ Events end,
     reckon_db_streams:fold_event_batches(StoreId, StreamId, BatchSize, Direction,
                                          Collect, []).
+
+%% A scavenge runs once, on the fold's first batch: deleting a prefix that
+%% reaches past the batch the fold already has is the hole a fold has to see.
+scavenge_once(_StoreId, _StreamId, true) ->
+    true;
+scavenge_once(StoreId, StreamId, false) ->
+    {ok, _} = reckon_db_scavenge:scavenge(StoreId, StreamId,
+        #{before_version => 75, require_snapshot => false}),
+    true.
 
 typed(Prefix, N) ->
     [<<Prefix/binary, (integer_to_binary(I))/binary>> || I <- lists:seq(1, N)].

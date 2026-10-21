@@ -430,8 +430,17 @@ process_link_stream(StoreId, Link, StreamId) ->
     Feed = fun(Events, ok) -> process_events_for_link(StoreId, Link, Events) end,
     case reckon_db_streams:fold_event_batches(
             StoreId, StreamId, ?BACKFILL_BATCH, forward, Feed, ok) of
-        {ok, ok} -> ok;
-        {error, _} -> ok
+        {ok, ok} ->
+            ok;
+        {error, Reason} ->
+            %% Answered, because one unreadable source stream must not stop a
+            %% backfill over the others - but not silently: the events after
+            %% this point are not in the link stream, and a link stream that
+            %% is merely short looks exactly like a complete one.
+            logger:warning("link ~p: backfill of stream ~p stopped at ~p; "
+                           "the events after that point are not linked",
+                           [Link#link.name, StreamId, Reason]),
+            ok
     end.
 
 %% @private Get source stream IDs based on source spec

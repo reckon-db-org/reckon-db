@@ -206,8 +206,16 @@ count_types_in_stream(StoreId, StreamId, Acc) ->
     Count = fun(Events, SoFar) -> lists:foldl(fun count_event_type/2, SoFar, Events) end,
     case reckon_db_streams:fold_event_batches(
             StoreId, StreamId, 10000, forward, Count, Acc) of
-        {ok, Counted} -> Counted;
-        {error, _} -> Acc
+        {ok, Counted} ->
+            Counted;
+        {error, Reason} ->
+            %% The summary keeps the streams it could count and says so: a
+            %% report that quietly stops at a failed read is a report nobody
+            %% can tell is short.
+            logger:warning("event-type summary of stream ~p stopped at ~p; "
+                           "its counts are a partial answer",
+                           [StreamId, Reason]),
+            Acc
     end.
 
 count_event_type(#event{event_type = T}, Acc) ->

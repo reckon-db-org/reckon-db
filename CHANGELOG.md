@@ -214,6 +214,18 @@ backfill read `read(..., 0, 10000, forward)` and an event-type summary used
 scavenge and stopped at ten thousand events. A backfill that misses events is
 worse than one that does not run, because the link stream then looks complete.
 
+The fold ends on a cursor past the newest version the stream had when it
+started, not on the first batch that comes back short. A scavenge can run
+while a fold does, and it deletes a prefix without renumbering: a fold that
+read 0..49, then saw a scavenge take 0..74, gets twenty-five events back from
+the next window over a stream that goes on to 149. Ending on the short batch
+would drop 100..149 and say nothing. An empty window inside the stream is now
+read as a hole - the tree is asked which versions are live and the fold jumps
+to the nearest one on its side. A fold a read failed under is logged by both
+callers rather than answering a partial result quietly: the link backfill
+names the stream it could not finish and says the events after that point are
+not linked, and the event-type summary says its counts are partial.
+
 ### Fixed: a version-node read that failed is no longer read as an empty tree
 
 `version_nodes/3` folded every read error into `[]`, and `[]` is exactly what
