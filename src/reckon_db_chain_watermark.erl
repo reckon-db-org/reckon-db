@@ -770,9 +770,11 @@ verify_genesis(StoreId, Scan, Event, Key) ->
         _ -> none
     end.
 
-%% @private
-genesis_context(StoreId, Scan, Key, Version) ->
-    Base = #{store_id => StoreId, key => Key, v2_from => Version + 1},
+%% @private The key travels as the argument it already is: gater's
+%% mac_context() is a closed map over store_id, life and v2_from, and an
+%% extra key in the map is not a subtype of it.
+genesis_context(StoreId, Scan, _Key, Version) ->
+    Base = #{store_id => StoreId, v2_from => Version + 1},
     case maps:get(life, Scan) of
         Life when is_binary(Life) -> Base#{life => Life};
         _ -> Base
@@ -1002,7 +1004,9 @@ new_life() ->
 %% integrity key - store id and stream id included, so the record does not
 %% fit another store or another life of the same stream.
 -spec sealed_record(atom(), binary(), binary(), non_neg_integer(),
-                    non_neg_integer()) -> map().
+                    non_neg_integer()) ->
+        #{version := non_neg_integer(), v2_from := non_neg_integer(),
+          life := binary(), mac := binary()}.
 sealed_record(StoreId, StreamId, Life, Version, V2From) ->
     Key = reckon_db_integrity_key:get(StoreId),
     true = is_binary(Key),

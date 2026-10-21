@@ -443,6 +443,42 @@ looks like:
 - `keep_versions` on the scavenge side now keeps versions counted back from
   the tip rather than from the count, so it keeps what it says it keeps.
 
+### Security: a MAC is bound to the store and the stream's life
+
+A MAC over the value alone does not say where the value belongs. With one
+integrity key shared by two stores, an event copied from one tree into the
+other verified as genuine there, and the same was true of a value carried
+into a later life of the same stream id. Either is a forgery path for anyone
+who can write a store's tree.
+
+`reckon_gater ~> 3.13` adds a second MAC scheme. This release stamps every
+event and snapshot it writes with `{v2, KeyId, Mac}`, whose input covers the
+store id and the life token of the stream the value was written under, and
+verifies with the same context. A stream's life token is minted when its
+first event is written and removed with the stream, in the same transaction.
+A scheme-1 MAC at or above a stream's `v2_from` is refused, so a writer still
+on the old scheme cannot put a store-blind MAC above the point where the
+stream began writing scheme 2; values written before the upgrade verified
+exactly as before.
+
+The chain-start watermark becomes a sealed record: version, `v2_from`, the
+life token, and an HMAC over all of them plus the store and stream ids. A
+bare integer is no longer believed, and a seal that does not verify is
+refused. An event's chain start is accepted only when the store can prove it:
+the genesis-prev event whose MAC verifies, or an authenticated cut - a
+scavenge boundary the store wrote, or a same-stream snapshot whose anchor is
+the surviving event's carried hash. Nothing else is sealed.
+
+**Upgrading.** The migration runs at store start, per stream, as before, and
+needs no hand step for a store whose chain starts it can prove. A stream it
+cannot prove is recorded in the migration marker and refused, never guessed
+at; the operator's explicit act for those is
+`reckon_db_chain_watermark:migrate/2` with `accept_missing => [StreamId]`.
+Two functions are gone: `seal/2` and `seal_all/1`. Sealing is the migration's
+decision, not a public operation: a seal is a claim about data the store can
+prove, and a caller who could seal anything could launder a forged chain
+start into an authenticated one.
+
 ### Security: a hash-bearing event is verified whatever the watermark says
 
 Two writes were enough to make a protected stream look untouched. The

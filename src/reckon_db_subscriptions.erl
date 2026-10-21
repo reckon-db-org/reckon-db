@@ -769,8 +769,24 @@ verify_catchup_batch(StoreId, Events) ->
         false ->
             ok;
         true ->
-            Key = reckon_db_integrity_key:get(StoreId),
-            verify_each_event_mac(Events, StoreId, Key)
+            verify_batch_with_key(StoreId, Events)
+    end.
+
+%% @private Integrity is on, so every event is checked. Without a key there
+%% is nothing to check with: the batch is answered as a violation rather than
+%% handed to gater with a non-binary key, which it has no clause for.
+verify_batch_with_key(StoreId, [#event{} = First | _] = Events) ->
+    case reckon_db_integrity_key:get(StoreId) of
+        Key when is_binary(Key) ->
+            verify_each_event_mac(Events, StoreId, Key);
+        _ ->
+            {error, {integrity_violation, #{
+                layer => storage,
+                stream_id => First#event.stream_id,
+                version => First#event.version,
+                kind => missing_integrity,
+                context => #{detail => integrity_key_absent}
+            }}}
     end.
 
 verify_each_event_mac([], _StoreId, _Key) ->
@@ -804,8 +820,8 @@ peer_tip(#event{prev_event_hash = Prev}) ->
     Prev.
 
 %% @private
-catchup_mac_context(StoreId, StreamId, Key) ->
-    Base = #{store_id => StoreId, key => Key},
+catchup_mac_context(StoreId, StreamId, _Key) ->
+    Base = #{store_id => StoreId},
     case reckon_db_chain_watermark:binding(StoreId, StreamId) of
         {ok, #{life := Life, v2_from := V2From}} ->
             Base#{life => Life, v2_from => V2From};

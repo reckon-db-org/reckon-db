@@ -26,7 +26,9 @@
     enabled_store_writes_integrity_fields/1,
     chain_continues_across_appends/1,
     watermark_is_recorded_on_first_append/1,
-    different_keys_produce_different_macs/1
+    different_keys_produce_different_macs/1,
+    a_sealed_watermark_without_a_life_token_refuses_the_append/1,
+    a_store_with_integrity_on_and_no_key_refuses_to_read/1
 ]).
 
 %%====================================================================
@@ -41,7 +43,9 @@ all() ->
         enabled_store_writes_integrity_fields,
         chain_continues_across_appends,
         watermark_is_recorded_on_first_append,
-        different_keys_produce_different_macs
+        different_keys_produce_different_macs,
+        a_sealed_watermark_without_a_life_token_refuses_the_append,
+        a_store_with_integrity_on_and_no_key_refuses_to_read
     ].
 
 init_per_suite(Config) ->
@@ -245,6 +249,41 @@ different_keys_produce_different_macs(Config) ->
 %%====================================================================
 %% Helpers
 %%====================================================================
+
+%% A sealed watermark with no life token is a broken stream state: the
+%% stream is defined as scheme-2 from its chain start, so there is no
+%% scheme-1 stamp this release may write. The append is refused with a
+%% reason, never stamped store-blind.
+a_sealed_watermark_without_a_life_token_refuses_the_append(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"stream-lifeless">>),
+    {ok, 0} = reckon_db_streams:append(
+        StoreId, StreamId, ?NO_STREAM,
+        [#{event_type => <<"x_happened">>, data => #{n => 1}}]),
+    ok = khepri:delete(StoreId,
+                       reckon_db_chain_watermark:life_path(StreamId)),
+    ?assertEqual({error, {life_missing, StreamId}},
+                 reckon_db_streams:append(
+                   StoreId, StreamId, 0,
+                   [#{event_type => <<"x_happened">>, data => #{n => 2}}])),
+    ok.
+
+%% Integrity on with no key is a configuration fault, not tampering. The
+%% read refuses rather than passing a non-binary key to gater, which has no
+%% clause for it, and rather than serving unverified bytes as ok.
+a_store_with_integrity_on_and_no_key_refuses_to_read(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"stream-keyless">>),
+    {ok, 0} = reckon_db_streams:append(
+        StoreId, StreamId, ?NO_STREAM,
+        [#{event_type => <<"x_happened">>, data => #{n => 1}}]),
+    %% Drop the key but leave integrity enabled, which clear/1 does not do.
+    true = persistent_term:erase({reckon_db, integrity_key, StoreId}),
+    ?assertMatch({error, {integrity_violation,
+                          #{kind := missing_integrity,
+                            context := #{detail := integrity_key_absent}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 10, forward)),
+    ok.
 
 setup_integrity_store(Config) ->
     StoreId = proplists:get_value(store_id, Config),

@@ -131,7 +131,9 @@ record_if_deepest(StoreId, StreamId, Version, PrevHash) ->
 %% @doc The record a boundary write stores, MAC'd and ready to be put inside
 %% a caller's transaction (the migration mints a boundary where a snapshot
 %% authenticated a cut that no scavenge recorded).
--spec boundary_record(atom(), binary(), non_neg_integer(), binary()) -> map().
+-spec boundary_record(atom(), binary(), non_neg_integer(), binary()) ->
+        #{version := non_neg_integer(), prev_hash := binary(),
+          mac := binary()}.
 boundary_record(StoreId, StreamId, Version, PrevHash) ->
     Key = reckon_db_integrity_key:get(StoreId),
     true = is_binary(Key),

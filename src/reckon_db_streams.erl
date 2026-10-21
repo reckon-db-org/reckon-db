@@ -2054,20 +2054,36 @@ setup_integrity_enabled(StoreId, StreamId, NextVersion) ->
 -type integrity_refusal() ::
     {chain_start_unauthenticated, non_neg_integer()} |
     {chain_start_missing, binary()} |
+    {life_missing, binary()} |
     {integrity_enabled_without_key, atom()}.
 
-%% @private
+%% @private The append context, or the reason this batch cannot be stamped.
+%%
+%% A sealed watermark with no life token is refused, never stamped scheme 1:
+%% the stream is defined as scheme-2-from-its-chain-start, so a store-blind
+%% MAC above that point is the exact shape the scheme-1 bound exists to
+%% refuse. Minting writes both nodes together; a missing one means the tree
+%% was damaged or edited, and the append says so rather than papering over it.
 -spec enabled_ctx(atom(), binary(), non_neg_integer()) ->
-    {enabled, binary(), non_neg_integer(), map()}
-        | {error, {integrity_enabled_without_key, atom()}}.
+    {enabled, Key :: binary(), ChainStart :: non_neg_integer(),
+     MacCtx :: #{store_id := atom(), life := binary()}}
+        | {error, {integrity_enabled_without_key, atom()}
+                 | {life_missing, binary()}}.
 enabled_ctx(StoreId, StreamId, ChainStart) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) ->
-            {ok, Life} = reckon_db_chain_watermark:life(StoreId, StreamId),
-            {enabled, Key, ChainStart,
-             #{store_id => StoreId, life => Life}};
+            append_ctx(StoreId, StreamId, Key, ChainStart);
         _ ->
             {error, {integrity_enabled_without_key, StoreId}}
+    end.
+
+%% @private
+append_ctx(StoreId, StreamId, Key, ChainStart) ->
+    case reckon_db_chain_watermark:life(StoreId, StreamId) of
+        {ok, Life} when is_binary(Life) ->
+            {enabled, Key, ChainStart, #{store_id => StoreId, life => Life}};
+        _ ->
+            {error, {life_missing, StreamId}}
     end.
 
 %% @private Resolve the chain-tip value that the FIRST event in this
@@ -2283,22 +2299,63 @@ verify_in_direction(StoreId, StreamId, StartVersion, backward, Events, Mode) ->
 ) -> {ok, [event()]} | {integrity_violation, map()}.
 verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode) ->
     {ok, Watermark} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
-    Ctx = mac_context(StoreId, StreamId),
+    case mac_context(StoreId, StreamId) of
+        {ok, Key, Ctx} ->
+            verify_with_mac_context(StoreId, StreamId, StartVersion, Events,
+                                    Mode, Watermark, Key, Ctx);
+        error ->
+            integrity_key_absent(StreamId, StartVersion)
+    end.
+
+%% @private
+verify_with_mac_context(StoreId, StreamId, StartVersion, Events, Mode,
+                        Watermark, Key, Ctx) ->
     case legacy_limit(StoreId, StreamId, Watermark, Events) of
         {error, Violation} ->
             {integrity_violation, Violation};
         {ok, Limit} ->
             verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode,
-                               Ctx, Limit)
+                               Key, Ctx, Limit)
     end.
+
+%% @private Integrity is enabled but the store has no key, so nothing this
+%% read returns can be verified. Refusing is the only answer that does not
+%% serve unverified bytes as ok.
+integrity_key_absent(StreamId, StartVersion) ->
+    {integrity_violation, #{
+        layer => storage,
+        stream_id => StreamId,
+        version => StartVersion,
+        kind => missing_integrity,
+        context => #{detail => integrity_key_absent}
+    }}.
 
 %% @private What a scheme-2 MAC needs: the key, and - when the stream has a
 %% sealed watermark - the store, the life token and the version scheme 2
 %% begins at. A stream with no sealed watermark carries no scheme-2 events
-%% the store would serve, so the context is just the key.
+%% the store would serve, so the context is just the store. With no key there
+%% is no context at all: the caller refuses to verify rather than pass a
+%% non-binary through to gater, which has no clause for it.
+%%
+%% The key travels beside the map, never inside it: gater's mac_context() is
+%% a closed map over store_id, life and v2_from, and an extra key in the map
+%% is not a subtype of it.
+-spec mac_context(atom(), binary()) ->
+        {ok, Key :: binary(),
+         Ctx :: #{store_id := atom(), life => binary(),
+                  v2_from => non_neg_integer()}}
+        | error.
 mac_context(StoreId, StreamId) ->
-    Base = #{store_id => StoreId,
-             key => reckon_db_integrity_key:get(StoreId)},
+    case reckon_db_integrity_key:get(StoreId) of
+        Key when is_binary(Key) ->
+            {ok, Key, mac_context_fields(StoreId, StreamId)};
+        _ ->
+            error
+    end.
+
+%% @private
+mac_context_fields(StoreId, StreamId) ->
+    Base = #{store_id => StoreId},
     case reckon_db_chain_watermark:binding(StoreId, StreamId) of
         {ok, #{life := Life, v2_from := V2From}} ->
             Base#{life => Life, v2_from => V2From};
@@ -2307,12 +2364,14 @@ mac_context(StoreId, StreamId) ->
     end.
 
 %% @private
-verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode, Ctx, Limit) ->
+verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
+                   Limit) ->
     case batch_anchor(StoreId, StreamId, Events, StartVersion) of
         {error, Violation} ->
             {integrity_violation, Violation};
         {ok, Anchor} ->
-            verify_events_loop(Events, Anchor, Limit, Ctx, Mode, StreamId, [])
+            verify_events_loop(Events, Anchor, Limit, Key, Ctx, Mode, StreamId,
+                               [])
     end.
 
 %% @private The version below which a hash-less event is legitimately
@@ -2420,14 +2479,16 @@ predecessor_event(StoreId, StreamId, Version) ->
     end.
 
 %% @private
-verify_events_loop([], _Tip, _Limit, _Ctx, _Mode, _StreamId, Acc) ->
+verify_events_loop([], _Tip, _Limit, _Key, _Ctx, _Mode, _StreamId, Acc) ->
     {ok, lists:reverse(Acc)};
-verify_events_loop([Event | Rest], Tip, Limit, Ctx, Mode, StreamId, Acc) ->
+verify_events_loop([Event | Rest], Tip, Limit, Key, Ctx, Mode, StreamId, Acc) ->
     case is_legacy(Event, Limit) of
         true ->
-            handle_legacy(Event, Rest, Tip, Limit, Ctx, Mode, StreamId, Acc);
+            handle_legacy(Event, Rest, Tip, Limit, Key, Ctx, Mode, StreamId,
+                          Acc);
         false ->
-            handle_integrity(Event, Rest, Tip, Limit, Ctx, Mode, StreamId, Acc)
+            handle_integrity(Event, Rest, Tip, Limit, Key, Ctx, Mode, StreamId,
+                             Acc)
     end.
 
 %% @private An event is legacy only if it carries no chain at all AND the
@@ -2444,7 +2505,8 @@ is_legacy(_Event, undefined) ->
 -spec is_chain_bearing(event()) -> boolean().
 is_chain_bearing(#event{prev_event_hash = PrevHash}) -> is_binary(PrevHash).
 
-handle_legacy(Event, _Rest, _Tip, _Limit, _Ctx, strict, StreamId, _Acc) ->
+handle_legacy(Event, _Rest, _Tip, _Limit, _Key, _Ctx, strict, StreamId,
+              _Acc) ->
     %% Strict mode refuses to return legacy events at all.
     {integrity_violation, #{
         layer => storage,
@@ -2453,7 +2515,7 @@ handle_legacy(Event, _Rest, _Tip, _Limit, _Ctx, strict, StreamId, _Acc) ->
         kind => missing_integrity,
         context => #{detail => legacy_event_under_strict_mode}
     }};
-handle_legacy(Event, Rest, Tip, Limit, Ctx, Mode, StreamId, Acc) ->
+handle_legacy(Event, Rest, Tip, Limit, Key, Ctx, Mode, StreamId, Acc) ->
     %% skip_legacy: return the legacy event untouched. Emit telemetry
     %% so operators can monitor remediation progress.
     telemetry:execute(
@@ -2461,10 +2523,11 @@ handle_legacy(Event, Rest, Tip, Limit, Ctx, Mode, StreamId, Acc) ->
         #{system_time => erlang:system_time(millisecond)},
         #{store_id_hint => StreamId, version => Event#event.version}
     ),
-    verify_events_loop(Rest, Tip, Limit, Ctx, Mode, StreamId, [Event | Acc]).
+    verify_events_loop(Rest, Tip, Limit, Key, Ctx, Mode, StreamId,
+                       [Event | Acc]).
 
 handle_integrity(#event{prev_event_hash = undefined} = Event, _Rest, _Tip,
-                 _Limit, _Ctx, _Mode, StreamId, _Acc) ->
+                 _Limit, _Key, _Ctx, _Mode, StreamId, _Acc) ->
     %% No chain, and the watermark did not make it legacy: its integrity
     %% fields were cleared somewhere above the point where the chain begins.
     {integrity_violation, #{
@@ -2475,15 +2538,15 @@ handle_integrity(#event{prev_event_hash = undefined} = Event, _Rest, _Tip,
         context => #{detail => integrity_fields_absent}
     }};
 handle_integrity(#event{prev_event_hash = PrevHash} = Event, Rest, undefined,
-                 Limit, Ctx, Mode, StreamId, Acc) ->
+                 Limit, Key, Ctx, Mode, StreamId, Acc) ->
     %% No running tip: this is where the chain begins in this batch. It may
     %% begin here because the events before it predate integrity, and the
     %% writer sealed the first one with the genesis hash. Any other carried
     %% hash is an anchor nothing can stand on.
     case PrevHash =:= reckon_gater_integrity:genesis_prev_hash() of
         true ->
-            handle_integrity(Event, Rest, PrevHash, Limit, Ctx, Mode, StreamId,
-                             Acc);
+            handle_integrity(Event, Rest, PrevHash, Limit, Key, Ctx, Mode,
+                             StreamId, Acc);
         false ->
             {integrity_violation, #{
                 layer => storage,
@@ -2493,12 +2556,11 @@ handle_integrity(#event{prev_event_hash = PrevHash} = Event, Rest, undefined,
                 context => #{detail => no_chain_anchor}
             }}
     end;
-handle_integrity(Event, Rest, Tip, Limit, Ctx, Mode, StreamId, Acc) ->
-    case reckon_gater_integrity:verify_event(Event, Tip, maps:get(key, Ctx),
-                                             Ctx) of
+handle_integrity(Event, Rest, Tip, Limit, Key, Ctx, Mode, StreamId, Acc) ->
+    case reckon_gater_integrity:verify_event(Event, Tip, Key, Ctx) of
         ok ->
             NextTip = reckon_gater_integrity:compute_chain_hash(Event, Tip),
-            verify_events_loop(Rest, NextTip, Limit, Ctx, Mode, StreamId,
+            verify_events_loop(Rest, NextTip, Limit, Key, Ctx, Mode, StreamId,
                                [Event | Acc]);
         {integrity_violation, _} = Violation ->
             Violation
