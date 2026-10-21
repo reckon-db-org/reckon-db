@@ -33,25 +33,24 @@ enum TaggedValue<'a> {
 fn term_to_f64(term: Term) -> Option<f64> {
     if let Ok(i) = term.decode::<i64>() {
         Some(i as f64)
-    } else if let Ok(f) = term.decode::<f64>() {
-        Some(f)
     } else {
-        None
+        term.decode::<f64>().ok()
     }
 }
 
 /// Parse a term into a TaggedValue.
 fn parse_tagged_value<'a>(term: Term<'a>) -> TaggedValue<'a> {
-    // Check if it's a tuple like {sum, N} or {overwrite, V}
-    if let Ok(tuple) = term.decode::<(Atom, Term<'a>)>() {
-        let (tag, value) = tuple;
-        if tag == atoms::sum() {
-            if let Some(num) = term_to_f64(value) {
-                return TaggedValue::Sum(num);
-            }
-        } else if tag == atoms::overwrite() {
-            return TaggedValue::Overwrite(value);
-        }
+    // A tuple like {sum, N} or {overwrite, V}; anything else is stored as is.
+    let Ok((tag, value)) = term.decode::<(Atom, Term<'a>)>() else {
+        return TaggedValue::Plain(term);
+    };
+    if tag == atoms::overwrite() {
+        return TaggedValue::Overwrite(value);
+    }
+    if tag == atoms::sum() {
+        return term_to_f64(value)
+            .map(TaggedValue::Sum)
+            .unwrap_or(TaggedValue::Plain(term));
     }
     TaggedValue::Plain(term)
 }
@@ -101,19 +100,25 @@ fn apply_data<'a>(
 
 /// Extract data from an event (handles both map and record formats).
 fn get_event_data<'a>(event: Term<'a>) -> Option<Term<'a>> {
-    // Try to get 'data' key from map
-    if let Ok(iter) = event.decode::<rustler::MapIterator>() {
-        for (key, value) in iter {
-            if let Ok(atom) = key.decode::<Atom>() {
-                if atom == atoms::data() {
-                    return Some(value);
-                }
-            }
+    // No map, no 'data' key: not an event we can read.
+    let iter = event.decode::<rustler::MapIterator>().ok()?;
+    for (key, value) in iter {
+        if key.decode::<Atom>().is_ok_and(|atom| atom == atoms::data()) {
+            return Some(value);
         }
-        // If no 'data' key, treat the entire map as data
-        return Some(event);
     }
-    None
+    // If no 'data' key, treat the entire map as data
+    Some(event)
+}
+
+/// A summed value as Erlang sees it: an integer when it is whole and fits,
+/// the float otherwise.
+fn sum_to_term<'a>(env: Env<'a>, n: f64) -> Term<'a> {
+    if n.fract() == 0.0 && (i64::MIN as f64..=i64::MAX as f64).contains(&n) {
+        (n as i64).encode(env)
+    } else {
+        n.encode(env)
+    }
 }
 
 /// Convert state back to Erlang terms.
@@ -127,26 +132,12 @@ fn state_to_term<'a>(
         .map(|(k, v)| {
             let value = if finalize {
                 match v {
-                    TaggedValue::Sum(n) => {
-                        // Return as integer if whole number, else float
-                        if n.fract() == 0.0 && *n >= i64::MIN as f64 && *n <= i64::MAX as f64 {
-                            (*n as i64).encode(env)
-                        } else {
-                            n.encode(env)
-                        }
-                    }
+                    TaggedValue::Sum(n) => sum_to_term(env, *n),
                     TaggedValue::Overwrite(t) | TaggedValue::Plain(t) => *t,
                 }
             } else {
                 match v {
-                    TaggedValue::Sum(n) => {
-                        let num = if n.fract() == 0.0 && *n >= i64::MIN as f64 && *n <= i64::MAX as f64 {
-                            (*n as i64).encode(env)
-                        } else {
-                            n.encode(env)
-                        };
-                        (atoms::sum(), num).encode(env)
-                    }
+                    TaggedValue::Sum(n) => (atoms::sum(), sum_to_term(env, *n)).encode(env),
                     TaggedValue::Overwrite(t) => (atoms::overwrite(), *t).encode(env),
                     TaggedValue::Plain(t) => *t,
                 }

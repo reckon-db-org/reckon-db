@@ -131,9 +131,20 @@ jobs:
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
         run: rebar3 xref
 
-      - name: Lint (structural floor, no baseline)
+      # One lint gate for the repository's Erlang: the service's own source and
+      # the benchmark workloads under benchmarks/slices, which are a separate
+      # rebar3 project whose dependencies resolve nowhere (reckon_bench_harness
+      # is not on hex), so its modules are named in the root elvis config
+      # instead of a per-project gate that could never run
+      # (macula-codebase-checks#9).
+      - name: Lint (structural floor, no baseline; benchmarks slices included)
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
-        run: rebar3 lint
+        run: |
+          # benchmarks/slices/*/src/**/*.erl is part of this run: rebar.config's
+          # macula_min entry names it beside src/**/*.erl. Proven live by
+          # lowering no_deep_nesting to level 0 and seeing all five slice
+          # modules fail, then restoring it.
+          rebar3 lint
 
       - name: EUnit
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
@@ -153,3 +164,35 @@ jobs:
       - name: Dialyzer (ratchet against .dialyzer_baseline)
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
         run: bash scripts/check_ratchet.sh
+
+  # The structural floor for the native crates (macula-codebase-checks#9): a
+  # function that nests past three blocks, goes past cognitive complexity 15 or
+  # runs past 60 lines fails here, against each crate's own clippy.toml and
+  # [lints.clippy]. Its own job, because the check above runs on the Erlang
+  # toolchain and this needs a Rust one carrying clippy.
+  rust-lint:
+    name: rust (clippy, deny warnings)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: rustup component add clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            native/reckon_db_aggregate_nif
+            native/reckon_db_archive_nif
+            native/reckon_db_crypto_nif
+            native/reckon_db_filter_nif
+            native/reckon_db_hash_nif
+      # One line per crate, named rather than globbed: the sweep reads these
+      # lines, and a crate a glob skipped cannot be seen to be skipped.
+      - name: clippy, every native crate
+        run: |
+          cargo clippy --manifest-path native/reckon_db_aggregate_nif/Cargo.toml --all-targets --locked -- -D warnings
+          cargo clippy --manifest-path native/reckon_db_archive_nif/Cargo.toml --all-targets --locked -- -D warnings
+          cargo clippy --manifest-path native/reckon_db_crypto_nif/Cargo.toml --all-targets --locked -- -D warnings
+          cargo clippy --manifest-path native/reckon_db_filter_nif/Cargo.toml --all-targets --locked -- -D warnings
+          cargo clippy --manifest-path native/reckon_db_hash_nif/Cargo.toml --all-targets --locked -- -D warnings
