@@ -64,6 +64,7 @@
     legacy_and_integrity_events_in_same_stream/1,
     backward_read_catches_tampering/1,
     backward_read_returns_events_in_descending_order/1,
+    a_scavenged_stream_is_read_from_the_oldest_event_that_is_there/1,
     integrity_disabled_store_bypasses_verification/1
 ]).
 
@@ -113,6 +114,7 @@ groups() ->
             legacy_and_integrity_events_in_same_stream,
             backward_read_catches_tampering,
             backward_read_returns_events_in_descending_order,
+            a_scavenged_stream_is_read_from_the_oldest_event_that_is_there,
             integrity_disabled_store_bypasses_verification
         ]}
     ].
@@ -485,6 +487,39 @@ backward_read_returns_events_in_descending_order(Config) ->
     %% Each event still has its integrity fields populated.
     [?assert(is_binary(E#event.prev_event_hash)) || E <- Events],
     ok.
+
+%% @doc GIVEN an integrity store whose stream is scavenged from the front
+%%      WHEN the surviving events are read forward, backward, and folded
+%%      THEN every one of them is returned and verified
+%%
+%% The first surviving event's prev_event_hash names an event the scavenge
+%% deleted, so the chain cannot be walked from the start: the read anchors
+%% on that event (its own MAC is still verified) and walks from there. Before
+%% this case's fix the forward read and the fold answered
+%% {error, {integrity_violation, version 10}} and the backward read exited
+%% with a function_clause in handle_integrity — a crash in a gateway worker,
+%% the reckon-db#4 class — over a stream whose events were all intact.
+a_scavenged_stream_is_read_from_the_oldest_event_that_is_there(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"integrity-scavenged">>),
+    write_n_events(StoreId, StreamId, 30),
+
+    {ok, #{deleted_versions := {0, 9}}} =
+        reckon_db_scavenge:scavenge(StoreId, StreamId,
+            #{before_version => 10, require_snapshot => false}),
+
+    Survivors = lists:seq(10, 29),
+
+    {ok, Forward} = reckon_db_streams:read_all(StoreId, StreamId, 100, forward),
+    ?assertEqual(Survivors, [E#event.version || E <- Forward]),
+
+    {ok, Backward} = reckon_db_streams:read_all(StoreId, StreamId, 100, backward),
+    ?assertEqual(lists:reverse(Survivors), [E#event.version || E <- Backward]),
+
+    Collect = fun(Events, Acc) -> Acc ++ [E#event.version || E <- Events] end,
+    {ok, Folded} = reckon_db_streams:fold_event_batches(
+        StoreId, StreamId, 7, forward, Collect, []),
+    ?assertEqual(Survivors, Folded).
 
 %% A store with integrity disabled bypasses verification entirely,
 %% regardless of opts.

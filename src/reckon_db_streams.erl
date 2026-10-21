@@ -378,8 +378,14 @@ fold_event_batches(StoreId, StreamId, BatchSize, Direction, Fun, Acc0) ->
 %% After that the cursor is a version, and the fold goes on while it is still
 %% inside the stream.
 fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, live_end) ->
+    %% The first batch is the one read_all/4 answers, and it is not bounded by
+    %% Newest: an append can land between the newest-version read above and
+    %% this one. Every batch the fold visits stays at or below Newest, the
+    %% number it was given, so a caller fencing on that number sees the same
+    %% stream it was told about.
     fold_batch(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, live_end,
-               read_all(StoreId, StreamId, BatchSize, Direction));
+               bounded(read_all(StoreId, StreamId, BatchSize, Direction),
+                       Newest, Direction));
 fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, {at, Start}) ->
     case inside_the_stream(Start, Newest, Direction) of
         true ->
@@ -423,6 +429,13 @@ reanchor(_StoreId, _StreamId, _BatchSize, _Direction, _Newest, _Fun, _Acc,
 %% fold is travelling.
 inside_the_stream(Start, Newest, forward) -> Start =< Newest;
 inside_the_stream(Start, _Newest, backward) -> Start >= 0.
+
+%% @private Drop a batch's events above the fold's fence. Going backward the
+%% window starts at Newest, so there is never anything above it.
+bounded({ok, Events}, Newest, forward) ->
+    {ok, [E || #event{version = V} = E <- Events, V =< Newest]};
+bounded(Result, _Newest, _Direction) ->
+    Result.
 
 %% @private The version one step past the batch just visited.
 next_start(Events, forward) ->
@@ -2144,8 +2157,16 @@ verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode) ->
     {ok, ChainStart} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
     Key = reckon_db_integrity_key:get(StoreId),
     InitialTip = resolve_read_initial_tip(
-        StoreId, StreamId, StartVersion, ChainStart),
+        StoreId, StreamId, first_event_version(Events, StartVersion), ChainStart),
     verify_events_loop(Events, InitialTip, ChainStart, Key, Mode, StreamId, []).
+
+%% @private The version the batch actually starts at, which is not the version
+%% the caller asked for whenever the window it named held no event: a scavenge
+%% removes a prefix, so a read from 0 answers 10..29 and the chain has to be
+%% anchored at 10, not at genesis. Anchoring on the requested start verified
+%% the first event it did get against the tip of an event it never had.
+first_event_version([#event{version = Version} | _], _Requested) -> Version;
+first_event_version([], Requested) -> Requested.
 
 %% @private
 verify_events_loop([], _Tip, _ChainStart, _Key, _Mode, _StreamId, Acc) ->
@@ -2194,6 +2215,28 @@ handle_integrity(Event, Rest, undefined, ChainStart, Key, Mode, StreamId, Acc)
     %% the verifier has a concrete value to compare against.
     Genesis = reckon_gater_integrity:genesis_prev_hash(),
     handle_integrity(Event, Rest, Genesis, ChainStart, Key, Mode, StreamId, Acc);
+handle_integrity(#event{prev_event_hash = Prev} = Event, Rest, undefined,
+                 ChainStart, Key, Mode, StreamId, Acc)
+        when is_binary(Prev) ->
+    %% The event this one chains to is not in the store: a scavenge removed
+    %% it. Nothing can recompute a link to an event that is gone, so the
+    %% chain is anchored at the oldest event that is still there - this one.
+    %% Its own MAC is still verified, against the hash it carries, and every
+    %% event after it is verified against the one before it. This is the
+    %% boundary a read from a scavenged stream starts at, and it is why a
+    %% read from the live end must not be a refusal to read at all.
+    handle_integrity(Event, Rest, Prev, ChainStart, Key, Mode, StreamId, Acc);
+handle_integrity(#event{} = Event, _Rest, undefined, _ChainStart, _Key, _Mode,
+                 StreamId, _Acc) ->
+    %% An integrity-bearing event that carries no hash to anchor on cannot be
+    %% verified either against its predecessor or against itself.
+    {integrity_violation, #{
+        layer => storage,
+        stream_id => StreamId,
+        version => Event#event.version,
+        kind => missing_integrity,
+        context => #{detail => no_chain_anchor}
+    }};
 handle_integrity(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc)
         when is_binary(Tip) ->
     case reckon_gater_integrity:verify_event(Event, Tip, Key) of

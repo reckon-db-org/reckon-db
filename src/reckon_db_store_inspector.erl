@@ -196,7 +196,7 @@ format_pid(Other) -> list_to_binary(io_lib:format("~p", [Other])).
 
 count_types_in_stream(StoreId, StreamId, Acc) ->
     %% fold_event_batches/6 is (StoreId, StreamId, BatchSize, Direction, Fun,
-    %% Acc) — the batch size comes before the direction, as it does in
+    %% Acc): the batch size comes before the direction, as it does in
     %% read_all/4. Passing (forward, 10000) swapped them once and crashed the
     %% worker with a function_clause on every event-type-summary call.
     %%
