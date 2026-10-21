@@ -421,6 +421,42 @@ looks like:
 - `keep_versions` on the scavenge side now keeps versions counted back from
   the tip rather than from the count, so it keeps what it says it keeps.
 
+### Security: a hash-bearing event is verified whatever the watermark says
+
+Two writes were enough to make a protected stream look untouched. The
+chain-start watermark is a plain Khepri node, and under `skip_legacy` every
+event below it is returned without verification: deleting it, or moving it
+above the events in question, turned verified data into "legacy" data. So did
+clearing one event's integrity fields just below a moved watermark.
+
+What decides whether an event is checked is now the event: an event carrying
+a `prev_event_hash` is verified against its predecessor, above or below the
+watermark, and a rewritten payload fails its MAC. The watermark is still
+needed, for the opposite question: an event with no integrity fields is either
+data written before integrity was enabled or an event whose fields were
+cleared, and only the watermark tells them apart. It has to be one the store
+can prove it wrote, so it is now stored with an HMAC under the store's
+integrity key. A watermark that is missing, or that is a bare integer, makes
+every hash-less event a violation rather than a skip.
+
+**This is an upgrade step for existing stores.** A watermark written by an
+earlier version is a bare integer by construction and is refused. Before this
+version serves reads of an existing integrity-enabled store, run
+`reckon_db_chain_watermark:seal_all(StoreId)` once; it rewrites each watermark
+in the authenticated shape with the value it already had, and answers how many
+it sealed. Reads of that stream answer
+`{integrity_violation, #{kind := missing_integrity,
+context := #{detail := chain_start_unauthenticated}}}` until it runs.
+
+### Fixed: a wildcard link no longer links its own output
+
+A link stream is named `$link:<name>`. `all` sources excluded link streams;
+`stream_pattern` sources did not, so a `<<"*">>` link matched its own output
+the moment the live path started delivering it: one append produced tens of
+thousands of linked events and did not stop. A pattern source excludes link
+streams now (backfill and live). Sourcing a link explicitly, by naming its
+stream id, still works and is how links compose.
+
 ### Upgrading
 
 No machine version change: 0.17.11 is still Ra machine version 2, its files

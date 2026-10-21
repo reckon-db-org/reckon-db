@@ -391,7 +391,8 @@ wildcard_to_regex(Pattern) ->
     <<"^", Converted/binary, "$">>.
 
 %% @private Emit telemetry for scavenge operations
--spec emit_telemetry(atom(), binary(), term(), integer()) -> ok.
+-spec emit_telemetry(atom(), binary(), {ok, scavenge_result()} | {error, term()},
+                     integer()) -> ok.
 emit_telemetry(StoreId, StreamId, Result, Duration) ->
     {DeletedCount, Archived} = case Result of
         {ok, #{deleted_count := DC, archived := A}} -> {DC, A};

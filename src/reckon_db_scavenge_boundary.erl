@@ -114,7 +114,8 @@ delete(StoreId, StreamId) ->
 %%====================================================================
 
 %% @private
--spec record_if_deepest(atom(), binary(), non_neg_integer(), binary()) -> ok.
+-spec record_if_deepest(atom(), binary(), non_neg_integer(), binary())
+        -> ok | {error, term()}.
 record_if_deepest(StoreId, StreamId, Version, PrevHash) ->
     case lookup(StoreId, StreamId) of
         {ok, #{version := Existing}} when Existing > Version ->
@@ -126,7 +127,8 @@ record_if_deepest(StoreId, StreamId, Version, PrevHash) ->
     end.
 
 %% @private
--spec write(atom(), binary(), non_neg_integer(), binary()) -> ok.
+-spec write(atom(), binary(), non_neg_integer(), binary())
+        -> ok | {error, term()}.
 write(StoreId, StreamId, Version, PrevHash) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) ->
@@ -145,7 +147,15 @@ put_boundary(StoreId, StreamId, Version, PrevHash, Key) ->
     Boundary = #{version => Version,
                  prev_hash => PrevHash,
                  mac => mac(Key, StreamId, Version, PrevHash)},
-    khepri:put(StoreId, ?BOUNDARY_PATH ++ [StreamId], Boundary).
+    %% A transaction, not a bare put: it is the one write a scavenge must not
+    %% get past unnoticed, and a transaction answers an error instead of
+    %% taking the calling worker down with a badmatch (reckon-db#4).
+    Fun = fun() -> khepri_tx:put(?BOUNDARY_PATH ++ [StreamId], Boundary) end,
+    case khepri:transaction(StoreId, Fun) of
+        {ok, ok} -> ok;
+        {ok, {error, Reason}} -> {error, Reason};
+        {error, Reason} -> {error, Reason}
+    end.
 
 %% @private A MAC over exactly what the anchor claims: this stream, this
 %% version, this hash.

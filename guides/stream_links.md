@@ -118,7 +118,22 @@ never linked: it records the fence and links nothing that already existed.
 
 A stream added to a `stream_pattern` source after the link started has no
 fence yet, so its events are linked from the moment it appears; a later
-restart resumes from the fence the link recorded for it.
+restart resumes from the fence the link recorded for it. Link streams are
+never sources for a wildcard pattern or an `all` source: a link whose pattern
+matched its own `$link:<name>` output would link that output again, and
+again. Naming a link stream explicitly (`#{type => stream, stream_id =>
+<<"$link:orders">>}`) is how links compose.
+
+### What "exactly once" covers
+
+Within a run, each source event lands in the link stream once: the backfill
+and the live path meet at the fence. Across a crash the guarantee is at least
+once, and it can only be a repeat, never a hole. The link appends the derived
+events and then records the fence, and those are two writes: a crash between
+them leaves the fence one batch behind, so the next run links that batch
+again. A consumer of a link stream that must not act twice on the same source
+event should key on the event's `source_stream` and `source_version`
+metadata.
 
 ### Stopping a Link
 

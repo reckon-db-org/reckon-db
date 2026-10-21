@@ -4,6 +4,8 @@
 # dialyzer reported 198 when this was written (files for lint, warnings for dialyzer).
 ||||||| parent of 1aa3537 (reckon-db 5.12.0: the fold's recovery read is consistent, so a lagging member cannot spin)
 # dialyzer reported 190 when this was written (files for lint, warnings for dialyzer).
+||||||| parent of ab285f8 (reckon-db 5.12.0: the watermark cannot excuse a hash, and a wildcard link cannot eat itself)
+# dialyzer reported 184 when this was written (files for lint, warnings for dialyzer).
 # A new finding fails CI. A fixed finding should have its line deleted here.
 src/reckon_db_app.erl	229929d0a14f	Expression produces a value of type 'ok' | {'error','already_exists'}, but this value is unmatched
 src/reckon_db_app.erl	f0ceac231f4c	The specification for reckon_db_app:start/0 states that the function might also return {'ok',pid()} but the in
@@ -110,8 +112,9 @@ src/reckon_db_leader_tracker.erl	9cb16afac67d	Type specification reckon_db_leade
 src/reckon_db_links.erl	01e26c482807	Invalid type specification for function reckon_db_links:start_link_subscription/2. The success typing is (_,_)
 src/reckon_db_links.erl	164fb90a9356	The specification for reckon_db_links:start/2 states that the function might also return 'ok' but the inferred
 src/reckon_db_links.erl	53cac1e1d0e4	Type specification reckon_db_links:wildcard_to_regex(binary()) -> binary() is a supertype of the success typin
+||||||| parent of ab285f8 (reckon-db 5.12.0: the watermark cannot excuse a hash, and a wildcard link cannot eat itself)
+src/reckon_db_links.erl	2a13e3fb1c49	Type specification reckon_db_links:emit_telemetry(atom(),binary(),atom()) -> 'ok' is a supertype of the succes
 src/reckon_db_links.erl	5ac8d578b964	The specification for reckon_db_links:stop/2 states that the function might also return {'error',_} but the in
-src/reckon_db_links.erl	7cb5ac895c8d	Type specification reckon_db_links:update_status(atom(),binary(),'running' | 'stopped' | 'error') -> 'ok' is a
 src/reckon_db_links.erl	affa23d32e30	Type specification reckon_db_links:event_to_map(event()) -> map() is a supertype of the success typing: reckon
 src/reckon_db_links.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
 src/reckon_db_links.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
@@ -141,7 +144,6 @@ src/reckon_db_resource_monitor.erl	18b05e4be6c0	The variable _ can never match s
 src/reckon_db_resource_monitor.erl	3678e6a165c5	Expression produces a value of type 'false' | non_neg_integer(), but this value is unmatched
 src/reckon_db_revocation.erl	28d0a137f178	Expression produces a value of type atom() | ets:tid(), but this value is unmatched
 src/reckon_db_revocation.erl	28d0a137f178	Expression produces a value of type atom() | ets:tid(), but this value is unmatched
-src/reckon_db_scavenge.erl	7637476af9b6	Type specification reckon_db_scavenge:emit_telemetry(atom(),binary(),term(),integer()) -> 'ok' is a supertype 
 src/reckon_db_scavenge.erl	8abef32cf138	Type specification reckon_db_scavenge:scavenge(atom(),binary(),scavenge_opts()) -> {'ok',scavenge_result()} | 
 src/reckon_db_scavenge.erl	ec67d48ef23f	The call reckon_db_scavenge:do_scavenge(StoreId::atom(), StreamId::binary(), #{'archived_key':=binary(), 'befo
 src/reckon_db_scavenge.erl	ffcdebc6d6c5	Type specification reckon_db_scavenge:delete_event_versions(atom(),binary(),non_neg_integer(),non_neg_integer(

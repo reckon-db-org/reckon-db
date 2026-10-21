@@ -67,6 +67,10 @@
     a_scavenged_stream_is_read_from_the_oldest_event_that_is_there/1,
     a_hand_deleted_prefix_is_read_as_a_violation/1,
     a_gap_just_before_the_read_start_is_a_violation/1,
+    a_deleted_chain_start_does_not_turn_events_into_legacy/1,
+    a_forged_chain_start_does_not_excuse_a_missing_predecessor/1,
+    a_cleared_event_above_a_forged_watermark_is_refused/1,
+    a_rewritten_event_under_a_sealed_watermark_is_caught/1,
     integrity_disabled_store_bypasses_verification/1
 ]).
 
@@ -119,6 +123,10 @@ groups() ->
             a_scavenged_stream_is_read_from_the_oldest_event_that_is_there,
             a_hand_deleted_prefix_is_read_as_a_violation,
             a_gap_just_before_the_read_start_is_a_violation,
+            a_deleted_chain_start_does_not_turn_events_into_legacy,
+            a_forged_chain_start_does_not_excuse_a_missing_predecessor,
+            a_cleared_event_above_a_forged_watermark_is_refused,
+            a_rewritten_event_under_a_sealed_watermark_is_caught,
             integrity_disabled_store_bypasses_verification
         ]}
     ].
@@ -570,6 +578,100 @@ a_gap_just_before_the_read_start_is_a_violation(Config) ->
                  reckon_db_streams:read(StoreId, StreamId, 15, 5, forward)),
     ?assertMatch({error, {integrity_violation, #{kind := missing_predecessor}}},
                  reckon_db_streams:read(StoreId, StreamId, 19, 5, backward)).
+
+%% @doc GIVEN an integrity stream
+%%      WHEN the chain-start watermark is deleted
+%%      THEN the read refuses instead of handing the events back as legacy
+%%
+%% The watermark is a plain tree node: whoever can delete an event can delete
+%% it, and under skip_legacy everything below it comes back unverified. A
+%% stream whose events carry a chain but whose watermark cannot be believed
+%% has no starting point the store can vouch for, so it is refused rather than
+%% read as if the chain began nowhere.
+a_deleted_chain_start_does_not_turn_events_into_legacy(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"integrity-watermark-deleted">>),
+    write_n_events(StoreId, StreamId, 30),
+
+    ok = khepri:delete(StoreId, watermark_path(StreamId)),
+
+    ?assertMatch({error, {integrity_violation,
+                          #{kind := missing_integrity,
+                            context := #{detail := chain_start_unauthenticated}}}},
+                 reckon_db_streams:read_all(StoreId, StreamId, 100, forward)),
+    ?assertMatch({error, {integrity_violation,
+                          #{kind := missing_integrity}}},
+                 reckon_db_streams:read_all(StoreId, StreamId, 100, backward)).
+
+%% @doc GIVEN an integrity stream
+%%      WHEN events are deleted and the chain-start watermark is moved above
+%%           the gap in the same shape
+%%      THEN the read still refuses
+%%
+%% A bare integer is a node anybody can write, so moving it above a tampered
+%% prefix is the whole attack: with it believed, the gap is just a legacy
+%% prefix. It is not believed.
+a_forged_chain_start_does_not_excuse_a_missing_predecessor(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"integrity-watermark-forged">>),
+    write_n_events(StoreId, StreamId, 30),
+
+    lists:foreach(fun(V) -> khepri:delete(StoreId, event_path(StreamId, V)) end,
+                  lists:seq(0, 9)),
+    ok = khepri:put(StoreId, watermark_path(StreamId), 1000),
+
+    ?assertMatch({error, {integrity_violation, #{kind := _}}},
+                 reckon_db_streams:read_all(StoreId, StreamId, 100, forward)),
+    ?assertMatch({error, {integrity_violation, #{kind := _}}},
+                 reckon_db_streams:read_all(StoreId, StreamId, 100, backward)).
+
+%% @doc GIVEN an integrity stream
+%%      WHEN one event's payload is rewritten and its integrity fields are
+%%           cleared, and the watermark is moved above it
+%%      THEN the read refuses instead of calling the event legacy
+a_cleared_event_above_a_forged_watermark_is_refused(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"integrity-watermark-cleared">>),
+    write_n_events(StoreId, StreamId, 5),
+
+    ok = clear_integrity_fields(StoreId, StreamId, 2),
+    ok = khepri:put(StoreId, watermark_path(StreamId), 1000),
+
+    ?assertMatch({error, {integrity_violation, #{kind := _}}},
+                 reckon_db_streams:read_all(StoreId, StreamId, 100, forward)).
+
+%% @doc GIVEN a sealed watermark and an intact stream
+%%      WHEN one event's payload is rewritten in place
+%%      THEN the MAC catches it
+%%
+%% The watermark being believable is not the same as the data being right.
+a_rewritten_event_under_a_sealed_watermark_is_caught(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"integrity-sealed">>),
+    write_n_events(StoreId, StreamId, 5),
+
+    ok = rewrite_event(StoreId, StreamId, 2, #{tampered => 1}),
+
+    ?assertMatch({error, {integrity_violation, #{kind := mac_mismatch}}},
+                 reckon_db_streams:read_all(StoreId, StreamId, 100, forward)).
+
+%% @private
+watermark_path(StreamId) ->
+    ?INTEGRITY_CHAIN_START_PATH ++ [StreamId].
+
+%% @private Rewrite an event's payload in place, leaving its chain fields as
+%% they are: the MAC no longer covers the data.
+rewrite_event(StoreId, StreamId, Version, Data) ->
+    Path = event_path(StreamId, Version),
+    {ok, Event} = khepri:get(StoreId, Path),
+    khepri:put(StoreId, Path, Event#event{data = Data}).
+
+%% @private Remove an event's integrity fields, keeping its payload.
+clear_integrity_fields(StoreId, StreamId, Version) ->
+    Path = event_path(StreamId, Version),
+    {ok, Event} = khepri:get(StoreId, Path),
+    khepri:put(StoreId, Path, Event#event{prev_event_hash = undefined,
+                                          mac = undefined}).
 
 %% @private
 event_path(StreamId, Version) ->

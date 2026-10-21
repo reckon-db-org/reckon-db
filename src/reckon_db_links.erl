@@ -346,8 +346,8 @@ do_start_worker(StoreId, Name) ->
 %% @private A link that failed left its spec behind: a transient child that
 %% exits with `shutdown' is not restarted, and its spec stays until someone
 %% deletes it. Starting the link again means deleting that spec first.
--spec start_child(pid(), binary(), supervisor:child_spec()) ->
-    {ok, pid()} | {error, term()}.
+-spec start_child(atom(), binary(), supervisor:child_spec()) ->
+    {ok, undefined | pid()} | {ok, undefined | pid(), term()} | {error, term()}.
 start_child(Sup, Name, Spec) ->
     case supervisor:start_child(Sup, Spec) of
         {error, already_present} ->
@@ -441,7 +441,13 @@ source_matches(#link{source = #{type := stream, stream_id := StreamId}}, StreamI
     true;
 source_matches(#link{source = #{type := stream_pattern, pattern := Pattern}},
                StreamId) ->
-    filter_by_pattern([StreamId], Pattern) =/= [];
+    %% A wildcard source never covers a link stream, its own or anybody
+    %% else's: `<<"*">>' would otherwise match `$link:orders' the moment the
+    %% first event is written, link its own output back in, and grow without
+    %% end. Sourcing a link explicitly (a `stream' source naming one) is how
+    %% links compose, and stays allowed.
+    not is_link_stream(StreamId) andalso
+        filter_by_pattern([StreamId], Pattern) =/= [];
 source_matches(#link{source = #{type := all}}, StreamId) ->
     not is_link_stream(StreamId);
 source_matches(_Link, _StreamId) ->
@@ -507,7 +513,10 @@ get_source_streams(_StoreId, #{type := stream, stream_id := StreamId}) ->
 get_source_streams(StoreId, #{type := stream_pattern, pattern := Pattern}) ->
     case reckon_db_streams:list_streams(StoreId) of
         {ok, Streams} ->
-            filter_by_pattern(Streams, Pattern);
+            %% Link streams are not sources for a wildcard, the same way they
+            %% are not for `all': a pattern that matched one would feed a
+            %% link its own output.
+            [S || S <- filter_by_pattern(Streams, Pattern), not is_link_stream(S)];
         {error, _} ->
             []
     end;
@@ -621,7 +630,7 @@ update_processed_count(StoreId, Name, Count) ->
     end.
 
 %% @private Emit telemetry
--spec emit_telemetry(atom(), binary(), atom()) -> ok.
+-spec emit_telemetry(atom(), binary(), created | deleted | failed | started | stopped) -> ok.
 emit_telemetry(StoreId, LinkName, Operation) ->
     telemetry:execute(
         [reckon_db, link, Operation],

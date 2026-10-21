@@ -2175,60 +2175,162 @@ verify_in_direction(StoreId, StreamId, StartVersion, backward, Events, Mode) ->
 
 %% @private Walk events in forward order, verifying each against the
 %% running chain tip. Short-circuits on the first integrity_violation.
+%%
+%% What is verified is decided by the events themselves, never by the
+%% chain-start watermark. The watermark is a plain tree node, so a writer who
+%% can delete one event can also delete it, or move it above the events they
+%% want included: under skip_legacy every event below the watermark is handed
+%% back unverified, and one khepri write would undo the whole chain. An event
+%% that carries a `prev_event_hash' is integrity-bearing whatever the
+%% watermark says, and it is verified.
 -spec verify_events_forward(
     atom(), binary(), non_neg_integer(), [event()], verify_mode()
 ) -> {ok, [event()]} | {integrity_violation, map()}.
 verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode) ->
-    {ok, ChainStart} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
     Key = reckon_db_integrity_key:get(StoreId),
-    FirstVersion = first_event_version(Events, StartVersion),
-    case resolve_read_initial_tip(StoreId, StreamId, FirstVersion, ChainStart,
-                                  Events) of
-        {missing_predecessor, Version} ->
-            %% A predecessor that is not in the store and was not cut away by
-            %% a scavenge: the chain is broken, and no anchor may be invented
-            %% for it.
-            {integrity_violation, #{
-                layer => storage,
-                stream_id => StreamId,
-                version => FirstVersion,
-                kind => missing_predecessor,
-                context => #{detail => predecessor_absent,
-                             missing_version => Version}
-            }};
-        InitialTip ->
-            verify_events_loop(Events, InitialTip, ChainStart, Key, Mode,
-                               StreamId, [])
+    {ok, Watermark} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
+    case legacy_limit(StoreId, StreamId, Watermark, Events) of
+        {error, Violation} ->
+            {integrity_violation, Violation};
+        {ok, Limit} ->
+            verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode,
+                               Key, Limit)
     end.
-
-%% @private The version the batch actually starts at, which is not the version
-%% the caller asked for whenever the window it named held no event: a scavenge
-%% removes a prefix, so a read from 0 answers 10..29 and the chain has to be
-%% anchored at 10, not at genesis. Anchoring on the requested start verified
-%% the first event it did get against the tip of an event it never had.
-first_event_version([#event{version = Version} | _], _Requested) -> Version;
-first_event_version([], Requested) -> Requested.
 
 %% @private
-verify_events_loop([], _Tip, _ChainStart, _Key, _Mode, _StreamId, Acc) ->
-    {ok, lists:reverse(Acc)};
-verify_events_loop([Event | Rest], Tip, ChainStart, Key, Mode, StreamId, Acc) ->
-    case is_legacy_event(Event, ChainStart) of
-        true ->
-            handle_legacy(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc);
-        false ->
-            handle_integrity(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc)
+verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode, Key, Limit) ->
+    case batch_anchor(StoreId, StreamId, Events, StartVersion) of
+        {error, Violation} ->
+            {integrity_violation, Violation};
+        {ok, Anchor} ->
+            verify_events_loop(Events, Anchor, Limit, Key, Mode, StreamId, [])
     end.
 
-%% @private An event is legacy if it predates the watermark (or the
-%% watermark is absent, meaning the stream never had integrity events).
-is_legacy_event(_Event, undefined) -> true;
-is_legacy_event(#event{version = V}, ChainStart) when is_integer(ChainStart) ->
-    V < ChainStart.
+%% @private The version below which a hash-less event is legitimately
+%% pre-integrity, or the reason the watermark cannot be believed.
+%%
+%% A hash-bearing event is verified whether or not the watermark covers it,
+%% so deleting or raising the watermark no longer hides one. What the
+%% watermark is still needed for is the opposite case: an event with no
+%% integrity fields at all. That is either data written before integrity was
+%% enabled, or an event whose fields were cleared, and the only thing that
+%% tells them apart is the watermark. It is a tree node, so it has to be one
+%% the store can prove it wrote: a watermark that is missing, or that is a
+%% bare integer anybody could have put there, makes every hash-less event a
+%% violation rather than a skip.
+-spec legacy_limit(atom(), binary(), reckon_db_chain_watermark:watermark(),
+                   [event()]) -> {ok, non_neg_integer() | undefined} | {error, map()}.
+legacy_limit(StoreId, StreamId, {sealed, Version}, _Events) ->
+    _ = StoreId,
+    _ = StreamId,
+    {ok, Version};
+legacy_limit(_StoreId, _StreamId, {unsealed, Version}, Events) ->
+    case any_chain_bearing(Events) of
+        false -> {ok, Version};
+        true -> {error, unauthenticated_watermark(Events, Version)}
+    end;
+legacy_limit(_StoreId, _StreamId, undefined, Events) ->
+    case any_chain_bearing(Events) of
+        false -> {ok, undefined};
+        true -> {error, unauthenticated_watermark(Events, undefined)}
+    end.
 
-handle_legacy(Event, Rest, Tip, ChainStart, Key, strict, StreamId, _Acc) ->
+%% @private
+-spec any_chain_bearing([event()]) -> boolean().
+any_chain_bearing(Events) ->
+    lists:any(fun is_chain_bearing/1, Events).
+
+%% @private
+unauthenticated_watermark(Events, Version) ->
+    #{layer => storage,
+      stream_id => (hd(Events))#event.stream_id,
+      version => (hd(Events))#event.version,
+      kind => missing_integrity,
+      context => #{detail => chain_start_unauthenticated,
+                   chain_start => Version}}.
+
+%% @private The tip the first integrity-bearing event of the batch is checked
+%% against, or the reason there is none.
+%%
+%% A batch that opens with legacy events (no hash at all) is not anchored
+%% here: the loop anchors the chain at the event where it starts, which the
+%% writer put at the genesis hash.
+-spec batch_anchor(atom(), binary(), [event()], non_neg_integer())
+        -> {ok, binary() | undefined} | {error, map()}.
+batch_anchor(_StoreId, _StreamId, [], _StartVersion) ->
+    {ok, undefined};
+batch_anchor(_StoreId, _StreamId, [#event{prev_event_hash = NoHash} | _], _Start)
+        when not is_binary(NoHash) ->
+    {ok, undefined};
+batch_anchor(StoreId, StreamId, [#event{} = First | _], _StartVersion) ->
+    anchor_for(StoreId, StreamId, First).
+
+%% @private
+-type predecessor_absent() ::
+    #{layer := storage,
+      stream_id := binary(),
+      version := pos_integer(),
+      kind := missing_predecessor,
+      context := #{detail := predecessor_absent,
+                   missing_version := non_neg_integer()}}.
+
+-spec anchor_for(atom(), binary(), event())
+        -> {ok, binary()} | {error, predecessor_absent()}.
+anchor_for(_StoreId, _StreamId, #event{version = 0}) ->
+    {ok, reckon_gater_integrity:genesis_prev_hash()};
+anchor_for(StoreId, StreamId, #event{version = Version}) ->
+    case predecessor_event(StoreId, StreamId, Version - 1) of
+        {ok, #event{prev_event_hash = PrevPrevHash} = PrevEvent}
+                when is_binary(PrevPrevHash) ->
+            {ok, reckon_gater_integrity:compute_chain_hash(PrevEvent,
+                                                           PrevPrevHash)};
+        {ok, _LegacyPredecessor} ->
+            %% The event before this one predates integrity: this event is
+            %% where the chain starts, and the writer sealed it with genesis.
+            %% verify_event checks that it carries genesis and a valid MAC.
+            {ok, reckon_gater_integrity:genesis_prev_hash()};
+        missing ->
+            scavenge_anchor(StoreId, StreamId, Version - 1)
+    end.
+
+%% @private
+-spec predecessor_event(atom(), binary(), non_neg_integer())
+        -> {ok, event()} | missing.
+predecessor_event(StoreId, StreamId, Version) ->
+    Path = reckon_db_stream_path:event_path(StreamId,
+                                            pad_version(Version, ?VERSION_PADDING)),
+    case khepri:get(StoreId, Path) of
+        {ok, #event{} = Event} -> {ok, Event};
+        _ -> missing
+    end.
+
+%% @private
+verify_events_loop([], _Tip, _Limit, _Key, _Mode, _StreamId, Acc) ->
+    {ok, lists:reverse(Acc)};
+verify_events_loop([Event | Rest], Tip, Limit, Key, Mode, StreamId, Acc) ->
+    case is_legacy(Event, Limit) of
+        true ->
+            handle_legacy(Event, Rest, Tip, Limit, Key, Mode, StreamId, Acc);
+        false ->
+            handle_integrity(Event, Rest, Tip, Limit, Key, Mode, StreamId, Acc)
+    end.
+
+%% @private An event is legacy only if it carries no chain at all AND the
+%% authenticated watermark says it predates integrity. Anything else is
+%% verified, or refused.
+-spec is_legacy(event(), non_neg_integer() | undefined) -> boolean().
+is_legacy(Event, Limit) when is_integer(Limit) ->
+    not is_chain_bearing(Event) andalso Event#event.version < Limit;
+is_legacy(_Event, undefined) ->
+    false.
+
+%% @private An event carries a chain when it names the hash of its
+%% predecessor. Nothing else decides that: not a watermark, not a version.
+-spec is_chain_bearing(event()) -> boolean().
+is_chain_bearing(#event{prev_event_hash = PrevHash}) -> is_binary(PrevHash).
+
+handle_legacy(Event, _Rest, _Tip, _Limit, _Key, strict, StreamId, _Acc) ->
     %% Strict mode refuses to return legacy events at all.
-    _ = Tip, _ = ChainStart, _ = Key, _ = Rest,
     {integrity_violation, #{
         layer => storage,
         stream_id => StreamId,
@@ -2236,7 +2338,7 @@ handle_legacy(Event, Rest, Tip, ChainStart, Key, strict, StreamId, _Acc) ->
         kind => missing_integrity,
         context => #{detail => legacy_event_under_strict_mode}
     }};
-handle_legacy(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc) ->
+handle_legacy(Event, Rest, Tip, Limit, Key, Mode, StreamId, Acc) ->
     %% skip_legacy: return the legacy event untouched. Emit telemetry
     %% so operators can monitor remediation progress.
     telemetry:execute(
@@ -2244,80 +2346,46 @@ handle_legacy(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc) ->
         #{system_time => erlang:system_time(millisecond)},
         #{store_id_hint => StreamId, version => Event#event.version}
     ),
-    verify_events_loop(Rest, Tip, ChainStart, Key, Mode, StreamId, [Event | Acc]).
+    verify_events_loop(Rest, Tip, Limit, Key, Mode, StreamId, [Event | Acc]).
 
-handle_integrity(Event, Rest, undefined, ChainStart, Key, Mode, StreamId, Acc)
-        when is_integer(ChainStart),
-             is_record(Event, event),
-             Event#event.version =:= ChainStart ->
-    %% Mid-read transition from legacy region to integrity region: the
-    %% first integrity-bearing event in a stream was written with
-    %% prev_event_hash = genesis. Seed the running tip accordingly so
-    %% the verifier has a concrete value to compare against.
-    Genesis = reckon_gater_integrity:genesis_prev_hash(),
-    handle_integrity(Event, Rest, Genesis, ChainStart, Key, Mode, StreamId, Acc);
-handle_integrity(#event{} = Event, _Rest, undefined, _ChainStart, _Key, _Mode,
-                 StreamId, _Acc) ->
-    %% An integrity-bearing event that carries no hash to anchor on cannot be
-    %% verified either against its predecessor or against itself.
+handle_integrity(#event{prev_event_hash = undefined} = Event, _Rest, _Tip,
+                 _Limit, _Key, _Mode, StreamId, _Acc) ->
+    %% No chain, and the watermark did not make it legacy: its integrity
+    %% fields were cleared somewhere above the point where the chain begins.
     {integrity_violation, #{
         layer => storage,
         stream_id => StreamId,
         version => Event#event.version,
         kind => missing_integrity,
-        context => #{detail => no_chain_anchor}
+        context => #{detail => integrity_fields_absent}
     }};
-handle_integrity(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc)
-        when is_binary(Tip) ->
+handle_integrity(#event{prev_event_hash = PrevHash} = Event, Rest, undefined,
+                 Limit, Key, Mode, StreamId, Acc) ->
+    %% No running tip: this is where the chain begins in this batch. It may
+    %% begin here because the events before it predate integrity, and the
+    %% writer sealed the first one with the genesis hash. Any other carried
+    %% hash is an anchor nothing can stand on.
+    case PrevHash =:= reckon_gater_integrity:genesis_prev_hash() of
+        true ->
+            handle_integrity(Event, Rest, PrevHash, Limit, Key, Mode, StreamId,
+                             Acc);
+        false ->
+            {integrity_violation, #{
+                layer => storage,
+                stream_id => StreamId,
+                version => Event#event.version,
+                kind => missing_integrity,
+                context => #{detail => no_chain_anchor}
+            }}
+    end;
+handle_integrity(Event, Rest, Tip, Limit, Key, Mode, StreamId, Acc) ->
     case reckon_gater_integrity:verify_event(Event, Tip, Key) of
         ok ->
             NextTip = reckon_gater_integrity:compute_chain_hash(Event, Tip),
-            verify_events_loop(
-                Rest, NextTip, ChainStart, Key, Mode, StreamId,
-                [Event | Acc]);
+            verify_events_loop(Rest, NextTip, Limit, Key, Mode, StreamId,
+                               [Event | Acc]);
         {integrity_violation, _} = Violation ->
             Violation
-    end.
-
-%% @private Resolve the chain tip that the FIRST event in the returned
-%% batch should reference as its `prev_event_hash`.
-%%
-%% - undefined watermark or StartVersion < watermark: legacy-only;
-%%   the running tip is irrelevant (verification won't be called).
-%% - StartVersion == watermark: tip = genesis (this is the first
-%%   integrity-bearing event in the stream).
-%% - StartVersion > watermark: tip = chain_hash of the event at
-%%   (StartVersion - 1), which must itself be integrity-bearing.
-%%
-%% When that predecessor is not in the store, the only thing that may anchor
-%% the batch is the boundary a scavenge recorded: the version right after the
-%% last one it removed, with the chain hash of that removed event, MAC'd under
-%% the store's integrity key. A prefix deleted by hand leaves the tree looking
-%% exactly the same, so "the predecessor is gone, anchor on whatever the
-%% survivor carries" fails open precisely where tamper detection matters.
-%% Every other gap is a broken chain and is reported as one.
--spec resolve_read_initial_tip(
-    atom(), binary(), non_neg_integer(), non_neg_integer() | undefined, [event()]
-) -> binary() | undefined | {missing_predecessor, non_neg_integer()}.
-resolve_read_initial_tip(_StoreId, _StreamId, _StartVersion, undefined, _Events) ->
-    undefined;
-resolve_read_initial_tip(_StoreId, _StreamId, StartVersion, ChainStart, _Events)
-        when StartVersion < ChainStart ->
-    undefined;
-resolve_read_initial_tip(_StoreId, _StreamId, StartVersion, ChainStart, _Events)
-        when StartVersion =:= ChainStart ->
-    reckon_gater_integrity:genesis_prev_hash();
-resolve_read_initial_tip(StoreId, StreamId, StartVersion, _ChainStart, Events)
-        when StartVersion > 0 ->
-    PrevVersion = StartVersion - 1,
-    PaddedVersion = pad_version(PrevVersion, ?VERSION_PADDING),
-    Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
-    case khepri:get(StoreId, Path) of
-        {ok, #event{prev_event_hash = PrevPrevHash} = PrevEvent}
-                when is_binary(PrevPrevHash) ->
-            reckon_gater_integrity:compute_chain_hash(PrevEvent, PrevPrevHash);
-        _ ->
-            scavenge_anchor(StoreId, StreamId, PrevVersion, Events)
     end.
 
 %% @private The anchor a scavenge left for this batch, if this batch is
@@ -2327,31 +2395,65 @@ resolve_read_initial_tip(StoreId, StreamId, StartVersion, _ChainStart, Events)
 %% version, and the event at that version carries the chain hash of the last
 %% removed one. The boundary's MAC says the store wrote it. A batch that
 %% starts anywhere else, or carries any other hash, has a gap nobody recorded
-%% and gets {missing_predecessor, _}.
--spec scavenge_anchor(atom(), binary(), non_neg_integer(), [event()])
-        -> binary() | {missing_predecessor, non_neg_integer()}.
-scavenge_anchor(StoreId, StreamId, PrevVersion, [#event{} = First | _]) ->
+%% and is reported as one.
+-spec scavenge_anchor(atom(), binary(), non_neg_integer())
+        -> {ok, binary()} | {error, predecessor_absent()}.
+scavenge_anchor(StoreId, StreamId, PrevVersion) ->
     BoundaryVersion = PrevVersion + 1,
-    Carried = First#event.prev_event_hash,
-    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
-        {ok, #{version := BoundaryVersion, prev_hash := Recorded} = Boundary}
-                when is_binary(Carried), Carried =:= Recorded ->
+    Carried = carried_hash(StoreId, StreamId, BoundaryVersion),
+    case matching_boundary(reckon_db_scavenge_boundary:lookup(StoreId, StreamId),
+                           BoundaryVersion, Carried) of
+        {true, Recorded, Boundary} ->
             verified_anchor(StoreId, StreamId, PrevVersion, Recorded, Boundary);
-        _ ->
-            {missing_predecessor, PrevVersion}
-    end;
-scavenge_anchor(_StoreId, _StreamId, _PrevVersion, []) ->
-    %% An empty batch has nothing to anchor.
-    undefined.
+        false ->
+            {error, missing_predecessor_violation(StreamId, BoundaryVersion,
+                                                  PrevVersion)}
+    end.
+
+%% @private The recorded boundary, when this batch is the one it was recorded
+%% for: same oldest surviving version, and the event there carries the hash
+%% the boundary names. Handed back unwrapped, because the verifier takes the
+%% record and not the lookup result.
+-type scavenge_boundary_record() ::
+    #{version := pos_integer(), prev_hash := binary(), mac := binary()}.
+
+-spec matching_boundary({ok, scavenge_boundary_record()} | {ok, undefined},
+                        non_neg_integer(), binary() | undefined)
+        -> {true, binary(), scavenge_boundary_record()} | false.
+matching_boundary({ok, #{version := Version, prev_hash := Recorded} = Boundary},
+                  Version, Carried)
+        when is_binary(Carried), Carried =:= Recorded ->
+    {true, Recorded, Boundary};
+matching_boundary(_Boundary, _Version, _Carried) ->
+    false.
+
+%% @private
+carried_hash(StoreId, StreamId, Version) ->
+    case predecessor_event(StoreId, StreamId, Version) of
+        {ok, #event{prev_event_hash = Carried}} -> Carried;
+        missing -> undefined
+    end.
+
+%% @private
+missing_predecessor_violation(StreamId, Version, MissingVersion) ->
+    #{layer => storage,
+      stream_id => StreamId,
+      version => Version,
+      kind => missing_predecessor,
+      context => #{detail => predecessor_absent,
+                   missing_version => MissingVersion}}.
 
 %% @private A boundary the store can prove it wrote.
 -spec verified_anchor(atom(), binary(), non_neg_integer(), binary(),
                       reckon_db_scavenge_boundary:boundary())
-        -> binary() | {missing_predecessor, non_neg_integer()}.
+        -> {ok, binary()} | {error, predecessor_absent()}.
 verified_anchor(StoreId, StreamId, PrevVersion, Recorded, Boundary) ->
     case reckon_db_scavenge_boundary:verify(StoreId, StreamId, Boundary) of
-        true -> Recorded;
-        false -> {missing_predecessor, PrevVersion}
+        true ->
+            {ok, Recorded};
+        false ->
+            {error, missing_predecessor_violation(StreamId, PrevVersion + 1,
+                                                  PrevVersion)}
     end.
 
 %% @private

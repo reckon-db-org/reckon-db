@@ -31,7 +31,7 @@
 #     nested try/catch, no if, functions at most 60 code lines) is a plain
 #     gate with NO baseline. The 26 findings once baselined were fixed at the
 #     source; a new one fails the job.
-#   - dialyzer: 184 findings across 45 files, recorded in `.dialyzer_baseline'.
+#   - dialyzer: 181 findings across 45 files, recorded in `.dialyzer_baseline'.
 # The dialyzer baseline is a RATCHET (scripts/check_ratchet.sh): a finding
 # outside it fails the job, a finding that disappears is reported so its line
 # can be struck. Do NOT add continue-on-error, and do not regenerate the

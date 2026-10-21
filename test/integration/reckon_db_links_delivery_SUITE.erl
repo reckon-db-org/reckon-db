@@ -26,7 +26,8 @@
          a_restarted_link_links_each_event_once/1,
          a_killed_worker_resumes_from_its_fence/1,
          a_failed_append_does_not_advance_the_fence/1,
-         a_failing_link_does_not_take_the_store_with_it/1]).
+         a_failing_link_does_not_take_the_store_with_it/1,
+         a_wildcard_link_does_not_link_its_own_output/1]).
 
 suite() -> [{timetrap, {minutes, 2}}].
 
@@ -37,7 +38,8 @@ all() ->
      a_restarted_link_links_each_event_once,
      a_killed_worker_resumes_from_its_fence,
      a_failed_append_does_not_advance_the_fence,
-     a_failing_link_does_not_take_the_store_with_it].
+     a_failing_link_does_not_take_the_store_with_it,
+     a_wildcard_link_does_not_link_its_own_output].
 
 %%====================================================================
 %% CT callbacks
@@ -262,6 +264,27 @@ a_failing_link_does_not_take_the_store_with_it(Config) ->
     ok = meck:unload(reckon_db_links),
     ok = reckon_db_links:start(StoreId, A),
     ok = wait_for_versions(StoreId, A, [0, 1]).
+
+%% @doc GIVEN a link whose source is the wildcard pattern
+%%      WHEN one event is appended to a stream
+%%      THEN the link stream holds exactly that event
+%%
+%% A link stream is named `$link:<name>', which the wildcard matches. Once the
+%% live path really delivers, a wildcard link links its own output, the new
+%% event matches again, and the store fills up with copies of itself. A
+%% wildcard source never covers a link stream, its own or anybody else's.
+a_wildcard_link_does_not_link_its_own_output(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    Name = <<"wildcard">>,
+    Source = reckon_db_test_helpers:sid(<<"orders-wildcard">>),
+    ok = create_link(StoreId, Name,
+                     #{type => stream_pattern, pattern => <<"*">>}),
+    ok = reckon_db_links:start(StoreId, Name),
+
+    {ok, 0} = append(StoreId, Source, 1),
+    ok = wait_for_versions(StoreId, Name, [0]),
+    timer:sleep(500),
+    ?assertEqual([0], link_versions(StoreId, Name)).
 
 %%====================================================================
 %% Helpers
