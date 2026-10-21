@@ -34,6 +34,7 @@
     a_scavenged_stream_never_reuses_a_version/1,
     dry_run_scavenge_leaves_versions_alone/1,
     stream_without_a_counter_reports_its_newest_version/1,
+    a_counter_below_the_tree_is_not_the_newest_version/1,
     deleting_a_stream_resets_its_versions/1
 ]).
 
@@ -45,6 +46,7 @@ all() ->
      a_scavenged_stream_never_reuses_a_version,
      append_after_scavenge_keeps_versions_and_delivery,
      stream_without_a_counter_reports_its_newest_version,
+     a_counter_below_the_tree_is_not_the_newest_version,
      deleting_a_stream_resets_its_versions].
 
 init_per_suite(Config) ->
@@ -195,6 +197,37 @@ stream_without_a_counter_reports_its_newest_version(Config) ->
     {ok, 5} = reckon_db_streams:append(StoreId, StreamId, -2, [event(<<"next">>)]),
     ?assertEqual({ok, 5}, khepri:get(StoreId, CounterPath)),
     ?assertEqual(5, reckon_db_streams:get_version(StoreId, StreamId)).
+
+%% @doc GIVEN a stream whose counter is below the newest event
+%%      WHEN the newest version is asked for, and a keep_versions scavenge runs
+%%      THEN the tree answers, not the counter, and the scavenge keeps the
+%%           newest events rather than measuring from a version that is not
+%%           the newest
+%%
+%% The shape is a 5.11.x writer: that release kept no counter, so it could
+%% append past one. Counter 9 over a tree holding 0..15 answered 9, and
+%% keep_versions 3 then deleted {0,6} instead of {0,12}.
+a_counter_below_the_tree_is_not_the_newest_version(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"scavver-005">>),
+    {ok, 15} = reckon_db_streams:append(StoreId, StreamId, -2,
+                                        [event(T) || T <- typed(<<"before_">>, 16)]),
+    ?assertEqual(15, reckon_db_streams:get_version(StoreId, StreamId)),
+
+    %% The counter sits above the tree it was written with: 9, where the tree
+    %% holds 0..15.
+    CounterPath = reckon_db_stream_path:version_counter_path(StreamId),
+    ok = khepri:put(StoreId, CounterPath, 9),
+    ?assertEqual({ok, 15}, reckon_db_streams:newest_event_version(StoreId, StreamId)),
+
+    {ok, Result} = reckon_db_scavenge:scavenge(StoreId, StreamId,
+        #{before_version => 100, keep_versions => 3, require_snapshot => false}),
+
+    %% The newest three are what is left: measured from 9 the scavenge stops
+    %% at 6 and leaves {7,15} behind, thirteen events where three belong.
+    ?assertMatch(#{deleted_versions := {0, 12}}, Result),
+    ?assertEqual(3, reckon_db_streams:live_event_count(StoreId, StreamId)),
+    ?assertEqual({ok, 15}, reckon_db_streams:newest_event_version(StoreId, StreamId)).
 
 %% @doc GIVEN a stream and then no stream
 %%      WHEN it is deleted and appended to again under the same id

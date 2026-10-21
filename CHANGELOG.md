@@ -178,10 +178,13 @@ reconcile reports `{version_unverifiable, Counter, Reason}` instead.
 ### Changed: the newest-version read costs one node, not a walk
 
 `newest_event_version/2` walked every version node of the stream: a dry run
-on a 50k-event stream took 130-226 ms. The counter's own node answers it,
-because the counter is written in the same Ra command as the events. The walk
-is left for the two cases that need it - no counter, or a counter whose node
-is gone - so the ordinary path is two reads.
+on a 50k-event stream took 130-226 ms. The counter answers it when the tree
+agrees with it, because the counter is written in the same Ra command as the
+events - and the tree agrees when the counter's own node is there and the node
+after it is not. The walk is left for the shapes that need it: no counter, a
+counter whose node is gone, or a writer that went past the counter (5.11.x
+kept none), where the counter names a version that is not the newest. The
+ordinary path is two node reads.
 
 `newest_event_version/2` answers `{ok, Version}` now, and `{error, Reason}`
 when the tree could not be read; it is new in this release and had no
@@ -232,8 +235,9 @@ implements that as a local query fenced to the leader's last applied index,
 not as a read on the leader. Only the retry pays for it; the first read of an
 append stays local.
 
-`reckon_db_concurrent_append_SUITE` is the proof: nine cases, seven of them
-red on 66edb40.
+`reckon_db_concurrent_append_SUITE` is the proof: fourteen cases - six
+races, two scavenged-stream appends, an empty append, the retry's consistent
+read, and four deleted-stream edges.
 
 ### Fixed: a version-less append through the gateway pool is no longer refused
 

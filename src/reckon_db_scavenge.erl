@@ -202,10 +202,21 @@ execute_or_preview(StoreId, StreamId, Opts, false, Events, FromVersion,
     %% it got; deleting them first and writing the number afterwards leaves a
     %% window in which a crash loses the number too, and the stream restarts
     %% at 0 on its next append. Written first, the worst a crash can leave is
-    %% a counter above a full tree, which the append reconciles.
-    ok = reckon_db_streams:ensure_version_counter(StoreId, StreamId, NewestVersion),
-    delete_event_versions(StoreId, StreamId, FromVersion, ToVersion),
-    {ok, build_scavenge_result(StreamId, Events, FromVersion, ToVersion, Opts)}.
+    %% a counter above a full tree, which the append reconciles - and a crash
+    %% midway through the deletes leaves that counter with the events from
+    %% FromVersion onwards still in the tree, so the stream keeps its number
+    %% and a re-run scavenges the rest.
+    %%
+    %% A failed counter write is an error, not a badmatch: this runs inside a
+    %% gateway worker, where a badmatch takes the worker down with it
+    %% (reckon-db#4), and nothing has been deleted yet.
+    case reckon_db_streams:ensure_version_counter(StoreId, StreamId, NewestVersion) of
+        ok ->
+            delete_event_versions(StoreId, StreamId, FromVersion, ToVersion),
+            {ok, build_scavenge_result(StreamId, Events, FromVersion, ToVersion, Opts)};
+        {error, _} = Error ->
+            Error
+    end.
 
 %% @private
 build_scavenge_result(StreamId, Events, FromVersion, ToVersion, Opts) ->
@@ -223,7 +234,10 @@ maybe_add_archive_key(Result, undefined) -> Result;
 maybe_add_archive_key(Result, Key) -> Result#{archive_key => Key}.
 
 %% @private Find events that should be scavenged, and the newest version the
-%% stream holds - the scavenge needs the second to leave a counter behind.
+%% stream holds - the scavenge needs the second to leave a counter behind, and
+%% it is the TREE's newest version, never the counter's: a 5.11.x append can
+%% leave the counter below the newest event, and `keep_versions' measured from
+%% there deletes the newest events instead of keeping them.
 -spec find_scavenge_candidates(atom(), binary(), scavenge_opts()) ->
     {ok, [event()], {non_neg_integer(), non_neg_integer()}, integer()}
         | {error, term()}.

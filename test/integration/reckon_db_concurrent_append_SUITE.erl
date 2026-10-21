@@ -25,9 +25,12 @@
 %% removed between the read and the write, with and without a counter, under
 %% ANY and under an explicit version.
 %%
-%% All thirteen are listed in all/0. The first eight are red on 66edb40, bar
-%% the empty append, which passes there too; the four deleted-stream cases are
-%% new in this round.
+%% All fourteen are listed in all/0: the first six are the races, then the
+%% two scavenged-stream appends, the empty append and the favour the retry
+%% asks for, and the last four are the delete - a stream removed between the
+%% read and the write, with and without a counter, under ANY and under an
+%% explicit version. The races are red on 66edb40; the empty append passes
+%% there too, and the four deleted-stream cases are new in this round.
 -module(reckon_db_concurrent_append_SUITE).
 
 -include_lib("common_test/include/ct.hrl").

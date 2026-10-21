@@ -121,6 +121,16 @@ a_snapshot_taken_at_the_threshold_is_used_by_the_next_load(Config) ->
     ?assertEqual([?SNAPSHOT_THRESHOLD],
                  [V || #snapshot{version = V,
                                  data = #account{version = V}} <- Snapshots]),
+    %% Now make the snapshot the ONLY way load/2 can answer: scavenge away
+    %% every event it covers. A load that ignored snapshots would answer -1
+    %% with an empty balance here, and this case used to pass with that branch
+    %% dead, because the cast happened to land before the load. The wait above
+    %% is what makes the scavenge safe to run now.
+    {ok, _} = reckon_db_scavenge:scavenge(StoreId, StreamId, #{before_version => 11}),
+    {ok, #account{version = AfterScavenge, balance = BalanceAfterScavenge}} =
+        load(StoreId, AccountId),
+    ?assertEqual(?SNAPSHOT_THRESHOLD + 1, AfterScavenge),
+    ?assertEqual(?SNAPSHOT_THRESHOLD + 2, BalanceAfterScavenge),
     %% And the stream keeps writing after the snapshot, from the version the
     %% snapshot carried - not from a version it re-used.
     {ok, AfterVersion, _} = execute(StoreId, AccountId, {deposit, 1}),

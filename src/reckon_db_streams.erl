@@ -892,12 +892,22 @@ counter_value(StoreId, StreamId, Options) ->
         _ -> none
     end.
 
-%% @private The counter, when the version node it names is in the tree.
+%% @private The counter, when it is the newest version in the tree.
 %%
-%% One node read, where walking every version node of a 50k stream cost
-%% 130-226 ms. A counter whose node is present is the newest version, because
-%% the counter is written in the same Ra command as the events; a counter
-%% whose node is gone is the rollback shape, and says nothing about the tree.
+%% Two node reads, where walking every version node of a 50k stream cost
+%% 130-226 ms. The counter is written in the same Ra command as the events, so
+%% a counter whose node is present is normally the newest version. Two shapes
+%% break that, and both are named by a read of the node after it:
+%%
+%% - the counter's own node is gone - a counter above a tree a delete and
+%%   re-create left short, or a rollback shape - and it says nothing;
+%% - the node at Counter + 1 is present - a 5.11.x writer appended past the
+%%   counter, which that release never maintained. Measured: counter 9 with
+%%   the tree holding 0..15, where answering 9 made a keep_versions 3 scavenge
+%%   delete {0,6} instead of {0,12}: it under-scavenged, and the cutoff was
+%%   measured against a version that was not the newest.
+%%
+%% Either way the tree is what answers, and the caller walks it.
 counter_naming_a_live_node(StoreId, StreamId, Options) ->
     case counter_value(StoreId, StreamId, Options) of
         {ok, Version} -> counter_over_a_live_node(StoreId, StreamId, Version, Options);
@@ -907,8 +917,17 @@ counter_naming_a_live_node(StoreId, StreamId, Options) ->
 %% @private
 counter_over_a_live_node(StoreId, StreamId, Version, Options) ->
     case version_node_exists(StoreId, StreamId, Version, Options) of
-        true  -> {ok, Version};
-        false -> no_counter
+        true ->
+            counter_is_newest(StoreId, StreamId, Version, Options);
+        false ->
+            no_counter
+    end.
+
+%% @private Whether a writer went past the counter.
+counter_is_newest(StoreId, StreamId, Version, Options) ->
+    case version_node_exists(StoreId, StreamId, Version + 1, Options) of
+        false -> {ok, Version};
+        true  -> no_counter
     end.
 
 %% @private Latest version present in the tree, for a stream whose counter
