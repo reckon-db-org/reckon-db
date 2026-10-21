@@ -394,6 +394,17 @@ fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, {at, Start}
                        read(StoreId, StreamId, Start, BatchSize, Direction));
         false ->
             {ok, Acc}
+    end;
+fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc,
+          {consistent, Start}) ->
+    case inside_the_stream(Start, Newest, Direction) of
+        true ->
+            fold_batch(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc,
+                       {at, Start},
+                       read_consistent(StoreId, StreamId, Start, BatchSize,
+                                       Direction));
+        false ->
+            {ok, Acc}
     end.
 
 %% @private
@@ -420,10 +431,22 @@ fold_batch(_StoreId, _StreamId, _BatchSize, _Direction, _Newest, _Fun, _Acc,
 reanchor(_StoreId, _StreamId, _BatchSize, _Direction, _Newest, _Fun, Acc, none) ->
     {ok, Acc};
 reanchor(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, {ok, Start}) ->
-    fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc, {at, Start});
+    fold_from(StoreId, StreamId, BatchSize, Direction, Newest, Fun, Acc,
+              {consistent, Start});
 reanchor(_StoreId, _StreamId, _BatchSize, _Direction, _Newest, _Fun, _Acc,
          {error, _} = Error) ->
     Error.
+
+%% @private A window read asked of the leader rather than this node.
+%%
+%% The fold only pays this after a re-anchor: the tree said the version is
+%% live, and the local read said the window was empty. On a follower that has
+%% not caught up those two answers disagree, and re-anchoring again would land
+%% on the same version for ever. One consistent read settles it.
+read_consistent(StoreId, StreamId, Start, Count, Direction) ->
+    {ok, Events} = read_events(StoreId, StreamId, Start, Count, Direction,
+                               read_options(consistent)),
+    verify_read_result({ok, Events}, StoreId, StreamId, Start, Direction, #{}).
 
 %% @private Whether a cursor is still inside the stream, in the direction the
 %% fold is travelling.
@@ -2083,9 +2106,7 @@ verify_read_result({ok, Events}, StoreId, StreamId, StartVersion, Direction, Opt
     %% Wrap at the public API boundary so callers see {error, _}; internal
     %% helpers and the gater module return the bare integrity tuple.
     wrap_verification(
-        maybe_verify_events(StoreId, StreamId, StartVersion, Direction, Events, Opts));
-verify_read_result(Other, _StoreId, _StreamId, _StartVersion, _Direction, _Opts) ->
-    Other.
+        maybe_verify_events(StoreId, StreamId, StartVersion, Direction, Events, Opts)).
 
 wrap_verification({ok, _} = Ok) -> Ok;
 wrap_verification({integrity_violation, _} = Violation) -> {error, Violation}.
@@ -2101,7 +2122,7 @@ wrap_verification({integrity_violation, _} = Violation) -> {error, Violation}.
 %% them in.
 -spec maybe_verify_events(
     atom(), binary(), non_neg_integer(), direction(), [event()], read_opts()
-) -> {ok, [event()]} | {error, term()}.
+) -> {ok, [event()]} | {integrity_violation, map()}.
 maybe_verify_events(StoreId, StreamId, StartVersion, Direction, Events, Opts) ->
     Mode = maps:get(verify, Opts, skip_legacy),
     case verify_required(StoreId, Direction, Mode) of
@@ -2125,7 +2146,7 @@ verify_required(StoreId, _Direction, _Mode) ->
 %% reverses to forward order, verifies, and reverses the result back.
 -spec verify_in_direction(
     atom(), binary(), non_neg_integer(), direction(), [event()], verify_mode()
-) -> {ok, [event()]} | {error, term()}.
+) -> {ok, [event()]} | {integrity_violation, map()}.
 verify_in_direction(StoreId, StreamId, StartVersion, forward, Events, Mode) ->
     verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode);
 verify_in_direction(StoreId, StreamId, StartVersion, backward, Events, Mode) ->
@@ -2152,7 +2173,7 @@ verify_in_direction(StoreId, StreamId, StartVersion, backward, Events, Mode) ->
 %% running chain tip. Short-circuits on the first integrity_violation.
 -spec verify_events_forward(
     atom(), binary(), non_neg_integer(), [event()], verify_mode()
-) -> {ok, [event()]} | {error, term()}.
+) -> {ok, [event()]} | {integrity_violation, map()}.
 verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode) ->
     {ok, ChainStart} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
     Key = reckon_db_integrity_key:get(StoreId),
@@ -2287,17 +2308,23 @@ resolve_read_initial_tip(StoreId, StreamId, StartVersion, _ChainStart)
 -spec read_events(atom(), binary(), non_neg_integer(), pos_integer(), direction()) ->
     {ok, [event()]}.
 read_events(StoreId, StreamId, StartVersion, Count, Direction) ->
+    read_events(StoreId, StreamId, StartVersion, Count, Direction, #{}).
+
+%% @private The same window, with the read options the caller names.
+read_events(StoreId, StreamId, StartVersion, Count, Direction, Options) ->
     Versions = calculate_versions(StartVersion, Count, Direction),
-    Events = lists:filtermap(fun(Version) -> read_one_event(StoreId, StreamId, Version) end,
-                             Versions),
+    Events = lists:filtermap(
+               fun(Version) ->
+                       read_one_event(StoreId, StreamId, Version, Options)
+               end, Versions),
     {ok, Events}.
 
 %% @private Fetch a single event by version, converting a stored map to a
 %% record if needed; drops versions with no event.
-read_one_event(StoreId, StreamId, Version) ->
+read_one_event(StoreId, StreamId, Version, Options) ->
     PaddedVersion = pad_version(Version, ?VERSION_PADDING),
     Path = reckon_db_stream_path:event_path(StreamId, PaddedVersion),
-    event_from_khepri(khepri:get(StoreId, Path)).
+    event_from_khepri(khepri:get(StoreId, Path, Options)).
 
 event_from_khepri({ok, Event}) when is_record(Event, event) -> {true, Event};
 event_from_khepri({ok, EventMap}) when is_map(EventMap) -> {true, map_to_event(EventMap)};

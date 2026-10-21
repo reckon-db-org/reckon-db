@@ -2,6 +2,8 @@
 # dialyzer reported 198 warnings when this was written.
 ||||||| parent of 4bb162b (reckon-db 5.12.0: a link links the events appended during its own start, exactly once)
 # dialyzer reported 198 when this was written (files for lint, warnings for dialyzer).
+||||||| parent of 1aa3537 (reckon-db 5.12.0: the fold's recovery read is consistent, so a lagging member cannot spin)
+# dialyzer reported 190 when this was written (files for lint, warnings for dialyzer).
 # A new finding fails CI. A fixed finding should have its line deleted here.
 src/reckon_db_app.erl	229929d0a14f	Expression produces a value of type 'ok' | {'error','already_exists'}, but this value is unmatched
 src/reckon_db_app.erl	f0ceac231f4c	The specification for reckon_db_app:start/0 states that the function might also return {'ok',pid()} but the in
@@ -179,20 +181,14 @@ src/reckon_db_store_inspector.erl	948736894b3f	Type specification reckon_db_stor
 src/reckon_db_streams.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
 src/reckon_db_streams.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
 src/reckon_db_streams.erl	0d2296c883b7	The variable _ can never match since previous clauses completely covered the type []
-src/reckon_db_streams.erl	0e48154b7c5e	The specification for reckon_db_streams:maybe_verify_events/6 states that the function might also return {'err
 src/reckon_db_streams.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
 src/reckon_db_streams.erl	28d0a137f178	Expression produces a value of type atom() | ets:tid(), but this value is unmatched
-src/reckon_db_streams.erl	6050fabc909a	The pattern Violation = {'integrity_violation', _} can never match the type {'ok',[{_,_,_,_,_,_,_,_,_,_,_,_,_,
-src/reckon_db_streams.erl	67d0e6a9564f	The pattern <Other, _StoreId, _StreamId, _StartVersion, _Direction, _Opts> can never match since previous clau
 src/reckon_db_streams.erl	7bfe9b04e074	Unknown type khepri:condition/0
 src/reckon_db_streams.erl	7bfe9b04e074	Unknown type khepri:condition/0
-src/reckon_db_streams.erl	7da8dbd5a7aa	The specification for reckon_db_streams:verify_in_direction/6 states that the function might also return {'err
-src/reckon_db_streams.erl	9441d1d5795b	The specification for reckon_db_streams:verify_events_forward/5 states that the function might also return {'e
 src/reckon_db_streams.erl	958a0fcfb1d5	Unknown type reckon_gater_types:seq_cutoff/0
 src/reckon_db_streams.erl	af7a0dcf7bdf	Record construction #event{event_id::'_',stream_id::'_',version::'_',data::'_',metadata::'_',tags::'_',timesta
 src/reckon_db_streams.erl	b1d3dacbe5bd	Type specification reckon_db_streams:warn_unindexed(atom(),index_decl()) -> 'ok' is a supertype of the success
 src/reckon_db_streams.erl	b52d9de6c8fb	The pattern [SingleCondition] can never match the type []
-src/reckon_db_streams.erl	cc3c36522356	The pattern Violation = {'integrity_violation', _} can never match the type {'ok',[#event{event_id::binary(),e
 src/reckon_db_streams.erl	db3918da04e2	The pattern Error = {'error', _} can never match the type {'ok',non_neg_integer()}
 src/reckon_db_subscription_health.erl	40d783a36299	The variable _ can never match since previous clauses completely covered the type 'undefined' | pid()
 src/reckon_db_subscription_health.erl	91066c59e846	Expression produces a value of type 'ok' | {'error','not_found' | 'restarting' | 'running' | 'simple_one_for_o
