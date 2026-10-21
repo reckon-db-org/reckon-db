@@ -74,6 +74,7 @@
     an_unsealed_watermark_never_excuses_a_hashless_stream/1,
     an_append_does_not_seal_a_forged_watermark/1,
     an_append_refuses_a_watermark_ahead_of_the_stream/1,
+    a_deleted_watermark_is_not_minted_by_an_append/1,
     integrity_disabled_store_bypasses_verification/1
 ]).
 
@@ -133,6 +134,7 @@ groups() ->
             an_unsealed_watermark_never_excuses_a_hashless_stream,
             an_append_does_not_seal_a_forged_watermark,
             an_append_refuses_a_watermark_ahead_of_the_stream,
+            a_deleted_watermark_is_not_minted_by_an_append,
             integrity_disabled_store_bypasses_verification
         ]}
     ].
@@ -396,10 +398,11 @@ skip_legacy_passes_legacy_events_through(Config) ->
     {StoreId, _Key} = setup_integrity_store_with_legacy_prefix(Config, 3),
     StreamId = reckon_db_test_helpers:sid(<<"mixed-skip-legacy">>),
     write_legacy_events(StoreId, StreamId, 3),
-    %% Now enable integrity (set watermark to 3) and write 2 more. The key
-    %% goes in first: the watermark is sealed under it.
+    %% Now enable integrity and write 2 more. The key goes in first, then the
+    %% migration gives the pre-integrity prefix its watermark: an append never
+    %% mints one for an existing stream.
     ok = enable_integrity(StoreId),
-    {ok, _} = reckon_db_chain_watermark:set_if_absent(StoreId, StreamId, 3),
+    ok = reckon_db_chain_watermark:migrate(StoreId),
     write_n_events_starting_at(StoreId, StreamId, 3, 2),
 
     {ok, Events} = reckon_db_streams:read(
@@ -464,7 +467,7 @@ legacy_and_integrity_events_in_same_stream(Config) ->
     StreamId = reckon_db_test_helpers:sid(<<"mixed">>),
     write_legacy_events(StoreId, StreamId, 2),
     ok = enable_integrity(StoreId),
-    {ok, _} = reckon_db_chain_watermark:set_if_absent(StoreId, StreamId, 2),
+    ok = reckon_db_chain_watermark:migrate(StoreId),
     write_n_events_starting_at(StoreId, StreamId, 2, 3),
 
     {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 10, forward),
@@ -726,21 +729,60 @@ an_append_does_not_seal_a_forged_watermark(Config) ->
 %% A watermark moved past the stream is not a reason for the gateway worker
 %% to die: the caller gets a reason it can report, and nothing is written.
 an_append_refuses_a_watermark_ahead_of_the_stream(Config) ->
-    {StoreId, _Key} = setup_integrity_store(Config),
+    {StoreId, Key} = setup_integrity_store(Config),
     StreamId = reckon_db_test_helpers:sid(<<"integrity-watermark-ahead">>),
-    write_n_events(StoreId, StreamId, 5),
 
-    %% The documented upgrade step, run over a bare value somebody moved.
-    ok = khepri:put(StoreId, watermark_path(StreamId), 1000),
-    ok = reckon_db_chain_watermark:seal(StoreId, StreamId),
+    %% A sealed watermark above the stream cannot be produced through the
+    %% API any more (sealing refuses one, and the migration refuses one), so
+    %% it is written the only way it can now arise: with the key.
+    ok = khepri:put(StoreId, watermark_path(StreamId),
+                    sealed_watermark(Key, StreamId, 1000)),
     ?assertMatch({ok, {sealed, 1000}},
                  reckon_db_chain_watermark:lookup(StoreId, StreamId)),
 
     ?assertMatch({error, {chain_start_ahead_of_append,
-                          #{next_version := 5, chain_start := 1000}}},
+                          #{next_version := 0, chain_start := 1000}}},
+                 reckon_db_streams:append(
+                     StoreId, StreamId, ?NO_STREAM,
+                     [#{event_type => <<"e">>, data => #{n => 9}}])),
+    ?assertNot(reckon_db_streams:exists(StoreId, StreamId)).
+
+%% @doc GIVEN a stream whose integrity fields were all cleared and whose
+%%           watermark was DELETED
+%%      WHEN one ordinary append runs
+%%      THEN it is refused, and the stream stays unreadable
+%%
+%% The third way to get a chain start the store never chose: delete the
+%% watermark instead of forging it. An append used to mint a sealed one at
+%% its own next version for a stream that already held events, and the read
+%% path then believed it, so one append vouched for a chain start over a
+%% stream that had been rewritten underneath. Only a new stream, at version
+%% 0, gets a watermark minted at runtime.
+a_deleted_watermark_is_not_minted_by_an_append(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"integrity-watermark-deleted-append">>),
+    write_n_events(StoreId, StreamId, 5),
+
+    lists:foreach(fun(V) -> ok = clear_integrity_fields(StoreId, StreamId, V) end,
+                  lists:seq(0, 4)),
+    ok = rewrite_event(StoreId, StreamId, 4, #{tampered => 1}),
+    ok = khepri:delete(StoreId, watermark_path(StreamId)),
+
+    ?assertMatch({error, {chain_start_missing, _}},
                  reckon_db_streams:append(
                      StoreId, StreamId, 4,
-                     [#{event_type => <<"e">>, data => #{n => 9}}])).
+                     [#{event_type => <<"e">>, data => #{n => 99}}])),
+    ?assertMatch({ok, undefined},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+    ?assertMatch({error, {integrity_violation, #{kind := missing_integrity}}},
+                 reckon_db_streams:read_all(StoreId, StreamId, 100, forward)).
+
+%% @private The authenticated watermark shape, MAC'd under the store's key.
+sealed_watermark(Key, StreamId, Version) ->
+    Mac = crypto:mac(hmac, sha256, Key,
+                     term_to_binary({reckon_db_chain_watermark, StreamId, Version},
+                                    [deterministic])),
+    #{version => Version, mac => Mac}.
 
 %% @private
 watermark_path(StreamId) ->

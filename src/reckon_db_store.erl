@@ -135,6 +135,14 @@ post_key_load(ok, StoreId, Mode, DataDir, Config, StartTime) ->
     %% Install the store's declared secondary indexes so the append path
     %% can read them. Always succeeds (a [] list just means no indexes).
     ok = reckon_db_index_config:load(Config),
+    %% Seal the watermarks an earlier version wrote as bare integers, once
+    %% per store and before anything is served. Downtime that waits for an
+    %% operator to run a command by hand is not an acceptable shape for a
+    %% security fix: without this, an upgraded store fails every append and
+    %% refuses every read on those streams until someone notices. It never
+    %% fails the start: a store that cannot be migrated stays fail-closed on
+    %% the affected streams and retries on its next boot.
+    ok = reckon_db_chain_watermark:migrate(StoreId),
     do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime);
 post_key_load({error, KeyReason} = KeyError, StoreId, _Mode, _DataDir, _Config, _StartTime) ->
     logger:error("Failed to load integrity key for store ~p: ~p", [StoreId, KeyReason]),

@@ -117,6 +117,12 @@
 %% events at or above the watermark must carry prev_event_hash + mac.
 -define(INTEGRITY_CHAIN_START_PATH, [metadata, integrity, chain_start]).
 
+%% Store-level record that the one-time watermark migration has run, MAC'd
+%% under the store's integrity key. Its presence is what makes a bare-integer
+%% watermark a forgery rather than a leftover: nothing seals one after it.
+-define(INTEGRITY_MIGRATION_PATH, [metadata, integrity, migration]).
+-define(INTEGRITY_MIGRATION_VERSION, 1).
+
 %%====================================================================
 %% Default Values
 %%====================================================================

@@ -160,9 +160,11 @@ catchup_continues_past_legacy_events(Config) ->
     %% Start with legacy: write 2 events on a disabled store.
     write_legacy_events(StoreId, StreamId, 2),
 
-    %% Enable integrity, write 3 more events with integrity.
+    %% Enable integrity, write 3 more events with integrity. The watermark
+    %% for the pre-integrity prefix comes from the migration, as it does at
+    %% store start: an append never mints one for an existing stream.
     install_random_key(StoreId),
-    %% Lazy watermark will be set to version 2 on the next append.
+    ok = reckon_db_chain_watermark:migrate(StoreId),
     write_n_events_starting_at(StoreId, StreamId, 2, 3),
 
     Self = self(),

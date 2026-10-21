@@ -447,23 +447,44 @@ can prove it wrote, so it is now stored with an HMAC under the store's
 integrity key. A watermark that is missing, or that is a bare integer, makes
 every hash-less event a violation rather than a skip.
 
-**This is an upgrade step for existing stores.** A watermark written by an
-earlier version is a bare integer by construction and is refused. Before this
-version serves reads of an existing integrity-enabled store, run
-`reckon_db_chain_watermark:seal_all(StoreId)` once; it rewrites each watermark
-in the authenticated shape with the value it already had, and answers how many
-it sealed. Reads of that stream answer
-`{integrity_violation, #{kind := missing_integrity,
-context := #{detail := chain_start_unauthenticated}}}` until it runs.
+**This is an automatic, one-time migration. No hand step.** A watermark
+written by an earlier version is a bare integer by construction, and this
+version refuses one. Refusing it without migrating would make the upgrade an
+outage: from the first boot, every append to those streams fails and every
+read is a violation until somebody ran a command. Downtime that waits for a
+human act is not an acceptable shape for a security fix, so the store seals
+them itself at start, before it serves anything.
 
-**Only `seal_all/1` seals.** An append never does: a bare-integer watermark
-found by the write path stops the append with
+What the migration does, per stream: a bare watermark is sealed at the value
+it already has only if it can still be one the store wrote, meaning it is not
+above the stream's newest version and no event below it carries a chain (a
+genuine watermark was written at the version integrity began, so nothing
+below it has one). A stream with no watermark at all is sealed at its first
+chain-bearing version, or, if it has none, at newest + 1. Anything that fails
+those checks is left unsealed and reported in the log and in telemetry; its
+reads stay refused, one stream at a time, never the whole store.
+
+Then it writes `[metadata, integrity, migration]`, a record MAC'd under the
+store's integrity key, and never runs again.
+
+**Only the migration seals, and only a new stream gets a watermark minted.**
+An append never seals a bare integer: it stops with
 `{error, {chain_start_unauthenticated, Value}}` and leaves it exactly as it
 was. Before this, an append sealed whatever value was there, outside its own
 transaction, so one ordinary append after a forged watermark was written
 laundered the forgery into an authenticated one and the tampered stream read
-back clean. The same batch also answered a watermark that sits above the
-stream with `{error, {chain_start_ahead_of_append, _}}` instead of crashing in
+back clean.
+
+An append no longer mints a watermark for an EXISTING stream either: one with
+no watermark answers `{error, {chain_start_missing, StreamId}}`. Deleting a
+stream's watermark and appending once used to mint a sealed one at the new
+version, which vouched for a chain start over events that had been rewritten
+underneath. A new stream at version 0 still mints, because there is no data
+there to excuse; a stream that predates integrity gets its watermark from the
+migration.
+
+A watermark that sits above the stream answers
+`{error, {chain_start_ahead_of_append, _}}` instead of crashing in
 `resolve_initial_tip/4`.
 
 **An unsealed watermark is never believed, whatever the batch carries.** The
@@ -471,6 +492,19 @@ read path used to trust one when no event in the batch happened to carry a
 chain, which is exactly the shape of the attack: clear the integrity fields
 off every event, write a large bare number, and the stream came back
 unverified. It is now refused in every case.
+
+**What the migration cannot decide, said plainly.** A bare integer at or
+below the newest version over a stream whose integrity fields were ALL
+cleared is indistinguishable from a genuine pre-integrity watermark, because
+the events carry no evidence either way; sealing it preserves exactly what
+the previous version did with that store. Re-running the migration is
+prevented by the marker, and on a store whose marker is missing or does not
+verify the migration refuses to seal anything while the store already holds
+sealed watermarks, because re-sealing is what a writer who stripped a stream
+and deleted the marker would want. The residual: a writer who overwrites
+every sealed watermark in the store as well has removed all in-tree evidence
+of the migration. That is the capability the previous version already gave
+them; what is gone is doing it with one write to one stream.
 
 ### Fixed: a wildcard link no longer links its own output
 

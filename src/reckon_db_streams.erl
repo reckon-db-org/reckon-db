@@ -2008,8 +2008,7 @@ bump_global_event_count(N) ->
 
 -spec setup_integrity(atom(), binary(), integer()) ->
     integrity_ctx()
-        | {error, {chain_start_unauthenticated, non_neg_integer()}
-                 | {integrity_enabled_without_key, atom()}}.
+        | {error, integrity_refusal()}.
 setup_integrity(StoreId, StreamId, CurrentVersion) ->
     case reckon_db_integrity_key:is_enabled(StoreId) of
         false ->
@@ -2028,9 +2027,7 @@ setup_integrity(StoreId, StreamId, CurrentVersion) ->
 %% A store with integrity enabled and no key cannot stamp anything either;
 %% that is a configuration fault, answered rather than crashed on.
 -spec setup_integrity_enabled(atom(), binary(), non_neg_integer()) ->
-    {enabled, binary(), non_neg_integer()}
-        | {error, {chain_start_unauthenticated, non_neg_integer()}
-                 | {integrity_enabled_without_key, atom()}}.
+    {enabled, binary(), non_neg_integer()} | {error, integrity_refusal()}.
 setup_integrity_enabled(StoreId, StreamId, NextVersion) ->
     case reckon_db_chain_watermark:set_if_absent(StoreId, StreamId, NextVersion) of
         {ok, ChainStart} ->
@@ -2038,6 +2035,12 @@ setup_integrity_enabled(StoreId, StreamId, NextVersion) ->
         {error, _} = Error ->
             Error
     end.
+
+%% The ways a batch can be refused before anything is written.
+-type integrity_refusal() ::
+    {chain_start_unauthenticated, non_neg_integer()} |
+    {chain_start_missing, binary()} |
+    {integrity_enabled_without_key, atom()}.
 
 %% @private
 -spec enabled_ctx(atom(), non_neg_integer()) ->
