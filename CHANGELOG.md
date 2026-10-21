@@ -469,14 +469,19 @@ read is a violation until somebody ran a command. Downtime that waits for a
 human act is not an acceptable shape for a security fix, so the store seals
 them itself at start, before it serves anything.
 
-What the migration does, per stream: a bare watermark is sealed at the value
-it already has only if it sits exactly where the chain begins (a genuine
-watermark was written at the version integrity began, so no event below it
-carries a chain), or, over a stream that carries no chain at all, at a value no
-higher than newest + 1. A stream with no watermark and no chain-bearing event is
-sealed at newest + 1: the whole stream predates integrity, or an earlier version
-crashed between minting its watermark and appending the event that would have
-carried the chain.
+What the migration does, per stream: a stream that carries a chain is sealed at
+the version the store can PROVE the chain began, never at the value the node
+happens to hold. The proof is the event only a store can write at a chain start:
+its `prev_event_hash` is the genesis value and its MAC verifies under the store's
+key. A bare watermark is not proof - strip the chain fields off the first three
+chain-bearing events and move the bare watermark up three, and the new "chain
+start" is a version nobody can account for - so a stream whose chain start does
+not verify is refused, unless a verified scavenge boundary sits exactly where the
+surviving chain begins, which is the one thing a scavenge (and nothing else) can
+write. A stream that carries no chain at all is sealed at the value on the node
+when it is at or below newest + 1, or at newest + 1 when there is none: the whole
+stream predates integrity, or an earlier version crashed between minting its
+watermark and appending the event that would have carried the chain.
 
 **Deletion evidence changes the answer for every other stream.** An earlier
 version minted the watermark before it stamped the chain (`setup_integrity/3` on
@@ -489,8 +494,10 @@ migration stops vouching for anything it cannot check:
 - a chain-bearing stream is rebuilt from its own evidence - the lowest event
   whose `prev_event_hash` is the genesis value AND whose MAC verifies under the
   store's key is where the store began that chain, and nothing else can carry a
-  genesis predecessor with a valid MAC - and sealed there. If no such event
-  survives, that stream is refused.
+  genesis predecessor with a valid MAC - and sealed there. If the chain-start
+  event was removed by a real scavenge, the MAC'd boundary that scavenge wrote
+  stands in for it, but only when it sits exactly where the surviving chain
+  begins. Otherwise the stream is refused.
 - a chain-less stream with a missing or bare watermark is refused, and named in
   the log, in telemetry and in the marker.
 

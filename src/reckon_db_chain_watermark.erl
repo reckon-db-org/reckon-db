@@ -162,6 +162,7 @@
                   newest := integer(),
                   chain_start := {ok, non_neg_integer()} | none,
                   genesis := {ok, non_neg_integer()} | none,
+                  boundary := {ok, non_neg_integer()} | none,
                   error => term()}.
 
 %% A decision the scan made, ready to commit.
@@ -548,37 +549,36 @@ plan_bare_chainless(Scan, Version, Newest) when Version =< Newest + 1 ->
 plan_bare_chainless(Scan, Version, _Newest) ->
     {refuse, maps:get(stream_id, Scan), {above_newest, Version}}.
 
-%% @private A stream that carries a chain must have an authenticated
-%% watermark exactly where its chain begins: the earlier version wrote it
-%% there, before it stamped the first chain-bearing event.
-plan_chain_bearing(Scan, ChainStart, Evidence) ->
-    case maps:get(watermark, Scan) of
-        {unsealed, ChainStart} ->
-            seal_plan(Scan, ChainStart, ChainStart);
-        {unsealed, Version} ->
+%% @private A stream that carries a chain is sealed at the version the store
+%% can PROVE the chain began, never at the value it happens to hold. The proof
+%% is the event that only a store can write at a chain start: its predecessor
+%% is the genesis value and its MAC verifies under the store's key. A bare
+%% watermark is not proof of anything - delete the chain fields off the first
+%% three chain-bearing events and move the bare watermark up three, and the
+%% new "first chain-bearing event" sits at a version nobody can account for,
+%% which is why sealing at whatever value is on the node is the attack.
+plan_chain_bearing(Scan, ChainStart, _Evidence) ->
+    case maps:get(genesis, Scan) of
+        {ok, ChainStart} ->
+            seal_plan(Scan, ChainStart, raw_watermark(Scan));
+        {ok, Other} ->
             {refuse, maps:get(stream_id, Scan),
-             {watermark_not_at_chain_start, Version, ChainStart}};
-        undefined ->
-            plan_missing_chain(Scan, ChainStart, Evidence)
+             {genesis_not_at_chain_start, Other, ChainStart}};
+        none ->
+            plan_unproven_chain_start(Scan, ChainStart)
     end.
 
-%% @private No watermark over a stream that carries a chain: the stream's
-%% own chain start is the only evidence left. Rebuild the watermark from the
-%% one event that can only exist at a chain start - a chain-bearing event
-%% whose predecessor is the genesis value and whose MAC verifies - and seal
-%% there. Anything less is refused: with the marker gone, a stream the store
-%% cannot account for is exactly what an attacker who stripped a prefix
-%% leaves behind.
-plan_missing_chain(#{genesis := {ok, Version}} = Scan, ChainStart, true) ->
-    _ = ChainStart,
-    seal_plan(Scan, Version, undefined);
-plan_missing_chain(Scan, ChainStart, true) ->
-    {refuse, maps:get(stream_id, Scan), {chain_start_unknown, ChainStart}};
-plan_missing_chain(Scan, _, false) ->
-    %% Unreachable by construction: a chain-bearing stream with no watermark
-    %% is what makes Evidence true. Refused rather than sealed in case this
-    %% module's two halves ever disagree.
-    {refuse, maps:get(stream_id, Scan), chain_start_missing}.
+%% @private The chain-start event does not verify: either somebody stripped
+%% it, or a scavenge removed it. A verified scavenge boundary is the one
+%% thing that can tell those apart - only a scavenge can write one - and it
+%% answers only when it sits exactly where the surviving chain begins, which
+%% is the shape a scavenge leaves when it cuts through the chain start. Any
+%% other version is refused: with the marker gone, a stream the store cannot
+%% account for is exactly what an attacker who stripped a prefix leaves.
+plan_unproven_chain_start(#{boundary := {ok, ChainStart}} = Scan, ChainStart) ->
+    seal_plan(Scan, ChainStart, raw_watermark(Scan));
+plan_unproven_chain_start(Scan, ChainStart) ->
+    {refuse, maps:get(stream_id, Scan), {chain_start_unproven, ChainStart}}.
 
 %% @private
 seal_plan(Scan, Version, Expected) ->
@@ -780,12 +780,22 @@ plans_for_accepted([{_StreamId, #{error := Reason}} | _Rest], _Acc) ->
     {error, {unreadable, Reason}};
 plans_for_accepted([{StreamId, #{chain_start := {ok, ChainStart}} = Scan} | Rest], Acc) ->
     case maps:get(genesis, Scan) of
-        {ok, Version} -> plans_for_accepted(Rest, [seal_plan(Scan, Version, raw_watermark(Scan)) | Acc]);
-        none -> {error, {cannot_vouch, StreamId, {chain_start_unknown, ChainStart}}}
+        {ok, Version} ->
+            plans_for_accepted(Rest, [seal_plan(Scan, Version, raw_watermark(Scan)) | Acc]);
+        none ->
+            accept_unproven(Scan, StreamId, ChainStart, Rest, Acc)
     end;
 plans_for_accepted([{_StreamId, #{chain_start := none} = Scan} | Rest], Acc) ->
     Version = maps:get(newest, Scan) + 1,
     plans_for_accepted(Rest, [seal_plan(Scan, Version, raw_watermark(Scan)) | Acc]).
+
+%% @private The operator act vouches for a stream the migration could not
+%% prove, but only where an authenticated scavenge boundary already accounts
+%% for the gap: the human is vouching for the data, not for the cut.
+accept_unproven(#{boundary := {ok, ChainStart}} = Scan, _StreamId, ChainStart, Rest, Acc) ->
+    plans_for_accepted(Rest, [seal_plan(Scan, ChainStart, raw_watermark(Scan)) | Acc]);
+accept_unproven(_Scan, StreamId, ChainStart, _Rest, _Acc) ->
+    {error, {cannot_vouch, StreamId, {chain_start_unproven, ChainStart}}}.
 
 %% @private The raw value the transaction compares against: what the scan
 %% found at the watermark path, or undefined when it found nothing.
@@ -843,7 +853,8 @@ scan_stream(StoreId, StreamId) ->
              watermark => Watermark,
              newest => -1,
              chain_start => none,
-             genesis => none},
+             genesis => none,
+             boundary => boundary_version(StoreId, StreamId)},
     case newest_version(StoreId, StreamId) of
         {ok, Newest} ->
             scan_versions(StoreId, Base#{newest => Newest});
@@ -871,6 +882,22 @@ genesis_version(StoreId, Event) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) -> verify_genesis(Event, Key);
         _ -> none
+    end.
+
+%% @private The version a verified scavenge boundary names, if the store has
+%% one for this stream. Only a scavenge can write one: it is MAC'd under the
+%% store's key over the stream, the version and the hash it cut at.
+boundary_version(StoreId, StreamId) ->
+    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
+        {ok, Boundary} when is_map(Boundary) -> vetted_boundary(StoreId, StreamId, Boundary);
+        _ -> none
+    end.
+
+%% @private
+vetted_boundary(StoreId, StreamId, Boundary) ->
+    case reckon_db_scavenge_boundary:verify(StoreId, StreamId, Boundary) of
+        true -> {ok, maps:get(version, Boundary)};
+        false -> none
     end.
 
 %% @private

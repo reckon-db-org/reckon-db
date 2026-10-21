@@ -26,7 +26,9 @@
     a_stream_with_no_watermark_is_sealed_at_store_start/1,
     a_bare_integer_after_the_migration_is_refused/1,
     a_watermark_above_the_stream_is_not_sealed/1,
-    a_watermark_over_a_chain_is_not_sealed/1,
+    a_bare_watermark_is_sealed_at_the_proven_chain_start/1,
+    a_watermark_moved_onto_a_stripped_chain_start_is_not_sealed/1,
+    a_scavenged_chain_start_is_sealed_at_the_boundary/1,
     a_deleted_marker_does_not_reseal/1,
     a_deleted_watermark_is_not_minted_after_the_marker/1,
     a_deleted_watermark_is_evidence_and_refuses_chainless_streams/1,
@@ -44,7 +46,9 @@ all() ->
         a_stream_with_no_watermark_is_sealed_at_store_start,
         a_bare_integer_after_the_migration_is_refused,
         a_watermark_above_the_stream_is_not_sealed,
-        a_watermark_over_a_chain_is_not_sealed,
+        a_bare_watermark_is_sealed_at_the_proven_chain_start,
+        a_watermark_moved_onto_a_stripped_chain_start_is_not_sealed,
+        a_scavenged_chain_start_is_sealed_at_the_boundary,
         a_deleted_marker_does_not_reseal,
         a_deleted_watermark_is_not_minted_after_the_marker,
         a_deleted_watermark_is_evidence_and_refuses_chainless_streams,
@@ -186,16 +190,45 @@ a_watermark_above_the_stream_is_not_sealed(Config) ->
     ?assertMatch({error, {integrity_violation, #{kind := missing_integrity}}},
                  read_raw(StoreId, StreamId)).
 
-%% @doc GIVEN events that carry a chain and a bare watermark that would
-%%           excuse them
+%% @doc GIVEN events that carry a chain, a bare watermark sitting away from
+%%           where that chain begins, and the genesis event still verifying
 %%      WHEN the migration runs
-%%      THEN it is not sealed
+%%      THEN it is sealed at the PROVEN chain start, not at the value on the
+%%           node
 %%
-%% A genuine legacy watermark never has a hash-bearing event below it: the
-%% hash is the evidence that integrity had already begun. Sealing this one
-%% would authenticate a stream that says two contradictory things about
-%% itself.
-a_watermark_over_a_chain_is_not_sealed(Config) ->
+%% A bare integer is not evidence. What is evidence is the event the store
+%% alone can write at a chain start: a genesis predecessor whose MAC
+%% verifies. Sealing at the node's value would let a writer move the claim
+%% wherever they liked.
+a_bare_watermark_is_sealed_at_the_proven_chain_start(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"watermark-elsewhere">>),
+
+    ok = start_store(StoreId, DataDir, disabled),
+    ok = write_legacy(StoreId, StreamId, 5),
+    ok = stop_store(StoreId),
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 9} = append_from(StoreId, StreamId, 4, 5, 9),
+    ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
+    ok = put_bare_watermark(StoreId, StreamId, 8),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {sealed, 5}},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+    ?assertEqual(10, length(events(StoreId, StreamId))).
+
+%% @doc GIVEN a chain start whose first events were STRIPPED and a bare
+%%           watermark moved onto the new lowest chain-bearing event
+%%      WHEN the migration runs
+%%      THEN it seals nothing for that stream: the event that would prove a
+%%           chain start no longer verifies, so the stream is refused
+%%
+%% This is the attack the proven-chain-start rule exists for: strip the chain
+%% off the first three chain-bearing events, move the bare watermark up three,
+%% and the new "chain start" is a version nobody can account for.
+a_watermark_moved_onto_a_stripped_chain_start_is_not_sealed(Config) ->
     {StoreId, DataDir} = store(Config),
     StreamId = stream(<<"watermark-over-chain">>),
 
@@ -203,20 +236,48 @@ a_watermark_over_a_chain_is_not_sealed(Config) ->
     ok = write_legacy(StoreId, StreamId, 5),
     ok = stop_store(StoreId),
     ok = start_store(StoreId, DataDir, enabled),
-    {ok, 9} = reckon_db_streams:append(StoreId, StreamId, 4,
-                                        [#{event_type => <<"e">>,
-                                           data => #{n => N}}
-                                         || N <- lists:seq(6, 10)]),
+    {ok, 9} = append_from(StoreId, StreamId, 4, 5, 9),
+    ok = clear_integrity_fields(StoreId, StreamId, 5),
+    ok = clear_integrity_fields(StoreId, StreamId, 6),
+    ok = clear_integrity_fields(StoreId, StreamId, 7),
     ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
     ok = put_bare_watermark(StoreId, StreamId, 8),
     ok = stop_store(StoreId),
 
     ok = start_store(StoreId, DataDir, enabled),
-
     ?assertMatch({ok, {unsealed, 8}},
                  reckon_db_chain_watermark:lookup(StoreId, StreamId)),
     ?assertMatch({error, {integrity_violation, #{kind := missing_integrity}}},
                  read_raw(StoreId, StreamId)).
+
+%% @doc GIVEN a stream whose chain start was removed by a real scavenge, so
+%%           the genesis event no longer exists
+%%      WHEN the migration runs
+%%      THEN it is sealed at the verified scavenge boundary, which is where
+%%           the surviving chain begins
+%%
+%% Only a scavenge can write that boundary, and it is MAC'd, so it is the one
+%% thing that tells a scavenged chain start from a stripped one. Without it
+%% the stream stays refused.
+a_scavenged_chain_start_is_sealed_at_the_boundary(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"scavenged-chain-start">>),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 9} = append_events(StoreId, StreamId, 10),
+    {ok, _} = reckon_db_scavenge:scavenge(
+                StoreId, StreamId,
+                #{before_version => 5, require_snapshot => false}),
+    ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
+    ok = delete_watermark(StoreId, StreamId),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {sealed, 5}},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+    ?assertEqual(5, length(events(StoreId, StreamId))).
 
 %% @doc GIVEN a migrated store whose marker has been deleted
 %%      WHEN a writer strips a stream, overwrites its watermark with a bare
@@ -448,6 +509,13 @@ evidence_store(Config) ->
     ok = stop_store(StoreId),
     ok = start_store(StoreId, DataDir, enabled),
     {StoreId, DataDir, Chainless, Chain}.
+
+%% @private Append events for versions First..Last, with `Expected' the
+%% version the caller believes the stream is at now (append/4's guard).
+append_from(StoreId, StreamId, Expected, First, Last) ->
+    reckon_db_streams:append(StoreId, StreamId, Expected,
+                             [#{event_type => <<"e">>, data => #{n => N}}
+                              || N <- lists:seq(First, Last)]).
 
 %% @private
 append_events(StoreId, StreamId, N) ->
