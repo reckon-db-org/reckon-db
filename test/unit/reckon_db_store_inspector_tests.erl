@@ -227,6 +227,8 @@ stream_info_found() ->
     %% every real call (reckon-db#6).
     meck:expect(reckon_db_streams, get_version,
         fun(?STORE, <<"s1">>) -> 10 end),
+    meck:expect(reckon_db_streams, live_event_count,
+        fun(?STORE, <<"s1">>) -> 11 end),
     meck:expect(reckon_db_streams, read,
         fun(?STORE, <<"s1">>, 0, 1, forward) ->
                 {ok, [#event{timestamp = 1000}]};
@@ -263,6 +265,15 @@ mock_streams(StreamIds) ->
             case maps:find(Id, get(mock_versions)) of
                 {ok, V} -> V;
                 error -> ?NO_STREAM
+            end
+        end),
+    %% The inspector counts live version nodes now, not version + 1. These
+    %% mocks stand for streams with no scavenge, so the two agree.
+    meck:expect(reckon_db_streams, live_event_count,
+        fun(?STORE, Id) ->
+            case maps:find(Id, get(mock_versions)) of
+                {ok, V} -> V + 1;
+                error -> 0
             end
         end),
     meck:expect(reckon_db_snapshots_store, list,

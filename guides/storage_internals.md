@@ -364,9 +364,16 @@ case reckon_db_streams:append(StoreId, StreamId, ExpectedVersion, Events) of
         %% contention and this append was not written.
         {error, {version_conflict, Expected, Current}};
     {error, {version_unverifiable, Version, _Reason}} = Error ->
-        %% The version could not be checked against the stream: its older
-        %% events were scavenged (see below), or it was deleted underneath
-        %% the append. Retrying will not help.
+        %% The store could not answer the version check: a read failed for
+        %% some reason other than the node being absent. Retrying will not
+        %% help.
+        %%
+        %% Two shapes do NOT land here. A stream deleted while the append was
+        %% in flight sees the delete in its transaction, aborts as
+        %% version_changed and re-reads and retries. A stream with no counter
+        %% yet (written before 5.12.0) whose target node is occupied also
+        %% aborts as version_changed and retries; only a read error other
+        %% than node_not_found answers version_unverifiable there.
         Error
 end.
 ```
@@ -376,20 +383,14 @@ Do not write the version check by hand as a `khepri:get` followed by a
 your put overwrites its events, with both calls answering ok. That is the
 data loss 5.11.13 fixed in `append/4`, and a hand-written check reopens it.
 
-The version is the count of the stream's live version nodes minus one, and a
-scavenge (`reckon_db_scavenge:scavenge/3`) deletes old nodes without
-renumbering the rest. On a scavenged stream the count is therefore below the
-newest event, and the append refuses with
-`{error, {version_unverifiable, _, _}}` rather than overwriting: either the
-node it would write already holds a live event, or the node before it is
-gone. Which of the two depends on how much was scavenged: the first holds
-for a short prefix, the second for a batch that would fit below the
-survivors. The check covers the node before the batch as well, because
-a batch short enough can fit entirely below the surviving events. A scavenge
-that deletes every event leaves no nodes at all, so the count reads -1 and
-the next `ANY_VERSION` append starts the stream again at version 0. 5.12.0
-keeps the version in a per-stream counter, written in the same transaction as
-the events, and is exact again after a scavenge.
+The version comes from a per-stream counter kept beside the tree
+(`[metadata, stream_versions, Type, Id]`), written in the same Ra command as
+the events. A scavenge (`reckon_db_scavenge:scavenge/3`) deletes old version
+nodes without renumbering the rest, which is why a count cannot answer this:
+the counter does not move when nodes are removed, so an append after a
+scavenge lands after the newest event rather than reusing a version that is
+still stored. A stream written before the counter existed reads its newest
+version node once and gets a counter on its next append.
 
 ## Performance Tips
 

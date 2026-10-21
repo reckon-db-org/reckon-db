@@ -167,21 +167,22 @@ that doubles up to 50 ms, and answers
 times in a row; with an explicit expected version it fails its own check, as
 above. An append of no events writes nothing and answers the version it read.
 
-A scavenged stream that still has events is refused: the version is the count
-of live version nodes, a scavenge deletes old ones without renumbering the
-rest, and the append checks both the node it would write and the node before
-it, so every prefix shape answers
-`{error, {version_unverifiable, Version, Reason}}` (5.12.0 reads a per-stream
-counter and is exact again). A scavenge that deletes every event is the
-exception: `get_version/2` answers -1 and the next `ANY_VERSION` append
-lands at version 0 again - a one-event append answers `{ok, 0}`, a batch of N
-answers `{ok, N - 1}` - nothing is overwritten, and a subscriber that
-re-reads by version sees 0, 1, ... again. See
-`guides/storage_internals.md` for the store's view. reckon-gater does not
-know either error yet, treats an unrecognised one as transient, and so burns
-ten retries - about 81 to 89 seconds - before answering
-`{error, {retries_exhausted, Reason}}`; reckon-evoq and evoq pass both
-through unchanged.
+The version is kept in a per-stream counter, written in the same Ra command
+as the events, so a scavenge - which deletes old version nodes without
+renumbering the rest - does not move it: an append after a scavenge lands
+after the newest event. A stream written before the counter existed reads
+its newest version node once and gets a counter on its next append. See
+`guides/storage_internals.md` for the store's view.
+
+What a gateway caller gets back depends on the gater it runs. The released
+one (gater 3.11.2) does not recognise `version_conflict` or
+`version_unverifiable`, reads either of them as transient, and burns ten
+retries - about 81 to 89 seconds measured - before answering
+`{error, {retries_exhausted, Reason}}`. The gater change that answers both
+on the first call is written and UNRELEASED - it is part of the same package
+as this release, reckon-db-org/evoq#22 - so nothing here depends on it.
+reckon-evoq and evoq do not recognise either error yet: they reach the
+caller as an error and never trigger a rebuild.
 
 ## Designing Events
 

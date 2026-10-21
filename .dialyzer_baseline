@@ -162,7 +162,7 @@ src/reckon_db_store_healer.erl	d845dd221a5e	Type specification reckon_db_store_h
 src/reckon_db_store_healer.erl	dfbedc41ea42	Type specification reckon_db_store_healer:is_orphan(map()) -> boolean() is a supertype of the success typing: 
 src/reckon_db_store_inspector.erl	2286084d229f	Type specification reckon_db_store_inspector:store_stats(atom()) -> {'ok',map()} is a supertype of the success
 src/reckon_db_store_inspector.erl	544df15cd910	Type specification reckon_db_store_inspector:subscription_lag(atom(),binary()) -> {'ok',map()} | {'error','not
-src/reckon_db_store_inspector.erl	697419a8bc8e	Type specification reckon_db_store_inspector:stream_info(atom(),binary()) -> {'ok',map()} | {'error',{'stream_
+src/reckon_db_store_inspector.erl	948736894b3f	Type specification reckon_db_store_inspector:stream_info(atom(),binary()) -> {'ok',map()} | {'error',{'stream_
 src/reckon_db_streams.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
 src/reckon_db_streams.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
 src/reckon_db_streams.erl	0d2296c883b7	The variable _ can never match since previous clauses completely covered the type []
@@ -187,6 +187,8 @@ src/reckon_db_subscription_health.erl	98c0b1f9e2e8	The variable _ can never matc
 src/reckon_db_subscriptions.erl	2a93e022f4b4	Expression produces a value of type 'ok' | {'subscription_error',{'integrity_violation',map()}}, but this valu
 src/reckon_db_subscriptions.erl	3266d84d11e5	The call khepri:register_trigger(StoreId::atom(), TriggerId::atom(), Filter::{'evf_tree',[atom() | binary() | 
 src/reckon_db_subscriptions.erl	4c169ce7af55	Type specification reckon_db_subscriptions:setup_event_notification(atom(),binary(),term(),subscription()) -> 
+||||||| parent of 984b651 (reckon-db 5.12.0: the version survives a scavenge, and nothing is lost)
+src/reckon_db_subscriptions.erl	3266d84d11e5	The call khepri:register_trigger(StoreId::atom(), TriggerId::atom(), Filter::{'evf_tree',[atom() | binary() | 
 src/reckon_db_subscriptions.erl	763691bb9e8e	The call reckon_db_filters:by_tags(Tags::binary() | map()) will never return since the success typing is (mayb
 src/reckon_db_subscriptions.erl	7783afbc9cc8	Expression produces a value of type 'ok' | {'error','no_emitters'}, but this value is unmatched
 src/reckon_db_subscriptions.erl	879272e112d9	Function activate_trigger/4 has no local return

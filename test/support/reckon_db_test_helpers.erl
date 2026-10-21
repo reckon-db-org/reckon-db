@@ -8,6 +8,8 @@
 -export([
     start_test_app/0,
     stop_test_app/0,
+    start_pg_scope/0,
+    stop_pg_scope/1,
     ensure_store/1,
     stop_store/1,
     cleanup_data_dir/1,
@@ -18,6 +20,33 @@
     wait_for/2,
     wait_for/3
 ]).
+
+%% @doc Start the pg scope reckon-db delivers events through, and say who
+%% started it.
+%%
+%% A suite that starts the scope by hand leaves a process reckon-db's own
+%% supervisor cannot adopt: the application child gets
+%% `{error, {already_started, Pid}}' and every later suite that starts the
+%% application in the same VM fails in init_per_suite. So whoever starts it
+%% stops it again in end_per_suite/end_per_group.
+-spec start_pg_scope() -> started_here | already_running.
+start_pg_scope() ->
+    case pg:start(?RECKON_DB_PG_SCOPE) of
+        {ok, _} -> started_here;
+        {error, {already_started, _}} -> already_running
+    end.
+
+%% @doc Undo start_pg_scope/0, if this suite is the one that started it.
+-spec stop_pg_scope(started_here | already_running) -> ok.
+stop_pg_scope(started_here) ->
+    %% `pg' has no stop/1 (OTP 28); the scope is a gen_server under its own
+    %% name, so that is how it is stopped.
+    case catch gen_server:stop(?RECKON_DB_PG_SCOPE) of
+        ok -> ok;
+        {'EXIT', _} -> ok
+    end;
+stop_pg_scope(already_running) ->
+    ok.
 
 %%====================================================================
 %% Application Lifecycle

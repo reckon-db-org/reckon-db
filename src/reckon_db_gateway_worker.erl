@@ -177,10 +177,15 @@ stream_read_op(Request, From, State) ->
 %% Append events (auto-versioned)
 stream_append_op({append_events, _StoreId, StreamId, Events}, _From,
             #state{store_id = StoreId} = State) ->
-    %% Get current version for auto-versioning
-    %% get_version returns integer directly: -1 for no stream, or version number
-    CurrentVersion = reckon_db_streams:get_version(StoreId, StreamId),
-    Result = reckon_db_streams:append(StoreId, StreamId, CurrentVersion, Events),
+    %% ANY_VERSION, not the version read here: the read and the append are
+    %% two calls, and a second caller on another pool worker can take the
+    %% version between them. Passing the read version as an expected version
+    %% then fails an append that had every right to succeed - measured: a
+    %% four-worker pool with eight callers answered wrong_expected_version to
+    %% 32 of 240 version-less appends. ANY_VERSION lets the store's own
+    %% transaction decide, which is what the caller asked for by leaving the
+    %% version out.
+    Result = reckon_db_streams:append(StoreId, StreamId, ?ANY_VERSION, Events),
     {reply, Result, State};
 
 %% Append events (with expected version)

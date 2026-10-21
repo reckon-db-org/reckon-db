@@ -14,7 +14,7 @@
 %% Version
 %%====================================================================
 
--define(RECKON_DB_VERSION, "5.11.13").
+-define(RECKON_DB_VERSION, "5.12.0").
 
 %%====================================================================
 %% Khepri Paths
@@ -29,6 +29,21 @@
 %% batch inside its Khepri transaction (mirrors ?DCB_SEQ_COUNTER_PATH), so
 %% the total event count is an O(1) read instead of a full store scan.
 -define(GLOBAL_EVENT_COUNT_PATH, [metadata, stats, global_event_count]).
+
+%% Per-stream version counters, one node per stream at
+%% [metadata, stream_versions, Type, Id]. Written with the events inside
+%% the append transaction, and what `get_version/2' trusts: a stream that has
+%% a counter answers it, and one written before this release has none, so its
+%% newest version node is read instead.
+%%
+%% It exists because a stream's latest version is NOT its child count:
+%% scavenging deletes old version nodes without renumbering the rest
+%% (that is deliberate — a version is a name, not a position), so after a
+%% scavenge `count - 1' answers a version LOWER than the newest event and
+%% the next append writes over live events. The counter lives outside the
+%% `streams' subtree so it is not a child of the stream node: it does not
+%% appear in version counts, in event reads, or in the global event scan.
+-define(STREAM_VERSION_COUNTERS_PATH, [metadata, stream_versions]).
 
 %% DCB (Dynamic Consistency Boundary) paths — Phase 3, 2.4.0+.
 %% DCB events live under one pseudo-stream `_dcb` AT THE SAME PATH

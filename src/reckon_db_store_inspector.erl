@@ -97,7 +97,7 @@ stream_info(StoreId, StreamId) ->
             {ok, #{
                 stream_id => StreamId,
                 version => Version,
-                event_count => Version + 1,
+                event_count => stream_event_count(StoreId, StreamId),
                 first_event_at => get_event_timestamp(StoreId, StreamId, 0),
                 last_event_at => get_event_timestamp(StoreId, StreamId, Version),
                 snapshots => snapshot_coverage(StoreId, StreamId)
@@ -124,14 +124,15 @@ sum_events(StoreId, StreamIds) ->
     lists:foldl(fun(StreamId, Acc) -> Acc + stream_event_count(StoreId, StreamId) end, 0, StreamIds).
 
 stream_event_count(StoreId, StreamId) ->
-    %% Same shape as stream_info/2. The old fallback matched nothing that
-    %% get_version/2 returns for a real stream, so this answered 0 for
-    %% every stream and every total built on it (store_stats total_events,
-    %% subscription_lag) was always zero (reckon-db#6).
-    case reckon_db_streams:get_version(StoreId, StreamId) of
-        ?NO_STREAM -> 0;
-        Version -> Version + 1
-    end.
+    %% COUNT THE NODES, NOT THE VERSION. `Version + 1' is the number of
+    %% versions ever assigned, which stopped being the number of events the
+    %% moment a stream was scavenged: delete versions 0 and 1 of a five-event
+    %% stream and this answered 5 for the 3 that are left, in stream_info's
+    %% event_count and in every total built on it (store_stats total_events,
+    %% subscription_lag). The old fallback also matched nothing that
+    %% get_version/2 returns for a real stream, so this answered 0 for every
+    %% stream (reckon-db#6).
+    reckon_db_streams:live_event_count(StoreId, StreamId).
 
 %%====================================================================
 %% Internal: Snapshots

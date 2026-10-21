@@ -42,6 +42,7 @@
     validate/1,
     event_path/2,
     stream_path/1,
+    version_counter_path/1,
     versions_pattern/1,
     type_streams_pattern/1,
     all_events_pattern/0,
@@ -103,6 +104,18 @@ stream_path(StreamId) ->
 versions_pattern(StreamId) ->
     {Type, Id} = id_nodes(StreamId),
     [streams, Type, Id, ?KHEPRI_WILDCARD_STAR].
+
+%% @doc Khepri path of a stream's version counter:
+%% `[metadata, stream_versions, Type, Id]' -> integer.
+%%
+%% Deliberately NOT a child of the stream node: a stream's latest version
+%% must not be derived from how many version nodes it has (scavenging
+%% deletes nodes without renumbering), and a node under `[streams, Type,
+%% Id]' would be counted as a version and read as an event.
+-spec version_counter_path(binary()) -> khepri_path:native_path().
+version_counter_path(StreamId) ->
+    {Type, Id} = id_nodes(StreamId),
+    ?STREAM_VERSION_COUNTERS_PATH ++ [Type, Id].
 
 %% @doc Pattern matching every aggregate-id node of one type:
 %% `[streams, Type, *]'. Used by links to navigate a type subtree

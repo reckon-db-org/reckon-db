@@ -65,6 +65,10 @@ Always keep a minimum number of recent versions:
 }).
 ```
 
+`keep_versions` is counted back from the newest version an event node holds,
+not from the stream's version counter, so it keeps what it says even on a
+stream a rollback left with a counter above its events.
+
 ### Dry Run
 
 Preview what would be deleted before actually deleting:

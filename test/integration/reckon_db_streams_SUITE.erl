@@ -158,14 +158,12 @@ init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(khepri),
 
     %% Start pg scope
-    case pg:start(?RECKON_DB_PG_SCOPE) of
-        {ok, _} -> ok;
-        {error, {already_started, _}} -> ok
-    end,
+    PgScope = reckon_db_test_helpers:start_pg_scope(),
 
-    [{ra_data_dir, RaDataDir} | Config].
+    [{pg_scope, PgScope}, {ra_data_dir, RaDataDir} | Config].
 
 end_per_suite(Config) ->
+    reckon_db_test_helpers:stop_pg_scope(proplists:get_value(pg_scope, Config, already_running)),
     %% Clean up Ra data directory
     RaDataDir = proplists:get_value(ra_data_dir, Config, "/tmp/reckon_db_streams_test_ra"),
     os:cmd("rm -rf " ++ RaDataDir),

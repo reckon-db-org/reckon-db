@@ -26,7 +26,8 @@
 -export([
     stream_info_reports_a_real_stream/1,
     stream_info_answers_not_found/1,
-    store_stats_counts_real_events/1
+    store_stats_counts_real_events/1,
+    a_scavenged_stream_reports_the_events_it_still_has/1
 ]).
 
 suite() ->
@@ -39,7 +40,8 @@ groups() ->
     [{store, [sequence], [
         stream_info_reports_a_real_stream,
         stream_info_answers_not_found,
-        store_stats_counts_real_events
+        store_stats_counts_real_events,
+        a_scavenged_stream_reports_the_events_it_still_has
     ]}].
 
 init_per_suite(Config) ->
@@ -54,14 +56,12 @@ init_per_suite(Config) ->
     ok = ra:start(),
     {ok, _} = application:ensure_all_started(khepri),
 
-    case pg:start(?RECKON_DB_PG_SCOPE) of
-        {ok, _} -> ok;
-        {error, {already_started, _}} -> ok
-    end,
+    PgScope = reckon_db_test_helpers:start_pg_scope(),
 
-    [{ra_data_dir, RaDataDir} | Config].
+    [{pg_scope, PgScope}, {ra_data_dir, RaDataDir} | Config].
 
 end_per_suite(Config) ->
+    reckon_db_test_helpers:stop_pg_scope(proplists:get_value(pg_scope, Config, already_running)),
     os:cmd("rm -rf " ++ proplists:get_value(ra_data_dir, Config, "/tmp/reckon_db_inspector_test_ra")),
     ok.
 
@@ -126,6 +126,28 @@ store_stats_counts_real_events(Config) ->
     ?assertEqual(maps:get(stream_count, Before) + 2, maps:get(stream_count, After)),
     ?assertEqual(maps:get(total_events, Before) + 5, maps:get(total_events, After)),
     ?assertEqual(true, maps:get(has_events, After)),
+    ok.
+
+%% A scavenge deletes version nodes without renumbering, so the newest
+%% version stops being the event count. `Version + 1' answered the versions
+%% ever assigned: five events, two scavenged, three live -> 5. stream_info and
+%% store_stats both read this, and subscription_lag is built on the total.
+a_scavenged_stream_reports_the_events_it_still_has(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = new_stream_id(),
+    {ok, 4} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, events(5)),
+    {ok, Before} = reckon_db_store_inspector:store_stats(StoreId),
+
+    {ok, #{deleted_count := 2}} =
+        reckon_db_scavenge:scavenge(StoreId, StreamId,
+            #{before_version => 2, require_snapshot => false}),
+
+    {ok, Info} = reckon_db_store_inspector:stream_info(StoreId, StreamId),
+    ?assertEqual(4, maps:get(version, Info)),
+    ?assertEqual(3, maps:get(event_count, Info)),
+
+    {ok, After} = reckon_db_store_inspector:store_stats(StoreId),
+    ?assertEqual(maps:get(total_events, Before) - 2, maps:get(total_events, After)),
     ok.
 
 %%====================================================================

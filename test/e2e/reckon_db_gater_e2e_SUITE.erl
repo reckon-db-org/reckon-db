@@ -155,10 +155,7 @@ init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(khepri),
 
     %% Start pg scope for reckon_db
-    case pg:start(?RECKON_DB_PG_SCOPE) of
-        {ok, _} -> ok;
-        {error, {already_started, _}} -> ok
-    end,
+    PgScope = reckon_db_test_helpers:start_pg_scope(),
 
     %% Start pg scope for reckon_gater
     case pg:start(reckon_gater_pg) of
@@ -169,9 +166,10 @@ init_per_suite(Config) ->
     %% Start reckon_gater application (worker registry)
     {ok, _} = application:ensure_all_started(reckon_gater),
 
-    [{ra_data_dir, RaDataDir} | Config].
+    [{pg_scope, PgScope}, {ra_data_dir, RaDataDir} | Config].
 
 end_per_suite(Config) ->
+    reckon_db_test_helpers:stop_pg_scope(proplists:get_value(pg_scope, Config, already_running)),
     %% Stop applications
     application:stop(reckon_gater),
 

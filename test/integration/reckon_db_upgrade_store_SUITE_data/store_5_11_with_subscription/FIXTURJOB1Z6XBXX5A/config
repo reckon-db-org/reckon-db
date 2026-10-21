@@ -1,0 +1,11 @@
+#{id => {fixture_store,nonode@nohost},
+  machine =>
+      {module,khepri_machine,
+              #{member => {fixture_store,nonode@nohost},
+                store_id => fixture_store}},
+  friendly_name => "Khepri store \"fixture_store\"",
+  cluster_name => fixture_store,uid => <<"FIXTURJOB1Z6XBXX5A">>,
+  log_init_args => #{uid => <<"FIXTURJOB1Z6XBXX5A">>},
+  broadcast_time => 100,tick_timeout => 1000,
+  install_snap_rpc_timeout => 120000,await_condition_timeout => 30000,
+  initial_members => []}.

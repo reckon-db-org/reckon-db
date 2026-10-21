@@ -5,6 +5,285 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.12.0] - 2026-10-21
+
+### Changed: khepri `~> 0.17.11`, still Ra machine version 2
+
+`rebar.config` pinned `{khepri, "0.17.2"}` exactly. That is not the rule here
+(`~> MAJOR.MINOR` against released versions). It is `~> 0.17.11` now — a
+floor, so the scavenge fix below cannot resolve away, and still inside 0.17,
+so it cannot float to 0.18 — resolving to 0.17.11, which runs Ra 2.16.13 and
+Horus 0.5.1.
+
+What that brings: the 0.17.x patch set (a `keep_while` index leak, a dedup ack
+sent to the leader, a Ra restart during a local reset, Horus 0.5 so an OTP 27
+and an OTP 28 member can share a cluster) and the scavenge fix below.
+
+**The khepri 0.18/0.19 line is not in this release.** It moves the Ra machine
+version from 2 to 4, and the 3-to-4 converter accepts only its own v2 trigger
+shape (`khepri_machine:trigger_v1_to_v2/1`): a trigger registered by an older
+version, replayed from the log, has no clause. Opening a 5.11.x store that has
+a subscription then crashes the Ra machine, and every later call answers
+`noproc`, on that store and on every reopen, because the bump is in the log.
+A store with no subscription upgrades cleanly, which is why this went unseen.
+Our own drift for the bump was written and is parked; it lands once upstream
+carries the converter fix, proposed as rabbitmq/khepri#443.
+
+`reckon_db_upgrade_store_SUITE` is the guard for that day. Its fixture is a
+real Ra directory written by 5.11.13 — a three-event stream with a stream
+subscription in its log — and the suite opens it, checks the events, the
+subscription and a fresh append, and must stay green through the bump,
+unchanged. It is green here, because 0.17.11 reads a 0.17.2 store as it is.
+
+### Fixed: a scavenge no longer poisons the store
+
+Upstream's. On 0.17.2, scavenging a stream that has a live subscription took
+the whole store down: khepri evaluated the delete against the trigger's
+filter, `does_path_match` badmatched on `node_not_found`, the badmatch was
+applied inside Ra's machine, and the failure was replayed on every member —
+reads and appends stopped, not just that subscription. Our filters carry
+`#if_has_data{}` and the pinned version computed the path match before it
+looked at `on_actions`, so `on_actions => [create]` did not protect us
+(rabbitmq/khepri#405, PR #398). The fix is in 0.17.11, and moving to it is
+what makes the store survive; `reckon_db_scavenge_trigger_SUITE` is the
+regression test, red on 0.17.2 with `{error, noproc}` and green here.
+
+### Fixed: a scavenge no longer makes the next append overwrite live events
+
+`get_version/2` answered `count - 1` of the stream's version nodes. A
+scavenge deletes old version nodes and deliberately does not renumber the
+rest (a version is a name, not a position), so after it the count was short
+by exactly what had been deleted: the next append reused versions that still
+held live events and wrote over them.
+
+Concretely: scavenge versions 0 and 1 of a ten-event stream, append five
+more, and events 9 and 10 (versions 8 and 9) are destroyed — five appends
+land where eight events had been, so the two at the boundary are replaced.
+Nobody saw those two go: they were delivered when they were appended, and
+what a subscriber never sees is the two events that replaced them, because
+the write to an existing path is an `update` and the subscription filters
+watch `create`. Both calls answer `{ok, Version}`.
+
+This is not new. `get_version/2` has counted version nodes and
+`reckon_db_scavenge` has deleted them without renumbering since 1.0.0, so
+every release from 1.0.0 to 5.11.12 loses events this way on a stream that is
+scavenged and then appended to. The overwritten events are not recoverable
+from the store, and `archive_and_scavenge` does not have them either — its
+archive is written before the delete and holds what was scavenged, not what
+was later overwritten. Only a snapshot or a copy outside the store has them.
+
+The store now keeps a per-stream version counter, at
+`[metadata, stream_versions, Type, Id]`, written in the same Ra command as
+the events, so it cannot drift from the tree. It is outside the `streams`
+subtree, so it is not counted as a version and not read as an event.
+`get_version/2` answers the counter; a stream written before this release
+has none, so its newest version node is read once (names only) and its next
+append writes the counter. Deleting a stream deletes its counter in the same
+transaction.
+
+`reckon_db_scavenge_version_SUITE` pins five cases. The one that is red on
+the released code is the tree-only one: ten events, scavenge two, append
+five, read back — 5.11.12 answers version 7 for a stream whose newest event
+is at 9, then reuses 8 and 9, while 5.11.13 refuses that append with
+`{version_unverifiable, 7, target_occupied}`. The others cover the
+counter-less stream, the dry run, delete-then-recreate, and delivery.
+
+### Fixed: a rollback cannot strand, hole or reorder a stream
+
+The counter is this release's, so reading a store with 5.11.x again — a
+rollback — leaves version nodes nothing counts and a counter that no longer
+describes the tree. Three shapes followed, and each answered ok while it did
+the wrong thing:
+
+- **5.11.x appended past the counter.** The counter stayed where this
+  release left it while the nodes moved on. Appends were built from the
+  counter's version, found the node taken, and lost the same race sixty
+  times: `{version_conflict, -2, 9}` for a stream whose newest event was 15,
+  and the stream was stuck for every caller.
+- **5.11.x deleted and re-created a stream.** A fresh tree of 0..2 sat under
+  a counter of 4. An `ANY_VERSION` append built version 5, which was free,
+  so nothing collided and nothing reconciled, and versions 3 and 4 stayed
+  empty for the rest of the stream's life — 150 of 150 race runs. A caller
+  naming the version the tree offered (2) was then refused on every attempt.
+- **5.11.x scavenged, or re-created and then scavenged.** With the counter
+  at 9 over events 13..15, an `ANY_VERSION` append wrote 10, 11 and 12 BELOW
+  events written before it: a forward read, which orders by version, handed
+  a projection newer events ahead of older ones. And a scavenge measured
+  `keep_versions` back from the counter, so `keep_versions => 1` over a
+  counter of 4 and a tree of 0..2 protected nothing and deleted all three
+  events, the newest included.
+
+Two changes. Every append now asks the tree whether the counter is the
+tree's before it writes from it — one read of the version node the counter
+names — and reconciles first when that node is gone. That check is what
+reaches the shapes above: none of them is introduced by a collision, so a
+reconcile that runs only when a write collides never ran. A healthy stream
+pays one point read per append. And a scavenge takes its cutoff from the
+newest live version node rather than from the counter.
+
+The reconcile moves the counter to the newest live version in either
+direction. A tree with no version node at all is left alone: this release's
+own scavenge deletes events without renumbering, so an empty tree with a
+counter above 0 is a stream whose prefix was scavenged, and the counter is
+the only record of how far it got. The tree does not have to be contiguous
+from 0 — a re-created stream that 5.11.x then scavenged from the bottom
+(counter 4, events 1..2) has tip 2, and insisting on a whole re-created
+stream left its counter at 4 and its tip unwritable.
+
+`reckon_db_stale_counter_SUITE` builds all four shapes in one VM by moving
+the counter node, and all four fail on the commit before this fix.
+
+### Fixed: concurrent appends to one stream no longer lose events
+
+Carried from 5.11.13, with the round-2 work its review produced.
+
+The version an append writes from was read before the write transaction and
+never checked again, so two appends that read the same version built the same
+version numbers and one overwrote the other. Every call answered ok: no
+error, no log, the events simply gone. Four writers appending 25 events each
+to one stream left 25 of the 100 in the store.
+
+The version is now verified inside the transaction that writes the events
+(`reckon_db_streams:append_guard/5`): if the counter moved, or the first
+version node the batch would occupy already exists, the command aborts and
+the append re-reads and tries again — with a delay that doubles from 1 ms to
+a 50 ms cap, jittered per attempt, for up to 60 attempts. After that it
+answers `{error, {version_conflict, ExpectedVersion, CurrentVersion}}`, the
+version being the one the last attempt read; `ExpectedVersion` alone is -2
+for `ANY_VERSION` writers and says nothing. An append with an explicit
+expected version still fails with `wrong_expected_version` when another
+writer got there first, which is what that option is for.
+
+The abort is inside the transaction because a transaction fun's return value
+is an ordinary result, not an error channel: the tuple would come back as a
+successful transaction carrying `{error, _}`, and the `ok =` on it one level
+up would turn that into a badmatch. `khepri_tx:abort/1` raises instead, and
+`khepri_tx_adv:run/5` catches it and hands back the state from before the
+transaction.
+
+The re-read after a lost race asks for a consistent answer
+(`#{favor => consistency}`): a follower can answer the same version twice
+while the stream has moved on the leader, and the retry would read that as
+having lost again — sixty times, on a stream nobody else is writing. khepri
+implements that as a local query fenced to the leader's last applied index,
+not as a read on the leader. Only the retry pays for it; the first read of an
+append stays local.
+
+`reckon_db_concurrent_append_SUITE` is the proof: nine cases, seven of them
+red on 66edb40.
+
+### Fixed: a version-less append through the gateway pool is no longer refused
+
+The gateway worker read the stream's version and passed it back as an
+EXPLICIT expected version. That is a different promise from the one
+`reckon_gater_api:append_events/3` makes — the caller left the version out —
+and the version it read was stale as soon as another worker of the same pool
+took it. The append was then refused with `wrong_expected_version`, which
+gater 3.11.2 reads as permanent and does not retry. Measured: a four-worker
+pool with eight callers answered it to 32 of 240 version-less appends (the
+count depends on how the callers interleave). The worker appends with
+`ANY_VERSION` now and the store's transaction decides.
+
+`reckon_db_gateway_pool_SUITE` is the case: eight callers, 240 version-less
+appends through a four-worker pool, every one stored and the versions
+contiguous.
+
+### Fixed: the inspector counted versions, not events
+
+`reckon_db_store_inspector` reported `event_count` as `version + 1`, which
+after a scavenge is the number of versions ever assigned: delete two of five
+and it said 5 for the 3 that were left, in `stream_info` and in
+`store_stats`' `total_events`, which `subscription_lag` is built on. It
+counts the live version nodes now.
+
+### Still wrapped, and still unwrapped by us
+
+`khepri:transaction/2` returns `{ok, {error, noproc}}` — not
+`{error, noproc}` — when the store is not running, and 0.17.11 still does
+(rabbitmq/khepri#400 is open; #436, which makes transaction funs transparent
+and raises Ra errors, is unmerged). The four call sites that unwrap it
+(`reckon_db_dcb`, `reckon_db_dcb_reindex`, `reckon_db_store_healer`,
+`reckon_db_streams`) stay, and `reckon_db_noproc_guard_SUITE` asserts both
+halves: khepri wraps, and the store's own append answers `{error, noproc}`
+rather than crashing.
+
+### Behaviour differences you may notice against 5.11.x
+
+The counter makes the version exact after a scavenge, which is a better
+answer than 5.11.13's refusal, and it changes what a fully scavenged stream
+looks like:
+
+- A stream whose every event was scavenged is **not** re-created at version
+  0: the counter survives the delete, so `get_version/2` answers the tip
+  (say 9), the next append lands at 10, while `read` still answers
+  `stream_not_found` and `list_streams` omits it (there are no version
+  nodes), and `stream_info` reports that version with `event_count` 0. On
+  5.11.x the same stream restarted at 0. If you key on version after a
+  whole-stream scavenge, read `get_version/2`, not the event count.
+- A stream deleted while an append is in flight: the append's transaction
+  sees the delete, aborts as `version_changed`, re-reads and retries. A
+  counter-less (legacy) stream can land at N+1; a stream with a counter is
+  re-created at 0, where 5.11.13 refused the append instead.
+- A strict integrity read after a scavenge now reports a clean
+  `chain_mismatch`; on 5.11.12 the same read crashed with `function_clause`.
+- `keep_versions` on the scavenge side now keeps versions counted back from
+  the tip rather than from the count, so it keeps what it says it keeps.
+
+### Upgrading
+
+No machine version change: 0.17.11 is still Ra machine version 2, its files
+are the ones 0.17.2 wrote, and a store opened by this release is readable by
+5.11.x again. This is why the release can ship without the 0.19 line moving
+under it.
+
+Reading it with 5.11.x is a rollback, and a rollback is the one way the
+counter can go stale, because 5.11.x writes version nodes and knows nothing
+about the counter. Three shapes, and every append now reconciles before it
+writes from the counter:
+
+- **5.11.x appends past the counter.** The counter stays where this release
+  left it while the nodes move on. `get_version/2` answers the counter's
+  number, lower than the tip, until an append reads the tree and moves the
+  counter up to the newest node.
+- **5.11.x deletes and re-creates a stream.** It does not delete the
+  counter, so a fresh tree sits under the old number. The next append brings
+  the counter down to the tree and retires the hole it would otherwise
+  leave: appending from a counter of 4 over a tree of 0..2 wrote version 5
+  and left 3 and 4 empty.
+- **5.11.x scavenges, or re-creates and then scavenges.** The counter can
+  sit above the newest live event, which is why a scavenge takes its cutoff
+  from the tree: `keep_versions` counted back from the counter would keep
+  nothing and delete the newest events with the oldest.
+
+What the reconcile costs on the normal path is one read of the version node
+the counter names. While that node is there, nothing else is read; the walk
+over the version nodes happens only when it is gone. `reckon_db_upgrade_store_SUITE`
+opens a store written through both releases for the first two shapes, and
+`reckon_db_stale_counter_SUITE` builds each shape in one VM.
+
+Rolling forward is still what to do. A store that has been written by
+5.12.0 should not be handed to 5.11.x if it can be avoided; if it happens,
+the reconcile above is what keeps the streams usable.
+
+Downstream: every two-part constraint (`~> 5.2`, `~> 5.4`, `~> 5.5`,
+`~> 5.9`, `~> 5.11`) floats to 5.12.0, so those consumers pick this up on
+their next dependency update — which is why this is a minor release and not a
+patch. A three-part constraint does not float: `~> 5.11.7` means
+`>= 5.11.7 and < 5.12.0`, and macula-realm pins exactly that in
+`apps/macula_realm` and `apps/guide_realm_lifecycle`. Those two need an
+explicit bump; until then macula-realm stays on 5.11.x.
+
+### Note for consumers with a khepri override
+
+`{override, khepri, [{erl_opts, [nowarn_deprecated_catch]}]}` was needed
+because khepri 0.17.2 used the deprecated `catch` expression. 0.17.11 does
+not (it was replaced with try/catch in 0.17.8): a clean rebuild of the
+dependency produces no such warning. Any repo carrying the override can drop
+it when it next bumps — mcl-om, mcl-tube, mcl-chess, mcl-jobs, mcl-agora,
+macula, macula-station, barrel (four apps) and, worth doing first,
+`mcl-om/priv/templates/mcl_service/rebar.config`, which is what a new service
+is scaffolded from.
+
 ## [5.11.13] - 2026-10-21
 
 ### Fixed: two concurrent appends to one stream silently lost events

@@ -225,7 +225,12 @@ find_scavenge_candidates(StoreId, StreamId, Opts) ->
 
 %% @private
 read_candidates(StoreId, StreamId, Opts) ->
-    CurrentVersion = reckon_db_streams:get_version(StoreId, StreamId),
+    %% The cutoff is measured against the tree, not against the counter: a
+    %% 5.11.x scavenge, or a delete and re-create, can leave the counter above
+    %% the newest live event, and a `keep_versions' measured from a version
+    %% that no longer exists protects nothing - it deletes the newest events
+    %% too.
+    CurrentVersion = reckon_db_streams:newest_event_version(StoreId, StreamId),
     KeepVersions = maps:get(keep_versions, Opts, 0),
     CutoffVersion = determine_cutoff_version(StoreId, StreamId, Opts, CurrentVersion),
     SafeCutoff = min(CutoffVersion, CurrentVersion - KeepVersions),

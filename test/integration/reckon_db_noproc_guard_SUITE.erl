@@ -54,7 +54,9 @@
     coordinator_join_works_after_store_starts/1,
     %% Discovery guards
     discovery_get_nodes_returns_error_when_not_running/1,
-    discovery_get_nodes_works_in_single_mode/1
+    discovery_get_nodes_works_in_single_mode/1,
+    %% The wrapping itself
+    transaction_wrapping_is_unwrapped_when_the_store_is_not_running/1
 ]).
 
 %%====================================================================
@@ -80,7 +82,8 @@ all() ->
      coordinator_should_handle_nodeup_false_when_not_running,
      coordinator_join_works_after_store_starts,
      discovery_get_nodes_returns_error_when_not_running,
-     discovery_get_nodes_works_in_single_mode
+     discovery_get_nodes_works_in_single_mode,
+     transaction_wrapping_is_unwrapped_when_the_store_is_not_running
     ].
 
 init_per_suite(Config) ->
@@ -514,6 +517,25 @@ discovery_get_nodes_works_in_single_mode(Config) ->
     ?assert(is_list(Result)),
 
     application:unset_env(reckon_db, cluster_secret),
+    ok.
+
+%% khepri:transaction/2 answers {ok, {error, noproc}} - not {error, noproc} -
+%% when the store is not running, and 0.17.11 still does (rabbitmq/khepri#400
+%% is open). Every call site that unwraps it is only right while both halves
+%% hold, so this asserts both: the wrapping, and the store's own answer to an
+%% append against a store that is not there.
+transaction_wrapping_is_unwrapped_when_the_store_is_not_running(_Config) ->
+    StoreId = no_such_store_for_unwrap,
+
+    ?assertEqual({ok, {error, noproc}},
+                 khepri:transaction(StoreId, fun() -> ok end)),
+
+    %% reckon_db_streams writes through khepri:transaction (write_batch/6).
+    StreamId = reckon_gater_stream_id:new(<<"unwrap">>),
+    ?assertEqual({error, noproc},
+                 reckon_db_streams:append(
+                   StoreId, StreamId, ?ANY_VERSION,
+                   [#{event_type => <<"thing_happened_v1">>, data => #{}}])),
     ok.
 
 %%====================================================================
