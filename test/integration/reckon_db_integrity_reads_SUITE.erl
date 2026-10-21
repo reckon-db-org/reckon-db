@@ -65,6 +65,8 @@
     backward_read_catches_tampering/1,
     backward_read_returns_events_in_descending_order/1,
     a_scavenged_stream_is_read_from_the_oldest_event_that_is_there/1,
+    a_hand_deleted_prefix_is_read_as_a_violation/1,
+    a_gap_just_before_the_read_start_is_a_violation/1,
     integrity_disabled_store_bypasses_verification/1
 ]).
 
@@ -115,6 +117,8 @@ groups() ->
             backward_read_catches_tampering,
             backward_read_returns_events_in_descending_order,
             a_scavenged_stream_is_read_from_the_oldest_event_that_is_there,
+            a_hand_deleted_prefix_is_read_as_a_violation,
+            a_gap_just_before_the_read_start_is_a_violation,
             integrity_disabled_store_bypasses_verification
         ]}
     ].
@@ -493,12 +497,13 @@ backward_read_returns_events_in_descending_order(Config) ->
 %%      THEN every one of them is returned and verified
 %%
 %% The first surviving event's prev_event_hash names an event the scavenge
-%% deleted, so the chain cannot be walked from the start: the read anchors
-%% on that event (its own MAC is still verified) and walks from there. Before
-%% this case's fix the forward read and the fold answered
-%% {error, {integrity_violation, version 10}} and the backward read exited
-%% with a function_clause in handle_integrity — a crash in a gateway worker,
-%% the reckon-db#4 class — over a stream whose events were all intact.
+%% deleted, so the chain cannot be walked from the start: the read anchors on
+%% the boundary the scavenge recorded (the oldest surviving version, with the
+%% chain hash of the last removed event, MAC'd under the integrity key) and
+%% walks from there. Before this case's fix the forward read and the fold
+%% answered {error, {integrity_violation, version 10}} and the backward read
+%% exited with a function_clause in handle_integrity, a crash in a gateway
+%% worker (the reckon-db#4 class), over a stream whose events were all intact.
 a_scavenged_stream_is_read_from_the_oldest_event_that_is_there(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
     StreamId = reckon_db_test_helpers:sid(<<"integrity-scavenged">>),
@@ -520,6 +525,55 @@ a_scavenged_stream_is_read_from_the_oldest_event_that_is_there(Config) ->
     {ok, Folded} = reckon_db_streams:fold_event_batches(
         StoreId, StreamId, 7, forward, Collect, []),
     ?assertEqual(Survivors, Folded).
+
+%% @doc GIVEN an integrity store whose prefix was deleted by hand, with no
+%%      scavenge to record a boundary
+%%      WHEN the survivors are read forward and backward
+%%      THEN both refuse: the gap is not one the store cut
+%%
+%% This is the shape a scavenge leaves in the tree, and the reason the
+%% scavenge record exists. Anchoring on whatever the survivor carries would
+%% make a deletion indistinguishable from a scavenge, and a reader who can
+%% verify a truncated stream verifies nothing.
+a_hand_deleted_prefix_is_read_as_a_violation(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"integrity-hand-deleted">>),
+    write_n_events(StoreId, StreamId, 30),
+
+    %% No scavenge: the events are removed straight from the tree.
+    lists:foreach(fun(V) -> khepri:delete(StoreId, event_path(StreamId, V)) end,
+                  lists:seq(0, 9)),
+
+    ?assertMatch({error, {integrity_violation, #{kind := missing_predecessor}}},
+                 reckon_db_streams:read_all(StoreId, StreamId, 100, forward)),
+    ?assertMatch({error, {integrity_violation, #{kind := missing_predecessor}}},
+                 reckon_db_streams:read_all(StoreId, StreamId, 100, backward)),
+    Collect = fun(Events, Acc) -> Acc ++ [E#event.version || E <- Events] end,
+    ?assertMatch({error, {integrity_violation, #{kind := missing_predecessor}}},
+                 reckon_db_streams:fold_event_batches(
+                   StoreId, StreamId, 7, forward, Collect, [])).
+
+%% @doc GIVEN an intact integrity stream
+%%      WHEN the single event just before a read's start is deleted by hand
+%%      THEN a read from that start refuses, in both directions
+%%
+%% A gap in the middle has to stay a violation: a read that starts above it
+%% would otherwise verify the survivors against a predecessor it never had.
+a_gap_just_before_the_read_start_is_a_violation(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"integrity-gap">>),
+    write_n_events(StoreId, StreamId, 30),
+
+    ok = khepri:delete(StoreId, event_path(StreamId, 14)),
+
+    ?assertMatch({error, {integrity_violation, #{kind := missing_predecessor}}},
+                 reckon_db_streams:read(StoreId, StreamId, 15, 5, forward)),
+    ?assertMatch({error, {integrity_violation, #{kind := missing_predecessor}}},
+                 reckon_db_streams:read(StoreId, StreamId, 19, 5, backward)).
+
+%% @private
+event_path(StreamId, Version) ->
+    reckon_db_stream_path:event_path(StreamId, pad_version(Version, ?VERSION_PADDING)).
 
 %% A store with integrity disabled bypasses verification entirely,
 %% regardless of opts.

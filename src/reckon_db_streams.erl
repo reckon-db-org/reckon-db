@@ -2177,9 +2177,25 @@ verify_in_direction(StoreId, StreamId, StartVersion, backward, Events, Mode) ->
 verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode) ->
     {ok, ChainStart} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
     Key = reckon_db_integrity_key:get(StoreId),
-    InitialTip = resolve_read_initial_tip(
-        StoreId, StreamId, first_event_version(Events, StartVersion), ChainStart),
-    verify_events_loop(Events, InitialTip, ChainStart, Key, Mode, StreamId, []).
+    FirstVersion = first_event_version(Events, StartVersion),
+    case resolve_read_initial_tip(StoreId, StreamId, FirstVersion, ChainStart,
+                                  Events) of
+        {missing_predecessor, Version} ->
+            %% A predecessor that is not in the store and was not cut away by
+            %% a scavenge: the chain is broken, and no anchor may be invented
+            %% for it.
+            {integrity_violation, #{
+                layer => storage,
+                stream_id => StreamId,
+                version => FirstVersion,
+                kind => missing_predecessor,
+                context => #{detail => predecessor_absent,
+                             missing_version => Version}
+            }};
+        InitialTip ->
+            verify_events_loop(Events, InitialTip, ChainStart, Key, Mode,
+                               StreamId, [])
+    end.
 
 %% @private The version the batch actually starts at, which is not the version
 %% the caller asked for whenever the window it named held no event: a scavenge
@@ -2236,17 +2252,6 @@ handle_integrity(Event, Rest, undefined, ChainStart, Key, Mode, StreamId, Acc)
     %% the verifier has a concrete value to compare against.
     Genesis = reckon_gater_integrity:genesis_prev_hash(),
     handle_integrity(Event, Rest, Genesis, ChainStart, Key, Mode, StreamId, Acc);
-handle_integrity(#event{prev_event_hash = Prev} = Event, Rest, undefined,
-                 ChainStart, Key, Mode, StreamId, Acc)
-        when is_binary(Prev) ->
-    %% The event this one chains to is not in the store: a scavenge removed
-    %% it. Nothing can recompute a link to an event that is gone, so the
-    %% chain is anchored at the oldest event that is still there - this one.
-    %% Its own MAC is still verified, against the hash it carries, and every
-    %% event after it is verified against the one before it. This is the
-    %% boundary a read from a scavenged stream starts at, and it is why a
-    %% read from the live end must not be a refusal to read at all.
-    handle_integrity(Event, Rest, Prev, ChainStart, Key, Mode, StreamId, Acc);
 handle_integrity(#event{} = Event, _Rest, undefined, _ChainStart, _Key, _Mode,
                  StreamId, _Acc) ->
     %% An integrity-bearing event that carries no hash to anchor on cannot be
@@ -2279,18 +2284,26 @@ handle_integrity(Event, Rest, Tip, ChainStart, Key, Mode, StreamId, Acc)
 %%   integrity-bearing event in the stream).
 %% - StartVersion > watermark: tip = chain_hash of the event at
 %%   (StartVersion - 1), which must itself be integrity-bearing.
+%%
+%% When that predecessor is not in the store, the only thing that may anchor
+%% the batch is the boundary a scavenge recorded: the version right after the
+%% last one it removed, with the chain hash of that removed event, MAC'd under
+%% the store's integrity key. A prefix deleted by hand leaves the tree looking
+%% exactly the same, so "the predecessor is gone, anchor on whatever the
+%% survivor carries" fails open precisely where tamper detection matters.
+%% Every other gap is a broken chain and is reported as one.
 -spec resolve_read_initial_tip(
-    atom(), binary(), non_neg_integer(), non_neg_integer() | undefined
-) -> binary() | undefined.
-resolve_read_initial_tip(_StoreId, _StreamId, _StartVersion, undefined) ->
+    atom(), binary(), non_neg_integer(), non_neg_integer() | undefined, [event()]
+) -> binary() | undefined | {missing_predecessor, non_neg_integer()}.
+resolve_read_initial_tip(_StoreId, _StreamId, _StartVersion, undefined, _Events) ->
     undefined;
-resolve_read_initial_tip(_StoreId, _StreamId, StartVersion, ChainStart)
+resolve_read_initial_tip(_StoreId, _StreamId, StartVersion, ChainStart, _Events)
         when StartVersion < ChainStart ->
     undefined;
-resolve_read_initial_tip(_StoreId, _StreamId, StartVersion, ChainStart)
+resolve_read_initial_tip(_StoreId, _StreamId, StartVersion, ChainStart, _Events)
         when StartVersion =:= ChainStart ->
     reckon_gater_integrity:genesis_prev_hash();
-resolve_read_initial_tip(StoreId, StreamId, StartVersion, _ChainStart)
+resolve_read_initial_tip(StoreId, StreamId, StartVersion, _ChainStart, Events)
         when StartVersion > 0 ->
     PrevVersion = StartVersion - 1,
     PaddedVersion = pad_version(PrevVersion, ?VERSION_PADDING),
@@ -2300,8 +2313,41 @@ resolve_read_initial_tip(StoreId, StreamId, StartVersion, _ChainStart)
                 when is_binary(PrevPrevHash) ->
             reckon_gater_integrity:compute_chain_hash(PrevEvent, PrevPrevHash);
         _ ->
-            %% No usable predecessor; legacy regime in practice.
-            undefined
+            scavenge_anchor(StoreId, StreamId, PrevVersion, Events)
+    end.
+
+%% @private The anchor a scavenge left for this batch, if this batch is
+%% exactly the one it left it for.
+%%
+%% Both halves have to line up: the boundary names the oldest surviving
+%% version, and the event at that version carries the chain hash of the last
+%% removed one. The boundary's MAC says the store wrote it. A batch that
+%% starts anywhere else, or carries any other hash, has a gap nobody recorded
+%% and gets {missing_predecessor, _}.
+-spec scavenge_anchor(atom(), binary(), non_neg_integer(), [event()])
+        -> binary() | {missing_predecessor, non_neg_integer()}.
+scavenge_anchor(StoreId, StreamId, PrevVersion, [#event{} = First | _]) ->
+    BoundaryVersion = PrevVersion + 1,
+    Carried = First#event.prev_event_hash,
+    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
+        {ok, #{version := BoundaryVersion, prev_hash := Recorded} = Boundary}
+                when is_binary(Carried), Carried =:= Recorded ->
+            verified_anchor(StoreId, StreamId, PrevVersion, Recorded, Boundary);
+        _ ->
+            {missing_predecessor, PrevVersion}
+    end;
+scavenge_anchor(_StoreId, _StreamId, _PrevVersion, []) ->
+    %% An empty batch has nothing to anchor.
+    undefined.
+
+%% @private A boundary the store can prove it wrote.
+-spec verified_anchor(atom(), binary(), non_neg_integer(), binary(),
+                      reckon_db_scavenge_boundary:boundary())
+        -> binary() | {missing_predecessor, non_neg_integer()}.
+verified_anchor(StoreId, StreamId, PrevVersion, Recorded, Boundary) ->
+    case reckon_db_scavenge_boundary:verify(StoreId, StreamId, Boundary) of
+        true -> Recorded;
+        false -> {missing_predecessor, PrevVersion}
     end.
 
 %% @private

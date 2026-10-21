@@ -101,9 +101,24 @@ ok = reckon_db_links:start(my_store, <<"high-value-orders">>).
 ```
 
 This:
-1. Updates link status to `running`
-2. Performs backfill if `backfill => true`
-3. Subscribes to source stream(s) for new events
+1. Subscribes to the source stream(s), so nothing appended from here on is missed
+2. Records each source stream's newest version — the link's *fence*
+3. Backfills every source event up to that fence, then links what arrives above it
+
+Each source event is linked exactly once: what was appended before the fence
+comes from the backfill, what is appended after it comes from the live
+delivery, and the two meet at the fence.
+
+A start resumes where the last one stopped. The link records the version it
+has linked to, per source stream, in
+`[links, StoreId, Name, fences, StreamId]`; a restart — after a crash, or a
+`stop` and `start` — backfills from there instead of appending the whole link
+stream again. `backfill => false` still applies to a stream the link has
+never linked: it records the fence and links nothing that already existed.
+
+A stream added to a `stream_pattern` source after the link started has no
+fence yet, so its events are linked from the moment it appears; a later
+restart resumes from the fence the link recorded for it.
 
 ### Stopping a Link
 
@@ -111,9 +126,9 @@ This:
 ok = reckon_db_links:stop(my_store, <<"high-value-orders">>).
 ```
 
-This:
-1. Unsubscribes from source streams
-2. Updates link status to `stopped`
+This removes the link's worker (and stops restarting it), unsubscribes it, and
+updates its status to `stopped`. A stopped or deleted link leaves no
+subscription, trigger or emitter pool behind.
 
 ### Checking Link Status
 

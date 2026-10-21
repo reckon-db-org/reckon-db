@@ -35,6 +35,64 @@ subscription in its log — and the suite opens it, checks the events, the
 subscription and a fresh append, and must stay green through the bump,
 unchanged. It is green here, because 0.17.11 reads a 0.17.2 store as it is.
 
+### Fixed: a link delivers, and its fence survives a restart
+
+A link on a real store was a link in name only, for three reasons.
+
+The worker joined the emitter process group itself, under the subscription
+*name*, while the trigger broadcasts under the *key* the subscription was
+stored with — and, even under the right key, a broadcast goes to one random
+member and arrives as `{forward_to_local, Topic, Event}`, which the worker
+dropped and which was then gone for the real emitters too. Nothing was ever
+delivered. The suite made it look otherwise by posting `{events, [...]}` to
+the worker by hand.
+
+The worker is now the subscription's subscriber, so delivery is the store's
+own path — trigger, emitter pool, subscriber — and a `catchup => false`
+subscription option switches off the global replay that the backfill replaces.
+A `stream_pattern` or `all` source subscribes to the whole store and applies
+its pattern to the events that arrive: a subscription filter matches event
+content, not stream-id shape, and `stream_pattern` used to map onto
+`by_event_pattern/1`, which takes a map and raised a `function_clause`.
+
+The fence written after every batch was never read: a start always fenced at
+"newest now" and backfilled from 0, so a restart, a crash, or a stop and start
+appended the whole link stream again — and duplicates are what this release
+exists to prevent, since the link stream is appended with `-2`. A start now
+resumes at the fence the last run recorded, and records each batch's highest
+source version rather than the whole range at the first batch.
+
+An append that failed was logged, then stepped over: the fence moved past
+events that were never linked, and they were lost. It stops the worker now,
+and the fence stays where it was.
+
+`stop/2` takes the worker out of `reckon_db_links_sup` with
+`terminate_child` + `delete_child` instead of only stopping it: the child spec
+is `transient` with the link's name for an id, so a stopped worker still held
+its spec and the next `start/2` was refused with `already_present`. The worker
+unsubscribes on its way out, so a stopped or deleted link leaves no trigger,
+emitter pool or subscription record behind.
+
+`reckon_db_links_delivery_SUITE` is the guard: the store's real supervision
+tree, every event appended through the public API, nothing posted to the
+worker. All six cases fail on the previous tip.
+
+### Fixed: an integrity read fails closed on a missing predecessor
+
+The read path anchored a batch on whatever `prev_event_hash` its first event
+carried whenever that event's predecessor was not in the store. A scavenge
+removes a prefix, so this is exactly what a scavenged stream looks like — and
+exactly what a prefix deleted by hand looks like too. Tampering with a
+protected stream's first *k* events verified clean, forward and backward.
+
+A scavenge now records its boundary: the oldest version it left, with the
+chain hash of the last event it removed, MAC'd under the store's integrity key
+(`reckon_db_scavenge_boundary`). The read anchors there, and only there — the
+batch must begin at that version, carry that hash, and the MAC must verify. A
+missing predecessor anywhere else is `{integrity_violation,
+#{kind := missing_predecessor}}` in both directions, with no `function_clause`
+on the backward path.
+
 ### Fixed: a scavenge no longer poisons the store
 
 Upstream's. On 0.17.2, scavenging a stream that has a live subscription took

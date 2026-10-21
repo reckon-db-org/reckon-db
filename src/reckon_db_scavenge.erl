@@ -213,9 +213,34 @@ execute_or_preview(StoreId, StreamId, Opts, false, Events, FromVersion,
     case reckon_db_streams:ensure_version_counter(StoreId, StreamId, NewestVersion) of
         ok ->
             delete_event_versions(StoreId, StreamId, FromVersion, ToVersion),
+            ok = record_chain_boundary(StoreId, StreamId, Events),
             {ok, build_scavenge_result(StreamId, Events, FromVersion, ToVersion, Opts)};
         {error, _} = Error ->
             Error
+    end.
+
+%% @private Record where this scavenge cut the chain, so a later read of a
+%% scavenged stream can anchor at the cut and at nothing else (see
+%% reckon_db_scavenge_boundary).
+%%
+%% The boundary is the version right after the last one deleted, together with
+%% the chain hash of that last deleted event - which is the `prev_event_hash'
+%% the oldest survivor carries. The hash of a deleted event is recomputed from
+%% the event itself and its own predecessor, both of which are still in hand
+%% here: nothing else is left in the tree to derive it from afterwards.
+-spec record_chain_boundary(atom(), binary(), [event(), ...]) -> ok.
+record_chain_boundary(StoreId, StreamId, Events) ->
+    #event{version = LastDeleted, prev_event_hash = PrevHash} = lists:last(Events),
+    case is_binary(PrevHash) of
+        false ->
+            %% A legacy tail: there is no chain to anchor.
+            ok;
+        true ->
+            ChainHashAtLast =
+                reckon_gater_integrity:compute_chain_hash(
+                  lists:last(Events), PrevHash),
+            reckon_db_scavenge_boundary:record(StoreId, StreamId,
+                                               LastDeleted + 1, ChainHashAtLast)
     end.
 
 %% @private

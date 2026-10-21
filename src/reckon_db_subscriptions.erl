@@ -48,7 +48,8 @@
     subscription_name => binary(),
     pool_size => pos_integer(),
     start_from => non_neg_integer(),
-    subscriber => pid()
+    subscriber => pid(),
+    catchup => boolean()
 }.
 
 -export_type([subscribe_opts/0]).
@@ -77,6 +78,9 @@ subscribe(StoreId, Type, Selector, SubscriptionName) ->
 %% - pool_size: Number of emitter workers (default: 1)
 %% - start_from: Starting position for replay (default: 0)
 %% - subscriber: PID to receive events directly (default: undefined)
+%% - catchup: Replay from `start_from' once the subscription exists (default:
+%%   true). `false' leaves the subscriber only what the trigger delivers from
+%%   now on, for a subscriber that does its own catch-up.
 -spec subscribe(atom(), subscription_type(), binary() | map(), binary(), subscribe_opts()) ->
     {ok, binary()} | {error, term()}.
 subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
@@ -694,6 +698,11 @@ map_to_event(Map) ->
 %% delivered twice. The subscriber must handle idempotency.
 -spec maybe_start_catchup(atom(), subscription()) -> ok.
 maybe_start_catchup(_StoreId, #subscription{subscriber_pid = undefined}) ->
+    ok;
+maybe_start_catchup(_StoreId, #subscription{options = #{catchup := false}}) ->
+    %% The subscriber runs its own catch-up. A link does: its backfill fences
+    %% each source stream and resumes from a stored version, and a replay of
+    %% the global log beside it would only be filtered out again.
     ok;
 maybe_start_catchup(StoreId,
                    #subscription{subscriber_pid = Pid,

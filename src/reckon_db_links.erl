@@ -167,6 +167,7 @@
     %% For reckon_db_link_worker, which runs one link.
     get_link/2,
     source_streams/2,
+    source_matches/2,
     process_events/2,
     append_to_link/3,
     link_stream_id/1
@@ -352,9 +353,15 @@ started({error, _} = Error, _StoreId, _Name) ->
     Error.
 
 %% @doc Stop processing a link.
+%%
+%% Under the store's supervision tree the child has to be taken out of it, not
+%% merely stopped: its spec is `transient' with the link's name, so a worker
+%% that exits normally leaves the spec behind and the next `start/2' is
+%% refused with `already_present'. `terminate_child' + `delete_child' removes
+%% the spec as well, and the worker unsubscribes on its way out.
 -spec stop(atom(), binary()) -> ok | {error, term()}.
 stop(StoreId, Name) ->
-    ok = reckon_db_link_worker:stop(StoreId, Name),
+    ok = stop_worker(StoreId, Name),
 
     %% Update status
     update_status(StoreId, Name, stopped),
@@ -384,6 +391,35 @@ info(StoreId, Name) ->
         Error ->
             Error
     end.
+
+%% @private
+-spec stop_worker(atom(), binary()) -> ok.
+stop_worker(StoreId, Name) ->
+    case whereis(reckon_db_naming:links_sup_name(StoreId)) of
+        undefined ->
+            reckon_db_link_worker:stop(StoreId, Name);
+        Sup ->
+            %% terminate_child is a no-op error when the worker is already
+            %% gone; deleting the spec is what makes a later start possible.
+            _ = supervisor:terminate_child(Sup, Name),
+            _ = supervisor:delete_child(Sup, Name),
+            ok
+    end.
+
+%% @doc Does the link's source cover this stream?
+%%
+%% The worker asks this about events delivered for a pattern or all source,
+%% whose subscription has to take the whole store.
+-spec source_matches(#link{}, binary()) -> boolean().
+source_matches(#link{source = #{type := stream, stream_id := StreamId}}, StreamId) ->
+    true;
+source_matches(#link{source = #{type := stream_pattern, pattern := Pattern}},
+               StreamId) ->
+    filter_by_pattern([StreamId], Pattern) =/= [];
+source_matches(#link{source = #{type := all}}, StreamId) ->
+    not is_link_stream(StreamId);
+source_matches(_Link, _StreamId) ->
+    false.
 
 %%====================================================================
 %% Internal functions
