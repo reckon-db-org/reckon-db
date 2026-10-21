@@ -84,7 +84,8 @@ lookup(StoreId, StreamId) ->
     end.
 
 %% @private
--spec sealed_shape(atom(), binary(), non_neg_integer(), term()) -> watermark().
+-spec sealed_shape(atom(), binary(), non_neg_integer(), term()) ->
+    {sealed, non_neg_integer()} | {unsealed, non_neg_integer()}.
 sealed_shape(StoreId, StreamId, Version, Mac) ->
     case seals(StoreId, StreamId, Version, Mac) of
         true -> {sealed, Version};

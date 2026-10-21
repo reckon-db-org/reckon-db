@@ -143,8 +143,8 @@ enabled_store_writes_integrity_fields(Config) ->
     ?assertEqual(ok,
         reckon_gater_integrity:verify_event(Event, Genesis, Key)),
 
-    %% Watermark recorded.
-    {ok, 0} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
+    %% Watermark recorded, in the authenticated shape.
+    {ok, {sealed, 0}} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
     ok.
 
 %% Across N appends, each event's prev_event_hash must equal the
@@ -196,7 +196,7 @@ watermark_is_recorded_on_first_append(Config) ->
         StoreId, StreamA, ?NO_STREAM,
         [#{event_type => <<"e">>, data => #{}}]),
 
-    ?assertEqual({ok, 0},
+    ?assertEqual({ok, {sealed, 0}},
         reckon_db_chain_watermark:lookup(StoreId, StreamA)),
     %% B still has no watermark.
     ?assertEqual({ok, undefined},
@@ -206,7 +206,7 @@ watermark_is_recorded_on_first_append(Config) ->
     {ok, 1} = reckon_db_streams:append(
         StoreId, StreamA, 0,
         [#{event_type => <<"e">>, data => #{}}]),
-    ?assertEqual({ok, 0},
+    ?assertEqual({ok, {sealed, 0}},
         reckon_db_chain_watermark:lookup(StoreId, StreamA)),
     ok.
 
