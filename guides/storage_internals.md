@@ -365,15 +365,19 @@ case reckon_db_streams:append(StoreId, StreamId, ExpectedVersion, Events) of
         {error, {version_conflict, Expected, Current}};
     {error, {version_unverifiable, Version, _Reason}} = Error ->
         %% The store could not answer the version check: a read failed for
-        %% some reason other than the node being absent. Retrying will not
-        %% help.
+        %% some reason other than the node being absent, or the node the
+        %% batch was built from is no longer there. Retrying will not help.
         %%
         %% Two shapes do NOT land here. A stream deleted while the append was
-        %% in flight sees the delete in its transaction, aborts as
-        %% version_changed and re-reads and retries. A stream with no counter
-        %% yet (written before 5.12.0) whose target node is occupied also
-        %% aborts as version_changed and retries; only a read error other
-        %% than node_not_found answers version_unverifiable there.
+        %% in flight, where a counter exists, sees the delete in its
+        %% transaction, aborts as version_changed, and re-reads and retries -
+        %% landing on a stream that is not there: ANY_VERSION writes at 0,
+        %% an explicit version is refused wrong_expected_version. A stream
+        %% with no counter yet (written before 5.12.0) whose target node is
+        %% occupied also aborts as version_changed and retries. The same
+        %% counter-less stream deleted under the append DOES land here: with
+        %% no number to compare, the version node it was built from is the
+        %% evidence, and it is gone.
         Error
 end.
 ```
@@ -390,7 +394,9 @@ nodes without renumbering the rest, which is why a count cannot answer this:
 the counter does not move when nodes are removed, so an append after a
 scavenge lands after the newest event rather than reusing a version that is
 still stored. A stream written before the counter existed reads its newest
-version node once and gets a counter on its next append.
+version node once and gets a counter on its next append - and a scavenge
+writes one before it deletes anything, so a whole-stream scavenge cannot
+empty the only record of how far the stream got.
 
 ## Performance Tips
 

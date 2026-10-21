@@ -29,6 +29,7 @@
     read_by_metadata/3,
     get_version/2,
     newest_event_version/2,
+    ensure_version_counter/3,
     live_event_count/2,
     exists/2,
     has_events/1,
@@ -804,26 +805,47 @@ convert_result_to_event(_, _) ->
 %% and the next append writes the counter.
 -spec get_version(atom(), binary()) -> integer().
 get_version(StoreId, StreamId) ->
-    element(1, current_version_for_append(StoreId, StreamId)).
+    case current_version_for_append(StoreId, StreamId) of
+        {ok, Version, _CounterExisted} -> Version;
+        %% A store that cannot answer reads as "no stream" here, which is
+        %% what it answered before the read errors were separated out: this
+        %% function has no error channel, and an append still refuses to
+        %% write over a node that is there (append_guard/6).
+        {error, _} -> ?NO_STREAM
+    end.
 
 %% @doc The newest version an event node holds, read from the tree.
 %%
 %% `get_version/2' answers the counter, which is what an append writes from.
-%% This answers the tree, and the two differ after a rollback: 5.11.x keeps
-%% no counter, so it can scavenge a stream's newest events away, or delete
-%% and re-create the stream, and the counter sits above what is left. A
-%% scavenge takes its cutoff from here - measuring `keep_versions' against a
-%% version that no longer exists protects nothing - and answers
-%% `?NO_STREAM' for a stream with no event left.
--spec newest_event_version(atom(), binary()) -> integer().
+%% This answers what the stream is, and the two differ after a rollback:
+%% 5.11.x keeps no counter, so it can scavenge a stream's newest events away,
+%% or delete and re-create the stream, and the counter sits above what is
+%% left. A scavenge takes its cutoff from here - measuring `keep_versions'
+%% against a version that no longer exists protects nothing - and answers
+%% `{ok, ?NO_STREAM}' for a stream with no event left.
+%%
+%% The counter is asked first, because one node read answers it: the counter
+%% is written in the same Ra command as the events, so a counter whose node
+%% is in the tree names the newest version. The tree is walked only when that
+%% node is gone, or when there is no counter at all, which is the rollback
+%% shape and the pre-counter stream. Walking is what made a dry run on a 50k
+%% stream cost 130-226 ms.
+-spec newest_event_version(atom(), binary()) -> {ok, integer()} | {error, term()}.
 newest_event_version(StoreId, StreamId) ->
-    get_version_from_version_nodes(StoreId, StreamId, read_options(consistent)).
+    Options = read_options(consistent),
+    case counter_naming_a_live_node(StoreId, StreamId, Options) of
+        {ok, Version} -> {ok, Version};
+        no_counter -> get_version_from_version_nodes(StoreId, StreamId, Options)
+    end.
 
-%% @private The version an append writes from, and whether it came from the
-%% stream's counter. The flag matters at write time: a stream with no counter
-%% (written before this release) has no number to compare in the transaction,
-%% only the version node the batch would occupy.
--spec current_version_for_append(atom(), binary()) -> {integer(), boolean()}.
+%% @private The version an append writes from, whether it came from the
+%% stream's counter, and - when nothing could be read at all - the error.
+%%
+%% The flag matters at write time: a stream with no counter (written before
+%% this release) has no number to compare in the transaction, only the
+%% version nodes, and that is what append_guard/6 checks for it.
+-spec current_version_for_append(atom(), binary()) ->
+    {ok, integer(), boolean()} | {error, term()}.
 current_version_for_append(StoreId, StreamId) ->
     current_version_for_append(StoreId, StreamId, local).
 
@@ -843,40 +865,77 @@ current_version_for_append(StoreId, StreamId) ->
 %% that far. That is what the retry needs - an answer no older than the race
 %% it just lost - and it does not cost a round trip for the read itself.
 -spec current_version_for_append(atom(), binary(), local | consistent) ->
-    {integer(), boolean()}.
+    {ok, integer(), boolean()} | {error, term()}.
 current_version_for_append(StoreId, StreamId, Read) ->
     Options = read_options(Read),
-    case khepri:get(StoreId, reckon_db_stream_path:version_counter_path(StreamId),
-                    Options) of
-        {ok, Version} when is_integer(Version), Version >= 0 ->
-            {Version, true};
-        _ ->
-            {get_version_from_version_nodes(StoreId, StreamId, Options), false}
+    case counter_value(StoreId, StreamId, Options) of
+        {ok, Version} -> {ok, Version, true};
+        none          -> version_from_the_tree(StoreId, StreamId, Options)
+    end.
+
+%% @private The version a stream with no counter has, taken from its nodes.
+version_from_the_tree(StoreId, StreamId, Options) ->
+    case get_version_from_version_nodes(StoreId, StreamId, Options) of
+        {ok, Version}      -> {ok, Version, false};
+        {error, _} = Error -> Error
     end.
 
 %% @private
 read_options(local) -> #{};
 read_options(consistent) -> #{favor => consistency}.
 
+%% @private The stream's version counter, as this node can serve it.
+counter_value(StoreId, StreamId, Options) ->
+    Path = reckon_db_stream_path:version_counter_path(StreamId),
+    case khepri:get(StoreId, Path, Options) of
+        {ok, Version} when is_integer(Version), Version >= 0 -> {ok, Version};
+        _ -> none
+    end.
+
+%% @private The counter, when the version node it names is in the tree.
+%%
+%% One node read, where walking every version node of a 50k stream cost
+%% 130-226 ms. A counter whose node is present is the newest version, because
+%% the counter is written in the same Ra command as the events; a counter
+%% whose node is gone is the rollback shape, and says nothing about the tree.
+counter_naming_a_live_node(StoreId, StreamId, Options) ->
+    case counter_value(StoreId, StreamId, Options) of
+        {ok, Version} -> counter_over_a_live_node(StoreId, StreamId, Version, Options);
+        none          -> no_counter
+    end.
+
+%% @private
+counter_over_a_live_node(StoreId, StreamId, Version, Options) ->
+    case version_node_exists(StoreId, StreamId, Version, Options) of
+        true  -> {ok, Version};
+        false -> no_counter
+    end.
+
 %% @private Latest version present in the tree, for a stream whose counter
 %% node is not there yet (written before this release, or never appended
 %% to since). One read of the child names: the padded version nodes sort
 %% lexicographically, so the maximum name IS the latest version.
 -spec get_version_from_version_nodes(atom(), binary(), #{favor => consistency}) ->
-    integer().
+    {ok, integer()} | {error, term()}.
 get_version_from_version_nodes(StoreId, StreamId, Options) ->
     case version_nodes(StoreId, StreamId, Options) of
-        [] -> ?NO_STREAM;
-        Versions -> lists:max(Versions)
+        {ok, []}           -> {ok, ?NO_STREAM};
+        {ok, Versions}     -> {ok, lists:max(Versions)};
+        {error, _} = Error -> Error
     end.
 
 %% @private Every live version number in a stream, read once.
+%%
+%% A read error is an error, not an empty tree: `[]' is what a fully
+%% scavenged stream answers, and the reconcile reads that as "the counter is
+%% the only record left, keep it". Folding a store that did not answer into
+%% it would keep a counter nothing had checked.
 version_nodes(StoreId, StreamId, Options) ->
     Pattern = reckon_db_stream_path:versions_pattern(StreamId),
     Query = Options#{props_to_return => []},
     case khepri_adv:get_many(StoreId, Pattern, Query) of
-        {ok, Nodes} -> version_numbers(Nodes);
-        {error, _} -> []
+        {ok, Nodes}        -> {ok, version_numbers(Nodes)};
+        {error, _} = Error -> Error
     end.
 
 %% @private Version numbers of the event nodes in a get_many result.
@@ -1033,17 +1092,25 @@ do_append(StoreId, StreamId, ExpectedVersion, Events, Attempts, Read) ->
 %% stream keeps moving under us.
 do_append(StoreId, StreamId, ExpectedVersion, Events, Attempts, Read,
           PreviousVersion) ->
-    {CurrentVersion, CounterExisted} =
-        current_version_for_append(StoreId, StreamId, Read),
+    case current_version_for_append(StoreId, StreamId, Read) of
+        {ok, CurrentVersion, CounterExisted} ->
+            append_from(StoreId, StreamId, CurrentVersion, CounterExisted,
+                        ExpectedVersion, Events, Attempts, PreviousVersion);
+        {error, _} = Error ->
+            Error
+    end.
 
+%% @private One attempt, once the version is known.
+append_from(StoreId, StreamId, CurrentVersion, CounterExisted, ExpectedVersion,
+            Events, Attempts, PreviousVersion) ->
     case counter_sits_above_the_tree(StoreId, StreamId, CurrentVersion,
                                      CounterExisted, Attempts) of
         ok ->
             check_and_append(StoreId, StreamId, CurrentVersion, CounterExisted,
                              ExpectedVersion, Events, Attempts, PreviousVersion);
         reconciled ->
-            retry_after_reconcile(StoreId, StreamId, ExpectedVersion, Events,
-                                  Attempts);
+            retry_after_reconcile(StoreId, StreamId, CurrentVersion,
+                                  ExpectedVersion, Events, Attempts);
         {error, _} = Error ->
             Error
     end.
@@ -1134,7 +1201,8 @@ append_checked(StoreId, StreamId, CurrentVersion, CounterExisted,
 reconcile_or_stall(StoreId, StreamId, CurrentVersion, ExpectedVersion, Events,
                    Attempts) ->
     case reconcile_counter(StoreId, StreamId, CurrentVersion) of
-        ok -> retry_after_reconcile(StoreId, StreamId, ExpectedVersion, Events, Attempts);
+        ok -> retry_after_reconcile(StoreId, StreamId, CurrentVersion,
+                                    ExpectedVersion, Events, Attempts);
         stale -> {error, {version_unverifiable, CurrentVersion, target_occupied}};
         {error, _} = Error -> Error
     end.
@@ -1146,14 +1214,22 @@ reconcile_or_stall(StoreId, StreamId, CurrentVersion, ExpectedVersion, Events,
 reconcile_or_error(StoreId, StreamId, CurrentVersion, ExpectedVersion, Events,
                    Attempts, Error) ->
     case reconcile_counter(StoreId, StreamId, CurrentVersion) of
-        ok -> retry_after_reconcile(StoreId, StreamId, ExpectedVersion, Events, Attempts);
+        ok -> retry_after_reconcile(StoreId, StreamId, CurrentVersion,
+                                    ExpectedVersion, Events, Attempts);
         stale -> Error;
         {error, _} = RepairError -> RepairError
     end.
 
 %% @private Try the append again once the counter has been repaired. The
-%% budget shrinks by one so a counter that keeps moving cannot loop here.
-retry_after_reconcile(StoreId, StreamId, ExpectedVersion, Events, Attempts) ->
+%% budget shrinks by one so a counter that keeps moving cannot loop here, and
+%% it has a floor: with nothing left to spend, the attempt answers the way a
+%% spent retry budget answers anywhere else in this module, rather than
+%% calling back in with a negative count.
+retry_after_reconcile(_StoreId, _StreamId, CurrentVersion, ExpectedVersion,
+                      _Events, Attempts) when Attempts =< 1 ->
+    {error, {version_conflict, ExpectedVersion, CurrentVersion}};
+retry_after_reconcile(StoreId, StreamId, _CurrentVersion, ExpectedVersion,
+                      Events, Attempts) ->
     do_append(StoreId, StreamId, ExpectedVersion, Events, Attempts - 1,
               consistent, undefined).
 
@@ -1248,12 +1324,16 @@ counter_looks_stale(StoreId, StreamId, Counter, Options) ->
 %% @private The newest version node is the truth; move the counter to it.
 reconcile_from_tree(StoreId, StreamId, Counter, Options) ->
     case version_nodes(StoreId, StreamId, Options) of
-        [] ->
+        {ok, []} ->
             %% Every event was scavenged: the counter is the only version
             %% left, and it is the right one.
             stale;
-        Versions ->
-            reconcile_to_tree(StoreId, StreamId, Counter, Versions)
+        {ok, Versions} ->
+            reconcile_to_tree(StoreId, StreamId, Counter, Versions);
+        {error, Reason} ->
+            %% A tree this node could not read is not an empty one: answering
+            %% `stale' would keep a counter nothing had checked.
+            {error, {version_unverifiable, Counter, Reason}}
     end.
 
 %% @private The newest live version is the truth: move the counter to it, in
@@ -1297,6 +1377,37 @@ repair_counter_tx(CounterPath, Stale, New) ->
     case khepri_tx:get(CounterPath) of
         {ok, Stale} -> khepri_tx:put(CounterPath, New);
         _           -> ok
+    end.
+
+%% @doc Record the version a stream reached, when it has no counter yet.
+%%
+%% The scavenge calls this before it deletes anything. A stream written before
+%% this release keeps no counter, so the tree is its only memory of how far it
+%% got; delete every version node without leaving a number behind and the
+%% next append starts at 0 and reuses versions the stream already used. A
+%% counter that is already there is left alone - it is the newer number, and
+%% the reconcile owns the disagreement between it and the tree.
+-spec ensure_version_counter(atom(), binary(), integer()) -> ok | {error, term()}.
+ensure_version_counter(_StoreId, _StreamId, Version) when Version < 0 ->
+    %% Nothing was ever appended: there is no version to remember.
+    ok;
+ensure_version_counter(StoreId, StreamId, Version) ->
+    Path = reckon_db_stream_path:version_counter_path(StreamId),
+    Fun = fun() -> ensure_version_counter_tx(Path, Version) end,
+    case khepri:transaction(StoreId, Fun) of
+        {ok, ok}         -> ok;
+        {ok, {error, E}} -> {error, E};
+        {error, _} = Err -> Err
+    end.
+
+%% @private
+ensure_version_counter_tx(Path, Version) ->
+    case khepri_tx:get(Path) of
+        {ok, _} -> ok;
+        {error, ?khepri_error(node_not_found, _)} ->
+            khepri_tx:put(Path, Version);
+        {error, Reason} ->
+            {error, {version_unverifiable, Version, Reason}}
     end.
 
 %% @private Whether one version node is present.
@@ -1419,9 +1530,11 @@ build_event_writes(StreamId, CurrentVersion, Events, Now, EpochUs,
 write_batch(StreamId, StoreId, Writes, IndexEntries, FinalVersion,
             CurrentVersion, CounterExisted, ExpectedVersion) ->
     CounterPath = reckon_db_stream_path:version_counter_path(StreamId),
+    PredecessorPath = predecessor_path(StreamId, CurrentVersion),
     Fun = fun() ->
-                  write_batch_tx(Writes, IndexEntries, CounterPath, FinalVersion,
-                                 CurrentVersion, CounterExisted, ExpectedVersion)
+                  write_batch_tx(Writes, IndexEntries, CounterPath,
+                                 PredecessorPath, FinalVersion, CurrentVersion,
+                                 CounterExisted, ExpectedVersion)
           end,
     %% There is no bare `ok' clause: khepri:transaction/2 answers {ok, _} or
     %% {error, _}, and the dead clause that matched `ok' was what made
@@ -1435,10 +1548,10 @@ write_batch(StreamId, StoreId, Writes, IndexEntries, FinalVersion,
     end.
 
 %% @private The body of the write-batch transaction.
-write_batch_tx(Writes, IndexEntries, CounterPath, FinalVersion,
+write_batch_tx(Writes, IndexEntries, CounterPath, PredecessorPath, FinalVersion,
                CurrentVersion, CounterExisted, ExpectedVersion) ->
-    ok = append_guard(CounterPath, CurrentVersion, CounterExisted,
-                      hd(Writes), ExpectedVersion),
+    ok = append_guard(CounterPath, PredecessorPath, CurrentVersion,
+                      CounterExisted, hd(Writes), ExpectedVersion),
     lists:foreach(fun put_tx_entry/1, Writes),
     lists:foreach(fun put_tx_entry/1, IndexEntries),
     %% The version the batch ended on, in the same Ra command as the
@@ -1453,14 +1566,19 @@ put_tx_entry({P, Record}) ->
 
 %% @private Refuse the batch if the stream moved since the version was read.
 %%
-%% Two checks, because there are two ways a version can be taken:
+%% Three checks, because there are three ways a version can be taken:
 %%
 %%   - the counter is not the one this batch was built from;
+%%   - the version node the batch was built from is gone, which is what a
+%%     stream with no counter has instead of a number to compare;
 %%   - the first version node this batch would write already exists.
 %%
-%% The second catches the legacy case, a stream written before this release
-%% had a counter at all: there is no number to compare, so the node we are
-%% about to occupy is the evidence.
+%% The second catches a counter-less stream deleted between the read and the
+%% write: the target node is free, so the third check is happy, and without
+%% the second the batch re-creates the stream at N+1 under a caller that read
+%% N - which is not an empty stream, it is a different one. It is also the
+%% only evidence there is for a stream a store wrote before this release
+%% had a counter at all.
 %%
 %% Aborting makes `khepri:transaction' answer `{error, {version_changed,
 %% Actual}}' for the caller to retry from; nothing is written. It MUST abort
@@ -1470,14 +1588,45 @@ put_tx_entry({P, Record}) ->
 %% one level up turns that into a badmatch. `khepri_tx:abort/1' raises
 %% instead, and `khepri_tx_adv:run/5' catches it and hands back the state from
 %% before the transaction.
-append_guard(CounterPath, CurrentVersion, CounterExisted, {FirstPath, _},
-             ExpectedVersion) ->
+append_guard(CounterPath, PredecessorPath, CurrentVersion, CounterExisted,
+             {FirstPath, _}, ExpectedVersion) ->
     case counter_matches(CounterPath, CurrentVersion, CounterExisted) of
         ok ->
+            ok = guard_predecessor_present(PredecessorPath, CurrentVersion,
+                                           CounterExisted),
             guard_first_path_free(FirstPath, CounterPath, ExpectedVersion);
         {error, Reason} ->
             khepri_tx:abort(Reason)
     end.
+
+%% @private The version node the batch was built from is still there.
+%%
+%% Only asked when there is no counter to compare: with one, counter_matches/3
+%% has already said whether the stream moved, and a counter it found absent is
+%% the deleted-stream answer. A new stream has no predecessor, so there is
+%% nothing to look at.
+guard_predecessor_present(_PredecessorPath, _CurrentVersion, true) ->
+    ok;
+guard_predecessor_present(undefined, _CurrentVersion, false) ->
+    ok;
+guard_predecessor_present(PredecessorPath, CurrentVersion, false) ->
+    case khepri_tx:get(PredecessorPath) of
+        {ok, _} -> ok;
+        {error, Reason} ->
+            khepri_tx:abort({version_unverifiable, CurrentVersion, Reason})
+    end.
+
+%% @private The node the batch was built from, or undefined for a new stream.
+%%
+%% Resolved OUTSIDE the transaction: a transaction fun may not call
+%% reckon_db_stream_path (horus walks the call graph and rejects the binary
+%% library calls underneath it), which is why the path travels in with the
+%% writes.
+predecessor_path(_StreamId, ?NO_STREAM) ->
+    undefined;
+predecessor_path(StreamId, CurrentVersion) ->
+    reckon_db_stream_path:event_path(StreamId,
+                                     pad_version(CurrentVersion, ?VERSION_PADDING)).
 
 %% @private
 counter_matches(CounterPath, CurrentVersion, CounterExisted) ->

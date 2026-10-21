@@ -131,9 +131,72 @@ from 0 — a re-created stream that 5.11.x then scavenged from the bottom
 stream left its counter at 4 and its tip unwritable.
 
 `reckon_db_stale_counter_SUITE` builds all four shapes in one VM by moving
-the counter node, and all four fail on the commit before this fix.
+the counter node: all four fail on 1c3437c, and three of the four on
+3b47d32 - the fourth is a re-create-then-scavenge shape that 3b47d32 still
+repaired on the explicit path.
 
-### Fixed: concurrent appends to one stream no longer lose events
+### Fixed: a counter-less stream cannot be re-created underneath an append
+
+The transaction verifies the version an append was built from in three ways:
+the counter has not moved, the version node the batch was built from is still
+there, and the node the batch would occupy is free. The middle check was
+5.11.13's and was lost in the rebase onto it, which left a stream with no
+counter - every stream written by 5.11.x, and every stream until its first
+append here - guarded only by the third.
+
+A counter-less stream deleted between the read and the write has a free
+target node, so the batch was written: `{ok, 5}` over a tree that had held
+0..4, re-creating the stream at N+1 and losing the fact that it had ever
+been a different stream. An explicit expected version of 4 was accepted the
+same way. With the check back, both answer `{error, {version_unverifiable,
+4, {khepri, node_not_found, _}}}`, as 5.11.13 did. Four cases in
+`reckon_db_concurrent_append_SUITE` cover it - counter and counter-less,
+`ANY_VERSION` and explicit - and the two counter-less ones are red on the
+commit before this fix (`{ok, 5}`), while the two counter rows pass there and
+now have something asserting them.
+
+### Fixed: a whole-stream scavenge no longer empties a counter-less stream's version
+
+The scavenge reads its cutoff from the tree and deletes version nodes. For a
+stream that has no counter, those nodes are the only record of how far it
+got: delete all of them and the next append started at 0, reusing versions
+the stream had already used. The scavenge now writes the counter - when it
+is absent - before it deletes anything, from the newest version the tree
+held. Written first on purpose: a crash between the two leaves a counter
+above a tree, which the append reconciles, where the other order loses the
+number. `a_fully_scavenged_counter_less_stream_keeps_its_version` is its
+case, red on the commit before this fix (`get_version/2` answered -1).
+
+### Fixed: a version-node read that failed is no longer read as an empty tree
+
+`version_nodes/3` folded every read error into `[]`, and `[]` is exactly what
+a fully scavenged stream answers - which the reconcile treats as "the
+counter is the only record left, keep it". A store that did not answer was
+therefore told its counter was fine. It answers the error now, and the
+reconcile reports `{version_unverifiable, Counter, Reason}` instead.
+
+### Changed: the newest-version read costs one node, not a walk
+
+`newest_event_version/2` walked every version node of the stream: a dry run
+on a 50k-event stream took 130-226 ms. The counter's own node answers it,
+because the counter is written in the same Ra command as the events. The walk
+is left for the two cases that need it - no counter, or a counter whose node
+is gone - so the ordinary path is two reads.
+
+`newest_event_version/2` answers `{ok, Version}` now, and `{error, Reason}`
+when the tree could not be read; it is new in this release and had no
+callers outside it. The scavenge reports that error rather than deleting
+from a tree it could not see.
+
+### Fixed: the reconcile retry has a floor
+
+`retry_after_reconcile` decremented the attempt budget without checking it,
+so a counter that moved on every attempt could reach a negative budget and
+call back in. It now answers `{error, {version_conflict, Expected, Current}}`
+with the last budget, the same answer the lost-race path gives when its cap
+is reached.
+
+
 
 Carried from 5.11.13, with the round-2 work its review produced.
 
@@ -219,11 +282,19 @@ looks like:
   `stream_not_found` and `list_streams` omits it (there are no version
   nodes), and `stream_info` reports that version with `event_count` 0. On
   5.11.x the same stream restarted at 0. If you key on version after a
-  whole-stream scavenge, read `get_version/2`, not the event count.
+  whole-stream scavenge, read `get_version/2`, not the event count. A
+  stream with no counter yet - one 5.11.x wrote - gets one from the scavenge
+  before anything is deleted, so it keeps its version the same way instead
+  of restarting at 0.
 - A stream deleted while an append is in flight: the append's transaction
-  sees the delete, aborts as `version_changed`, re-reads and retries. A
-  counter-less (legacy) stream can land at N+1; a stream with a counter is
-  re-created at 0, where 5.11.13 refused the append instead.
+  sees the delete and refuses. With a counter, the transaction finds the
+  counter gone, aborts, re-reads and retries, and the retry sees a stream
+  that is not there - `ANY_VERSION` then writes at 0 (a fresh stream under
+  the same id) and an explicit version is refused `wrong_expected_version`.
+  Without a counter there is no number to compare, so the node the batch was
+  built from is checked instead: it is gone, and the append is refused
+  `version_unverifiable` rather than re-creating the stream at N+1. 5.11.13
+  refused both.
 - A strict integrity read after a scavenge now reports a clean
   `chain_mismatch`; on 5.11.12 the same read crashed with `function_clause`.
 - `keep_versions` on the scavenge side now keeps versions counted back from
@@ -254,12 +325,38 @@ writes from the counter:
   sit above the newest live event, which is why a scavenge takes its cutoff
   from the tree: `keep_versions` counted back from the counter would keep
   nothing and delete the newest events with the oldest.
+- **5.11.x deletes a stream and does not re-create it.** The counter is not
+  its to delete, so it survives, and the stream is left with a version and no
+  events. In the tree this is indistinguishable from this release's own
+  whole-stream scavenge, and it is answered the same way: `get_version/2`
+  keeps answering the counter (9, say), `ANY_VERSION` appends at 10,
+  `read/5` answers `stream_not_found`, and `stream_info` reports version 9
+  with `event_count` 0. An append that names the first version instead
+  (`?NO_STREAM`, asking for a fresh stream under that id) is refused
+  `wrong_expected_version` for good - `{error, {wrong_expected_version, -1,
+  9}}` - because the number says the stream is not new. To start that id
+  again, delete the stream (`delete/2` removes the counter too) and append
+  from `?NO_STREAM`.
+
+Each of these is answered on the append path unless it is documented
+otherwise, and an append that cannot settle the disagreement answers
+`version_unverifiable` with the reason.
 
 What the reconcile costs on the normal path is one read of the version node
 the counter names. While that node is there, nothing else is read; the walk
 over the version nodes happens only when it is gone. `reckon_db_upgrade_store_SUITE`
 opens a store written through both releases for the first two shapes, and
 `reckon_db_stale_counter_SUITE` builds each shape in one VM.
+
+One limit worth naming: those reads are taken from the node serving the
+append, and a follower that has not caught up can still hold a version node
+the leader has deleted. After a 5.11.x re-create that makes the stale shape
+invisible to the check - the counter's node looks present, so nothing is
+reconciled and the append writes from the stale number. Seeing it needs a
+mixed-version cluster (5.11.x and 5.12.0 members of one store), which is not
+a supported deployment here, so it is not tested and not counted against the
+60-attempt budget; in a single-version cluster the leader's tree is the one
+every member reads.
 
 Rolling forward is still what to do. A store that has been written by
 5.12.0 should not be handed to 5.11.x if it can be avoided; if it happens,

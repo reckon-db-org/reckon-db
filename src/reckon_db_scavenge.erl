@@ -114,14 +114,14 @@ scavenge_matching(StoreId, Pattern, Opts) ->
 archive_and_scavenge(StoreId, StreamId, {BackendMod, BackendState}, Opts) ->
     %% First, find events that would be scavenged
     case find_scavenge_candidates(StoreId, StreamId, Opts) of
-        {ok, [], _} ->
+        {ok, [], _, _} ->
             {ok, #{
                 stream_id => StreamId,
                 deleted_count => 0,
                 deleted_versions => {0, 0},
                 archived => false
             }};
-        {ok, Events, {FromVersion, ToVersion}} ->
+        {ok, Events, {FromVersion, ToVersion}, _NewestVersion} ->
             %% Archive the events, then scavenge with the archive flag.
             ArchiveKey = reckon_db_archive_backend:make_key(StoreId, StreamId, FromVersion, ToVersion),
             archive_then_scavenge(BackendMod:archive(BackendState, ArchiveKey, Events),
@@ -171,21 +171,23 @@ check_snapshot_requirement(StoreId, StreamId, true) ->
     {ok, scavenge_result()} | {error, term()}.
 do_scavenge_with_snapshot_check(StoreId, StreamId, Opts, DryRun) ->
     case find_scavenge_candidates(StoreId, StreamId, Opts) of
-        {ok, [], _} ->
+        {ok, [], _, _} ->
             {ok, #{
                 stream_id => StreamId,
                 deleted_count => 0,
                 deleted_versions => {0, 0},
                 archived => false
             }};
-        {ok, Events, {FromVersion, ToVersion}} ->
-            execute_or_preview(StoreId, StreamId, Opts, DryRun, Events, FromVersion, ToVersion);
+        {ok, Events, {FromVersion, ToVersion}, NewestVersion} ->
+            execute_or_preview(StoreId, StreamId, Opts, DryRun, Events,
+                               FromVersion, ToVersion, NewestVersion);
         {error, _} = Error ->
             Error
     end.
 
 %% @private
-execute_or_preview(_StoreId, StreamId, _Opts, true, Events, FromVersion, ToVersion) ->
+execute_or_preview(_StoreId, StreamId, _Opts, true, Events, FromVersion,
+                   ToVersion, _NewestVersion) ->
     {ok, #{
         stream_id => StreamId,
         deleted_count => length(Events),
@@ -193,7 +195,15 @@ execute_or_preview(_StoreId, StreamId, _Opts, true, Events, FromVersion, ToVersi
         archived => false,
         dry_run => true
     }};
-execute_or_preview(StoreId, StreamId, Opts, false, Events, FromVersion, ToVersion) ->
+execute_or_preview(StoreId, StreamId, Opts, false, Events, FromVersion,
+                   ToVersion, NewestVersion) ->
+    %% The counter goes in BEFORE the deletes. A stream written before this
+    %% release has none, so the version nodes are its only memory of how far
+    %% it got; deleting them first and writing the number afterwards leaves a
+    %% window in which a crash loses the number too, and the stream restarts
+    %% at 0 on its next append. Written first, the worst a crash can leave is
+    %% a counter above a full tree, which the append reconciles.
+    ok = reckon_db_streams:ensure_version_counter(StoreId, StreamId, NewestVersion),
     delete_event_versions(StoreId, StreamId, FromVersion, ToVersion),
     {ok, build_scavenge_result(StreamId, Events, FromVersion, ToVersion, Opts)}.
 
@@ -212,9 +222,11 @@ build_scavenge_result(StreamId, Events, FromVersion, ToVersion, Opts) ->
 maybe_add_archive_key(Result, undefined) -> Result;
 maybe_add_archive_key(Result, Key) -> Result#{archive_key => Key}.
 
-%% @private Find events that should be scavenged
+%% @private Find events that should be scavenged, and the newest version the
+%% stream holds - the scavenge needs the second to leave a counter behind.
 -spec find_scavenge_candidates(atom(), binary(), scavenge_opts()) ->
-    {ok, [event()], {non_neg_integer(), non_neg_integer()}} | {error, term()}.
+    {ok, [event()], {non_neg_integer(), non_neg_integer()}, integer()}
+        | {error, term()}.
 find_scavenge_candidates(StoreId, StreamId, Opts) ->
     case reckon_db_streams:exists(StoreId, StreamId) of
         false ->
@@ -230,11 +242,27 @@ read_candidates(StoreId, StreamId, Opts) ->
     %% the newest live event, and a `keep_versions' measured from a version
     %% that no longer exists protects nothing - it deletes the newest events
     %% too.
-    CurrentVersion = reckon_db_streams:newest_event_version(StoreId, StreamId),
+    case reckon_db_streams:newest_event_version(StoreId, StreamId) of
+        {ok, CurrentVersion} ->
+            candidates_up_to(StoreId, StreamId, Opts, CurrentVersion);
+        {error, _} = Error ->
+            %% A tree this node could not read is not an empty stream: deleting
+            %% nothing is the right answer to a store that did not answer.
+            Error
+    end.
+
+%% @private The candidates, with the newest version the stream held - the
+%% scavenge leaves a counter behind when it finds none, and this is the number
+%% that goes in it.
+candidates_up_to(StoreId, StreamId, Opts, CurrentVersion) ->
     KeepVersions = maps:get(keep_versions, Opts, 0),
-    CutoffVersion = determine_cutoff_version(StoreId, StreamId, Opts, CurrentVersion),
+    CutoffVersion = determine_cutoff_version(StoreId, StreamId, Opts,
+                                             CurrentVersion),
     SafeCutoff = min(CutoffVersion, CurrentVersion - KeepVersions),
-    read_candidates_up_to(StoreId, StreamId, SafeCutoff).
+    case read_candidates_up_to(StoreId, StreamId, SafeCutoff) of
+        {ok, Events, Range} -> {ok, Events, Range, CurrentVersion};
+        {error, _} = Error  -> Error
+    end.
 
 %% @private
 read_candidates_up_to(_StoreId, _StreamId, SafeCutoff) when SafeCutoff < 0 ->

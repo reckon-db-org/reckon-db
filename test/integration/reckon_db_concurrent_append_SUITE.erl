@@ -17,13 +17,17 @@
 %% The five cases after this one are the race and contention shapes: four
 %% writers in ten batches of five, four writers appending singly, an append
 %% naming an explicit version against a concurrent one, and ten and twenty
-%% writers on one stream. The last three are the edges: a scavenged stream,
-%% whose append must land after the newest event rather than over it, an
-%% append of no events, which writes nothing and answers the version it
+%% writers on one stream. The last four of these are the edges: a scavenged
+%% stream, whose append must land after the newest event rather than over it,
+%% an append of no events, which writes nothing and answers the version it
 %% read, and the favour the retry's re-read asks for, which a follower must
-%% not answer from a stale snapshot. All eight are listed in all/0, and seven
-%% of them are red on 66edb40 - the eighth, the empty append, passes there
-%% too.
+%% not answer from a stale snapshot. The last four are the delete: a stream
+%% removed between the read and the write, with and without a counter, under
+%% ANY and under an explicit version.
+%%
+%% All thirteen are listed in all/0. The first eight are red on 66edb40, bar
+%% the empty append, which passes there too; the four deleted-stream cases are
+%% new in this round.
 -module(reckon_db_concurrent_append_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
@@ -47,8 +51,13 @@
     twenty_writers_on_one_stream_keep_every_event/1,
     a_scavenged_stream_appends_after_its_tip/1,
     a_fully_scavenged_stream_keeps_its_counter/1,
+    a_fully_scavenged_counter_less_stream_keeps_its_version/1,
     an_append_of_no_events_answers_the_version_it_read/1,
-    a_retry_reads_the_version_consistently/1
+    a_retry_reads_the_version_consistently/1,
+    a_deleted_stream_with_a_counter_is_re_created_at_zero_by_any/1,
+    a_deleted_stream_with_a_counter_refuses_an_explicit_version/1,
+    a_deleted_counter_less_stream_is_refused_under_any/1,
+    a_deleted_counter_less_stream_refuses_an_explicit_version/1
 ]).
 
 suite() ->
@@ -62,8 +71,13 @@ all() ->
      twenty_writers_on_one_stream_keep_every_event,
      a_scavenged_stream_appends_after_its_tip,
      a_fully_scavenged_stream_keeps_its_counter,
+     a_fully_scavenged_counter_less_stream_keeps_its_version,
      an_append_of_no_events_answers_the_version_it_read,
-     a_retry_reads_the_version_consistently].
+     a_retry_reads_the_version_consistently,
+     a_deleted_stream_with_a_counter_is_re_created_at_zero_by_any,
+     a_deleted_stream_with_a_counter_refuses_an_explicit_version,
+     a_deleted_counter_less_stream_is_refused_under_any,
+     a_deleted_counter_less_stream_refuses_an_explicit_version].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(crypto),
@@ -193,6 +207,30 @@ a_fully_scavenged_stream_keeps_its_counter(Config) ->
     ?assertEqual([10], [E#event.version || E <- Appended]),
     ok.
 
+%% The counter-less sibling of the case above: a stream a 5.11.x store wrote
+%% has no counter, so its version nodes are the only memory it has of how far
+%% it got. A scavenge that deletes every one of them without leaving a number
+%% behind empties that memory, and the next append starts at 0 and reuses
+%% versions the stream already used.
+a_fully_scavenged_counter_less_stream_keeps_its_version(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"scavenged-all-no-counter">>),
+    {ok, 9} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, events(10)),
+    drop_the_counter(StoreId, StreamId),
+
+    {ok, #{deleted_versions := {0, 9}}} =
+        reckon_db_scavenge:scavenge(StoreId, StreamId,
+                                    #{before_version => 10,
+                                      require_snapshot => false}),
+    ?assertEqual([], stored_versions(StoreId, StreamId)),
+    ?assertEqual(9, reckon_db_streams:get_version(StoreId, StreamId)),
+    ?assertEqual({ok, 10}, reckon_db_streams:append(
+                             StoreId, StreamId, ?ANY_VERSION, events(1))),
+    ?assertEqual(10, reckon_db_streams:get_version(StoreId, StreamId)),
+    {ok, Appended} = reckon_db_streams:read(StoreId, StreamId, 10, 1, forward),
+    ?assertEqual([10], [E#event.version || E <- Appended]),
+    ok.
+
 %% An append of no events writes nothing and answers the version it read, as
 %% it did before the version was verified inside the write transaction. It
 %% used to reach the transaction and crash the calling process - a gateway
@@ -270,6 +308,134 @@ a_retry_reads_the_version_consistently(Config) ->
     ?assertEqual([0, 1, 2], [E#event.version || E <- Stored]),
     ok.
 
+
+%% A stream deleted between the read and the write, while a counter exists:
+%% the transaction finds the counter gone, aborts, and the retry re-reads a
+%% stream that is no longer there. ANY_VERSION then writes at 0 - a fresh
+%% stream under the same id - and never at the version the deleted one had
+%% reached.
+a_deleted_stream_with_a_counter_is_re_created_at_zero_by_any(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"deleted-with-counter-any">>),
+    {ok, 4} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, events(5)),
+    delete_after_the_counter_read(StoreId, StreamId,
+                                  fun() ->
+                                          ?assertEqual(
+                                             {ok, 0},
+                                             reckon_db_streams:append(
+                                               StoreId, StreamId, ?ANY_VERSION,
+                                               events(1)))
+                                  end),
+    ?assertEqual([0], stored_versions(StoreId, StreamId)),
+    ?assertEqual(0, reckon_db_streams:get_version(StoreId, StreamId)),
+    ok.
+
+%% The same delete under an explicit version: the retry reads a stream that is
+%% not there, so the version the caller named cannot hold, and the answer is
+%% the wrong-expected-version pair, not a write.
+a_deleted_stream_with_a_counter_refuses_an_explicit_version(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"deleted-with-counter-explicit">>),
+    {ok, 4} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, events(5)),
+    delete_after_the_counter_read(StoreId, StreamId,
+                                  fun() ->
+                                          ?assertEqual(
+                                             {error,
+                                              {wrong_expected_version, 4, -1}},
+                                             reckon_db_streams:append(
+                                               StoreId, StreamId, 4, events(1)))
+                                  end),
+    ?assertEqual([], stored_versions(StoreId, StreamId)),
+    ok.
+
+%% A stream with no counter - one a 5.11.x store wrote - deleted between the
+%% read and the write. There is no counter to compare, so the version node the
+%% batch was built from is the evidence: it is gone, and the append is refused
+%% with what the transaction's own read of that node answered. ANY_VERSION is
+%% not an answer to it: a delete is not an empty stream, and writing there
+%% re-creates it at N+1.
+a_deleted_counter_less_stream_is_refused_under_any(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"deleted-no-counter-any">>),
+    {ok, 4} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, events(5)),
+    drop_the_counter(StoreId, StreamId),
+    delete_after_the_tree_read(StoreId, StreamId,
+                               fun() ->
+                                       ?assertMatch(
+                                          {error, {version_unverifiable, 4, _}},
+                                          reckon_db_streams:append(
+                                            StoreId, StreamId, ?ANY_VERSION,
+                                            events(1)))
+                               end),
+    ?assertEqual([], stored_versions(StoreId, StreamId)),
+    ok.
+
+%% The same stream, the same delete, an explicit version: refused the same way.
+%% The version the caller named is the one the batch was built from, so the
+%% caller is told that the store could not verify it rather than that it was
+%% wrong.
+a_deleted_counter_less_stream_refuses_an_explicit_version(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"deleted-no-counter-explicit">>),
+    {ok, 4} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, events(5)),
+    drop_the_counter(StoreId, StreamId),
+    delete_after_the_tree_read(StoreId, StreamId,
+                               fun() ->
+                                       ?assertMatch(
+                                          {error, {version_unverifiable, 4, _}},
+                                          reckon_db_streams:append(
+                                            StoreId, StreamId, 4, events(1)))
+                               end),
+    ?assertEqual([], stored_versions(StoreId, StreamId)),
+    ok.
+
+%% @private Make the stream look like one a 5.11.x store wrote: no counter.
+drop_the_counter(StoreId, StreamId) ->
+    ok = khepri:delete(StoreId,
+                       reckon_db_stream_path:version_counter_path(StreamId)).
+
+%% @private Run Fun with the stream deleted the moment its counter is read:
+%% the append has its version and the stream is gone before the transaction
+%% opens.
+delete_after_the_counter_read(StoreId, StreamId, Fun) ->
+    CounterPath = reckon_db_stream_path:version_counter_path(StreamId),
+    hooked(StoreId, StreamId, khepri, get,
+           fun(_S, P, _Opts) -> P =:= CounterPath end, Fun).
+
+%% @private The same, for a stream with no counter: the version comes from the
+%% tree, so that read is where the delete has to land.
+delete_after_the_tree_read(StoreId, StreamId, Fun) ->
+    hooked(StoreId, StreamId, khepri_adv, get_many,
+           fun(_S, _Pattern, _Query) -> true end, Fun).
+
+%% @private Run Fun with one module function patched: on the first call that
+%% Matches, the stream is deleted after the real call has answered.
+hooked(StoreId, StreamId, Module, Function, Matches, Fun) ->
+    meck:new(Module, [passthrough, no_link]),
+    try
+        meck:expect(Module, Function,
+                    fun(A, B, C) ->
+                            Result = meck:passthrough([A, B, C]),
+                            case Matches(A, B, C) andalso get(stream_deleted) =:= undefined of
+                                true ->
+                                    put(stream_deleted, true),
+                                    ok = reckon_db_streams:delete(StoreId, StreamId);
+                                false ->
+                                    ok
+                            end,
+                            Result
+                    end),
+        Fun()
+    after
+        meck:unload(Module)
+    end.
+
+%% @private The versions the stream actually holds, in order.
+stored_versions(StoreId, StreamId) ->
+    case reckon_db_streams:read(StoreId, StreamId, 0, 1000, forward) of
+        {ok, Events} -> [E#event.version || E <- Events];
+        {error, _} -> []
+    end.
 
 %% @private Advance the stream on the first call only: the nested append reads
 %% the counter too, and that read must not advance it again.
