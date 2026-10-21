@@ -65,7 +65,23 @@ normalise() {
     done | sort
 }
 
+# The same findings with their whole text, for reading: a baseline line shows
+# 110 characters, which is not enough to tell two similiar findings apart or to
+# see what a failing run is asking you to accept.
+normalise_full() {
+  sed -e 's/\x1b\[[0-9;]*m//g' "$LOG" | awk '
+    /^[A-Za-z0-9_\/.-]+\.(erl|hrl)$/ { file = $0; next }
+    /^Line [0-9]+ Column [0-9]+: / {
+      text = $0; sub(/^Line [0-9]+ Column [0-9]+: /, "", text)
+      if (file != "") print file "\t" text
+      next
+    }' | while IFS=$'\t' read -r f t; do
+      printf '%s\t%s\t%s\n' "$f" "$(printf '%s' "$t" | sha1sum | cut -c1-12)" "$t"
+    done | sort
+}
+
 FOUND="$(normalise)"
+FULL="$(normalise_full)"
 FOUND_N="$(printf '%s\n' "$FOUND" | grep -c . || true)"
 REPORTED_N="$(sed -e 's/\x1b\[[0-9;]*m//g' "$LOG" | sed -n 's/.*Warnings occurred running dialyzer: \([0-9]*\).*/\1/p' | tail -1)"
 REPORTED_N="${REPORTED_N:-0}"
@@ -99,7 +115,10 @@ fi
 if [ "$NEW_N" -gt 0 ]; then
   echo
   echo "::error::$NEW_N $TOOL finding(s) not in the baseline:"
-  printf '%s\n' "$NEW" | sed 's/^/  + /'
+  printf '%s\n' "$NEW" | while IFS=$'\t' read -r f h _; do
+    printf '  + %s\t%s\n' "$f" "$h"
+    printf '%s\n' "$FULL" | awk -F'\t' -v f="$f" -v h="$h" '$1 == f && $2 == h { print "      " $3; exit }'
+  done
   echo
   echo "Fix them, or if they are genuinely acceptable, add them with --update and say why in the commit."
   exit 1
