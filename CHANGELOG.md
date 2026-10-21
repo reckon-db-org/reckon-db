@@ -5,6 +5,162 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.13] - 2026-10-21
+
+### Fixed: two concurrent appends to one stream silently lost events
+
+The version an append writes from is read before its write transaction -
+the event records and their index entries are built outside it, because
+integrity stamping computes an HMAC and runs crypto, neither of which may
+run inside a Ra transaction - and nothing checked it again. Two appends that
+read the same version therefore built the same version numbers, and the
+second wrote over the first's events. Every call answered `{ok, Version}`:
+nothing failed, nothing logged, the events were simply gone.
+
+Measured on 5.11.12 with this suite, where the count depends on how the
+writers interleave: two runs of four writers appending one event at a time
+to one stream left 25 and 26 of the 100 in the store, two runs of four
+writers in ten batches of five left 100 and 120 of 200, and two appends that
+both named version 1 both succeeded, writing the same version twice. Every
+call involved answered `{ok, Version}`. It needs two appends in flight on the
+same stream at the same time, which is what a gateway pool larger than 1
+gives - macula-realm runs its store with `gateway_pool_size = 2`.
+
+The write transaction now looks at the node the batch would occupy and at
+the node before it (`append_guard/3`): the target must be free and, unless
+the stream is new, the predecessor must still be there. A lost race aborts
+the transaction, and the append re-reads the version and tries again with a
+delay that doubles up to 50 ms, jittered so writers do not collide in
+lockstep; after 60 attempts it answers
+`{error, {version_conflict, ExpectedVersion, CurrentVersion}}` rather than
+losing the events. The third element is the version the last attempt read:
+`ExpectedVersion` alone is -2 for the writers that use `ANY_VERSION`. An
+append with an explicit expected version still gets
+`wrong_expected_version` when another writer got there first.
+
+The abort happens inside the transaction on purpose: what a transaction fun
+returns is an ordinary result, not an error channel, so the tuple would come
+back as a successful transaction carrying `{error, _}` (and the `ok =` on it
+would turn it into a badmatch one level up). `khepri_tx:abort/1` raises, the
+transaction writes nothing, and the append is handed the reason.
+
+The re-read after a lost race asks the cluster for a consistent answer
+(`#{favor => consistency}`). A follower answering from its own snapshot can
+return the same count the previous read did while the stream has moved on the
+leader - and "the version did not move" is exactly the shape this release
+reads as a scavenged prefix, so a healthy stream on a multi-host cluster
+could be refused with `version_unverifiable`. The first read of an append
+keeps the cheap local one; only the retry pays for consistency.
+
+**A scavenged stream that still has events is refused, in every prefix
+shape.** The version is a count of
+the stream's live version nodes, and a scavenge deletes old nodes without
+renumbering the rest, so after one the count sits inside the stream instead
+of at its tip. Checking only the node the batch would write is not enough:
+scavenge versions 0..7 of ten and an append of two events writes 2 and 3,
+below the two surviving events, and an append of seven reaches and
+overwrites version 8, both answering ok. Requiring the predecessor as well
+turns every prefix shape into a refusal - either the predecessor is gone or
+the target is taken, and the two cannot both hold on a scavenged stream. The
+append answers `{error, {version_unverifiable, CurrentVersion, Reason}}` and
+is never retried to the cap: no further attempt brings the removed events
+back. Which of the two it hits decides how quickly it answers:
+
+- the predecessor gone (scavenging 0..4, 0..7 or 0..8 of a ten-event stream)
+  is caught by the first transaction, so the caller is answered at once, and
+  `Reason` is what `khepri_tx:get/1` answered for the predecessor node inside
+  that transaction - a khepri error tuple (`{khepri, node_not_found, _}`) in
+  every shape measured;
+- the target still taken (0..0, where only the oldest version is gone and
+  the count now points at a version an event still holds) aborts the first
+  transaction as `version_changed`, so the append backs off, re-reads the
+  version consistently, reads the same count again and answers
+  `target_occupied` - one pause of about a millisecond and one consistent
+  read, 1 to 6 ms measured.
+
+`Reason` is therefore not a stable term - a khepri error in one shape, an
+atom in the other - so match on the `version_unverifiable` tag and the
+version, not on the reason. A stream deleted between the read and the
+transaction is refused the same way.
+
+A scavenge that deletes every event is the one shape that is not a refusal.
+The stream is gone as far as the count can tell, `get_version/2` answers -1,
+and the next `ANY_VERSION` append lands at version 0 again: a one-event
+append answers `{ok, 0}`, a batch of N answers `{ok, N - 1}`. Nothing is
+overwritten and 5.11.12 behaves identically, but
+a reader or subscriber that keys on the version sees 0, 1, ... a second time,
+so this is a behaviour to know about rather than one this release changes.
+`a_fully_scavenged_stream_restarts_at_version_zero` is the case for it.
+
+This refusal is what 5.12.0 removes: it keeps a per-stream counter, written
+in the same transaction as the events, and reads the version from that, so a
+scavenge no longer moves it (5.12.0's changelog works through the overwrite
+this release turns into a refusal). Scavenge is reached over the gateway
+(`scavenge`, `scavenge_matching`, `scavenge_dry_run`), and no service in our
+repositories calls it - but reckon-go's `reckon admin scavenge` CLI puts it
+in an operator's hands, so a deployed store can be brought into this shape.
+
+An append of no events is unchanged: it writes nothing and answers the
+version it read. On a scavenged stream that version is the count-derived one
+and not the tip, because there is no transaction to be refused in.
+
+`reckon_db_concurrent_append_SUITE` is the regression test, ten cases:
+four writers in ten batches of five events; four writers appending one event
+at a time; two appends that both name version 1; ten and twenty writers
+appending one event at a time to one stream (a thousand and two thousand
+appends, every one of them landing); a scavenged stream in five prefix
+shapes, including a batch short enough to fit below the survivors; a scavenge
+that deletes every event; an append of no events; a stream deleted between
+the read and the write; and the favour the retry's re-read asks for. On
+5.11.12, one run, case by case: the batch case loses 100 of its 200 events,
+the single-append case 75 of its 100, the two appends that name version 1
+both succeed and write the same version twice, the ten- and twenty-writer
+cases do not keep their thousand and two thousand appends, and the scavenged
+append goes through. Two are red on 5.11.12 for a different reason: the base
+reads the version through `khepri:count/2` while those cases hook `count/3`,
+so the hook never fires - the retry-favour case answers `{ok, 1}` where
+`{ok, 2}` is expected, and the deleted-stream case answers `{ok, 5}` where
+the refusal is expected (measured on 66edb40).
+Here every case passes; the empty append and the full scavenge pass on
+5.11.12 too, because this release does not change either.
+
+Consumers on `~> 5.11` pick this up on their next dependency update,
+macula-realm included (`~> 5.11.7` resolves 5.11.13). The error space gains
+`{version_conflict, ExpectedVersion, CurrentVersion}` and
+`{version_unverifiable, Version, Reason}`. reckon-gater does not know either
+yet: it treats an error it does not recognise as transient, so a gateway
+caller that gets one waits out ten retries - about 81 to 89 seconds measured
+- and is answered `{error, {retries_exhausted, Reason}}`. The gater change
+that adds a clause for both is in this package but is UNRELEASED, on an
+unmerged branch (evoq#22): today's gater, 3.11.2, still treats them as
+transient, and they reach the caller on the first call once that change
+ships.
+
+What each caller gets from this release, by shape:
+
+- an append with an explicit expected version that loses a race answers
+  `{error, {wrong_expected_version, Expected, Current}}`, which gater does
+  not retry (it is in its permanent list), so the caller sees it once. The
+  same race answered `{ok, Version}` before, and one writer's events were
+  overwritten.
+- an append with an explicit expected version on a stream whose prefix was
+  scavenged, with the expected version equal to the count-derived one,
+  answers `{error, {version_unverifiable, Version, Reason}}` - and gater on
+  main reads that as transient, so a gateway caller waits 81 to 89 seconds
+  and is answered `{error, {retries_exhausted, _}}`.
+- the same append naming the stream's TRUE tip instead (version 9 of a
+  stream scavenged 0..8, whose count-derived version is 0) answers
+  `{error, {wrong_expected_version, 9, 0}}`: the caller's own check runs
+  against the count-derived version and fails before any transaction does.
+- the version-less gateway `append_events/3`: the worker reads
+  `get_version/2` and passes it as an explicit expected version, so the
+  guard applies to it and a race between pool workers now answers
+  `{wrong_expected_version, _, _}`. Measured once, with eight callers and
+  thirty appends each on a pool of 2 (macula-realm's size): 209 of 240
+  answered ok and 31 were refused, and every ok'd append was stored. On
+  5.11.12 the same run answered ok 238 times and stored 121 of them. Making
+  that path append with `ANY_VERSION` is the separate release, 5.12.0.
+
 ## [5.11.12] - 2026-10-20
 
 ### Fixed: a malformed stream id hung the caller instead of returning an error (reckon-db #4)

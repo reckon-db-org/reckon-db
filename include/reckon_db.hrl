@@ -14,7 +14,7 @@
 %% Version
 %%====================================================================
 
--define(RECKON_DB_VERSION, "5.11.9").
+-define(RECKON_DB_VERSION, "5.11.13").
 
 %%====================================================================
 %% Khepri Paths
@@ -111,6 +111,36 @@
 -endif.
 -define(DEFAULT_BATCH_SIZE, 100).
 -define(DEFAULT_POOL_SIZE, 10).
+%% How many times an append re-reads the stream version and tries again after
+%% losing the race to another append. Each lost attempt means another writer
+%% committed in between, so the cap bounds livelock rather than ordinary
+%% contention. With ?APPEND_BACKOFF_CAP_MS of growth below, a caller that
+%% loses all of them is answered {error, {version_conflict, ExpectedVersion,
+%% CurrentVersion}} after the 59 pauses - a mean of 1.39 s and a maximum of
+%% 2.71 s of sleep on their own, plus the 60 transactions it queued behind.
+%% Measured end to end, one stream: 20 writers stay clear of the cap (p99
+%% 451 ms, max 909 ms, no conflicts); at 50 writers a share do reach it (5 of
+%% 2000 appends, 0.25%), the slowest taking 2.5 s; at 100 writers, 17% (513
+%% of 3000) and a slowest of 8.8 s. Through reckon-gater a version_conflict
+%% is retried, and each retry is a fresh 60-attempt append: a contended caller
+%% therefore usually lands on a later attempt, seconds to tens of seconds
+%% later, so the 81-89 s gater figure (measured on an instantly refused
+%% error) understates this path. The appenders are the gateway workers or an
+%% embedded caller in the same VM, not the writer pool: `?DEFAULT_POOL_SIZE'
+%% above is writer/reader_pool_size and is off the append path, while
+%% gateway_pool_size defaults to 1 and macula-realm runs 2 - both far inside
+%% the clear range.
+-define(APPEND_ATTEMPTS, 60).
+
+%% The pause before attempt N+1 is a random delay of at most
+%% min(?APPEND_BACKOFF_CAP_MS, 2^(N-1)) milliseconds. Both matter: the
+%% doubling takes a writer out of lockstep with the others on a hot stream,
+%% and the cap keeps the wait bounded when many writers contend at once. A
+%% fixed 0-2 ms jitter is shorter than one append transaction, so writers
+%% kept colliding: at 10 and 20 writers on one stream that jitter still
+%% reached the cap and lost appends.
+-define(APPEND_BACKOFF_CAP_MS, 50).
+
 -define(VERSION_PADDING, 12).  %% Supports up to 999,999,999,999 events per stream
 
 %%====================================================================

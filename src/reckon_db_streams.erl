@@ -66,10 +66,53 @@
 %%
 %% Expected version semantics:
 %%   -1 (NO_STREAM)    - Stream must not exist (first write)
-%%   -2 (ANY_VERSION)  - No version check, always append
+%%   -2 (ANY_VERSION)  - Land after whatever is already there
 %%   N >= 0            - Stream version must equal N
 %%
 %% Returns {ok, NewVersion} on success or {error, Reason} on failure.
+%%
+%% An append never writes over an event that is already stored. Two appends
+%% racing for the same version no longer lose one of them: the loser re-reads
+%% the version and tries again with a growing, capped delay, and answers
+%% {error, {version_conflict, ExpectedVersion, CurrentVersion}} when it has
+%% tried 60 times. An explicit expected version answers
+%% {error, {wrong_expected_version, Expected, Current}} when another writer
+%% got there first. An append of no events writes nothing and answers the
+%% version it read - which, on a stream whose older versions were scavenged,
+%% is the count-derived one and not the tip.
+%%
+%% The version is the number of live version nodes in the stream minus one,
+%% and a scavenge deletes old nodes without renumbering the rest. Inside its
+%% write transaction the append verifies that the node it was built from is
+%% still there and that the node it would write is free; on a stream whose
+%% older versions were scavenged and whose events remain, one of the two is
+%% false, so the append is refused with
+%% {error, {version_unverifiable, Version, Reason}} and never retried to the
+%% cap: no further attempt makes the missing events come back. A predecessor
+%% that is gone is caught by the first transaction, so that answer comes back
+%% at once, with what the transaction's own `khepri_tx:get/1' of the
+%% predecessor node answered as Reason; a target that is
+%% still taken makes the first transaction abort as version_changed, so the
+%% append backs off, re-reads the version consistently, reads the same count
+%% again and answers target_occupied (one pause, 1 to 6 ms measured). Reason
+%% therefore varies by shape and is not a stable term - match on the
+%% version_unverifiable tag. A stream deleted between the read and the
+%% write is refused the same way. 5.12.0 reads a per-stream counter instead
+%% of the count and is exact after a scavenge.
+%%
+%% A scavenge that deletes EVERY event is the exception, and it is not a
+%% refusal: the stream is gone as far as the count can tell, get_version
+%% answers -1, and the next ANY_VERSION append lands at version 0 again - a
+%% one-event append answers {ok, 0}, a batch of N answers {ok, N - 1}.
+%% Nothing is overwritten - this release behaves as 5.11.12 does - but a
+%% reader or subscriber that keys on version sees 0, 1, ... a second time.
+%%
+%% reckon-gater (3.11.x) recognises neither error and treats an unknown
+%% error as transient, so a gateway caller whose append is refused waits out
+%% ten retries - about 81 to 89 seconds measured - and is then answered
+%% {error, {retries_exhausted, Reason}}. reckon-evoq and evoq do not
+%% recognise them either: they reach the caller as an error and never
+%% trigger a rebuild.
 -spec append(atom(), binary(), integer(), [new_event()]) ->
     {ok, non_neg_integer()} | {error, term()}.
 append(StoreId, StreamId, ExpectedVersion, Events) ->
@@ -763,7 +806,20 @@ convert_result_to_event(_, _) ->
 %%   N >= 0 - representing the version of the latest event
 -spec get_version(atom(), binary()) -> integer().
 get_version(StoreId, StreamId) ->
-    case khepri:count(StoreId, reckon_db_stream_path:versions_pattern(StreamId)) of
+    count_version(StoreId, StreamId, #{}).
+
+%% @private The version, read as a count of the stream's live version nodes.
+%%
+%% The first read of an append takes whatever this node can serve at once. A
+%% re-read after a lost race cannot: on a follower it may answer the same
+%% count the previous read did, and attempt_append/6 reads "the version did
+%% not move" as the scavenged-prefix shape and refuses a perfectly healthy
+%% stream with version_unverifiable. So the retry asks the cluster for a
+%% consistent answer (the leader's), and pays for that only on the path that
+%% has already lost a race.
+-spec count_version(atom(), binary(), #{favor => consistency}) -> integer().
+count_version(StoreId, StreamId, Options) ->
+    case khepri:count(StoreId, reckon_db_stream_path:versions_pattern(StreamId), Options) of
         {ok, 0} -> ?NO_STREAM;
         {ok, Count} -> Count - 1;
         {error, _} -> ?NO_STREAM
@@ -859,18 +915,82 @@ delete_validated(StoreId, StreamId) ->
 %%====================================================================
 
 %% @private
+%%
+%% The version this batch writes from is read here and VERIFIED again inside
+%% the write transaction (append_guard/3). Reading it here is what lets the
+%% event records and their index entries be built outside Ra's transaction -
+%% HMAC stamping and crypto cannot run inside one - but a read outside the
+%% transaction is a snapshot: two appends to the same stream that both read
+%% version N build versions N+1.. and one of them overwrites the other. So
+%% the transaction looks again at the version node the batch would occupy,
+%% aborts if it is taken, and the append re-reads and retries. Without that,
+%% four writers appending 25 events each to one stream left 25 of the 100 in
+%% the store, with every call answering ok.
 -spec do_append(atom(), binary(), integer(), [new_event()]) ->
     {ok, non_neg_integer()} | {error, term()}.
 do_append(StoreId, StreamId, ExpectedVersion, Events) ->
-    CurrentVersion = get_version(StoreId, StreamId),
+    attempt_append(StoreId, StreamId, ExpectedVersion, Events,
+                   ?APPEND_ATTEMPTS, undefined).
 
-    %% Check expected version
+%% @private One attempt: read the version, check what the caller asked for,
+%% then append - or retry while the stream keeps moving under us.
+attempt_append(StoreId, StreamId, ExpectedVersion, Events, Attempts, PreviousVersion) ->
+    CurrentVersion = read_version(StoreId, StreamId, PreviousVersion),
+
     case check_expected_version(ExpectedVersion, CurrentVersion) of
+        ok when CurrentVersion =:= PreviousVersion ->
+            %% We lost a race, waited, and the stream has not moved since.
+            %% The node we would write is held by an event the count cannot
+            %% see, which is what a scavenged prefix looks like from here -
+            %% the same version number read twice, a target that stays taken.
+            %% No further attempt clears that. The reason says what the shape
+            %% is rather than what happened: a stream deleted and refilled to
+            %% the same count would be answered the same way.
+            {error, {version_unverifiable, CurrentVersion, target_occupied}};
         ok ->
-            append_events_to_stream(StoreId, StreamId, CurrentVersion, Events);
+            try_append(StoreId, StreamId, CurrentVersion, ExpectedVersion,
+                       Events, Attempts);
         {error, _} = Error ->
             Error
     end.
+
+%% @private The read an attempt starts from: this node's snapshot on the
+%% first, the cluster's consistent answer on every retry.
+read_version(StoreId, StreamId, undefined) ->
+    get_version(StoreId, StreamId);
+read_version(StoreId, StreamId, _PreviousVersion) ->
+    count_version(StoreId, StreamId, #{favor => consistency}).
+
+%% @private An append of no events writes nothing and answers the version it
+%% read, which is what it answered before the version was verified in the
+%% transaction. Short-circuiting here is what keeps the batch that reaches
+%% write_batch_tx/4 non-empty.
+try_append(_StoreId, _StreamId, CurrentVersion, _ExpectedVersion, [], _Attempts) ->
+    {ok, CurrentVersion};
+try_append(StoreId, StreamId, CurrentVersion, ExpectedVersion, Events, Attempts) ->
+    case append_events_to_stream(StoreId, StreamId, CurrentVersion,
+                                 ExpectedVersion, Events) of
+        {error, {version_changed, _}} when Attempts =< 1 ->
+            %% The cap. Hand back the version this attempt read, so the
+            %% caller can see what the stream had reached; ExpectedVersion
+            %% alone is -2 for the writers that use ANY_VERSION.
+            {error, {version_conflict, ExpectedVersion, CurrentVersion}};
+        {error, {version_changed, _}} ->
+            %% Someone took these versions between the read and the write.
+            %% Back off, then re-read and try again: ANY_VERSION simply
+            %% lands after them, an explicit expected version now fails its
+            %% own check, which is the answer it asked for.
+            backoff_before_retry(?APPEND_ATTEMPTS - Attempts + 1),
+            attempt_append(StoreId, StreamId, ExpectedVersion, Events,
+                           Attempts - 1, CurrentVersion);
+        Other ->
+            Other
+    end.
+
+%% @private A capped, jittered pause on the lost-race path.
+backoff_before_retry(Attempt) ->
+    Ceiling = min(?APPEND_BACKOFF_CAP_MS, 1 bsl (Attempt - 1)),
+    timer:sleep(rand:uniform(Ceiling)).
 
 %% @private
 -spec check_expected_version(integer(), integer()) -> ok | {error, term()}.
@@ -886,9 +1006,10 @@ check_expected_version(ExpectedVersion, CurrentVersion) ->
     {error, {wrong_expected_version, ExpectedVersion, CurrentVersion}}.
 
 %% @private
--spec append_events_to_stream(atom(), binary(), integer(), [new_event()]) ->
+-spec append_events_to_stream(atom(), binary(), integer(), integer(),
+                              [new_event()]) ->
     {ok, non_neg_integer()} | {error, term()}.
-append_events_to_stream(StoreId, StreamId, CurrentVersion, Events) ->
+append_events_to_stream(StoreId, StreamId, CurrentVersion, ExpectedVersion, Events) ->
     Now = erlang:system_time(millisecond),
     EpochUs = erlang:system_time(microsecond),
 
@@ -928,12 +1049,29 @@ append_events_to_stream(StoreId, StreamId, CurrentVersion, Events) ->
     %% {error, _} return, NOT a hard `ok =` badmatch (the boot-time
     %% crash-loop lesson the old per-put loop encoded). khepri:transaction
     %% returns {error, _} for a not-ready store; reckon-gater retries.
-    case write_batch(StoreId, Writes, IndexEntries) of
+    case write_batch(StoreId, append_guard_input(StreamId, CurrentVersion),
+                     Writes, IndexEntries, ExpectedVersion) of
         ok ->
             {ok, FinalVersion};
         {error, _} = Error ->
             Error
     end.
+
+%% @private What the write transaction needs to verify its version: the
+%% version the batch was built from, and that version's node - undefined for
+%% a new stream, which has no predecessor.
+%%
+%% Both are resolved here, outside the transaction, because a transaction fun
+%% may not call reckon_db_stream_path: horus walks the call graph and rejects
+%% the binary library calls underneath it (failed_to_prepare_tx_fun).
+-spec append_guard_input(binary(), integer()) -> {integer(), khepri_path:native_path() | undefined}.
+
+append_guard_input(_StreamId, ?NO_STREAM) ->
+    {?NO_STREAM, undefined};
+append_guard_input(StreamId, CurrentVersion) ->
+    Path = reckon_db_stream_path:event_path(
+             StreamId, pad_version(CurrentVersion, ?VERSION_PADDING)),
+    {CurrentVersion, Path}.
 
 %% @private Build the {Path, Record} event writes and the flat list of
 %% {Path, EventRef} index entries for a batch, applying integrity stamping
@@ -965,14 +1103,15 @@ build_event_writes(StreamId, CurrentVersion, Events, Now, EpochUs,
 %% @private Write all event records + index entries in one transaction.
 -spec write_batch(
     atom(),
+    {integer(), khepri_path:native_path() | undefined},
     [{khepri_path:native_path(), event()}],
-    [{khepri_path:native_path(), reckon_db_index:event_ref()}]
+    [{khepri_path:native_path(), reckon_db_index:event_ref()}],
+    integer()
 ) -> ok | {error, term()}.
-write_batch(StoreId, Writes, IndexEntries) ->
-    Fun = fun() -> write_batch_tx(Writes, IndexEntries) end,
+write_batch(StoreId, Guard, Writes, IndexEntries, ExpectedVersion) ->
+    Fun = fun() -> write_batch_tx(Guard, Writes, IndexEntries, ExpectedVersion) end,
     case khepri:transaction(StoreId, Fun) of
         {ok, ok}            -> ok;
-        ok                  -> ok;
         %% Khepri 0.17.x catch-all wraps process_command errors as {ok, Err}
         %% when Ra is not yet ready (e.g. store startup race).
         {ok, {error, E}}    -> {error, E};
@@ -980,11 +1119,66 @@ write_batch(StoreId, Writes, IndexEntries) ->
     end.
 
 %% @private The body of the write-batch transaction.
-write_batch_tx(Writes, IndexEntries) ->
+%%
+%% Writes is never empty: an append of no events is answered before it gets
+%% here (try_append/6).
+write_batch_tx(Guard, Writes, IndexEntries, ExpectedVersion) ->
+    ok = append_guard(Guard, hd(Writes), ExpectedVersion),
     lists:foreach(fun put_tx_entry/1, Writes),
     lists:foreach(fun put_tx_entry/1, IndexEntries),
     bump_global_event_count(length(Writes)),
     ok.
+
+%% @private Refuse the batch if the version it would occupy is already taken,
+%% or if the version it was built from is no longer there.
+%%
+%% The version was read outside this transaction (the records are built
+%% there), so these are the checks that make the read safe. Without the first
+%% one, two appends to one stream that both read version N write the same
+%% nodes, and the second writes over the first's events.
+%%
+%% The predecessor has to be there because get_version/2 is a count: with a
+%% contiguous stream the node counted last is the predecessor of the batch,
+%% but after a scavenge the count lands somewhere inside the stream and the
+%% batch would write below the surviving events - a batch of two after
+%% versions 0..7 of ten were scavenged writes 2 and 3 while 8 and 9 are still
+%% there, and a batch long enough to reach them writes over them. Requiring
+%% the predecessor to exist and the first target to be free turns both into
+%% a refusal: after a prefix scavenge either the predecessor is gone or the
+%% target is taken. It is also what refuses an append to a stream that was
+%% deleted between the read and the transaction.
+%%
+%% Both abort rather than return an error tuple, because what a transaction
+%% fun returns is an ordinary result, not an error channel: the tuple would
+%% come back as a successful transaction (and the `ok =' on this call would
+%% turn it into a badmatch, one level up). khepri_tx:abort/1 raises instead;
+%% khepri_tx_adv:run/5 catches it, hands back the state from before the
+%% transaction, so nothing is written, and the caller is given the reason.
+append_guard({?NO_STREAM, undefined}, {FirstPath, _}, ExpectedVersion) ->
+    guard_target_free(FirstPath, ?NO_STREAM, ExpectedVersion);
+append_guard({CurrentVersion, PredecessorPath}, {FirstPath, _}, ExpectedVersion) ->
+    ok = guard_predecessor_present(PredecessorPath, CurrentVersion),
+    guard_target_free(FirstPath, CurrentVersion, ExpectedVersion).
+
+%% @private
+guard_predecessor_present(PredecessorPath, CurrentVersion) ->
+    case khepri_tx:get(PredecessorPath) of
+        {ok, _} ->
+            ok;
+        {error, Reason} ->
+            khepri_tx:abort({version_unverifiable, CurrentVersion, Reason})
+    end.
+
+%% @private
+guard_target_free(FirstPath, CurrentVersion, ExpectedVersion) ->
+    case khepri_tx:get(FirstPath) of
+        {error, ?khepri_error(node_not_found, _)} ->
+            ok;
+        {ok, _} ->
+            khepri_tx:abort({version_changed, ExpectedVersion});
+        {error, Reason} ->
+            khepri_tx:abort({version_unverifiable, CurrentVersion, Reason})
+    end.
 
 put_tx_entry({P, Record}) ->
     ok = khepri_tx:put(P, Record).

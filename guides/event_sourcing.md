@@ -144,7 +144,7 @@ reckon-db uses optimistic concurrency control to prevent conflicting writes:
 ```erlang
 %% Expected version semantics:
 %% -1 (NO_STREAM): Stream must not exist (first write)
-%% -2 (ANY_VERSION): No version check, always append
+%% -2 (ANY_VERSION): Land after whatever is already there
 %% N >= 0: Stream version must equal N
 
 %% First write to a new stream
@@ -159,6 +159,29 @@ reckon-db uses optimistic concurrency control to prevent conflicting writes:
 %% Process A writes with expected version 1 -> succeeds, version is now 2
 %% Process B writes with expected version 1 -> fails! (wrong_expected_version)
 ```
+
+Two appends that race for the same version never overwrite each other. With
+`ANY_VERSION` the loser re-reads the version and tries again with a delay
+that doubles up to 50 ms, and answers
+`{error, {version_conflict, ExpectedVersion, CurrentVersion}}` if it loses 60
+times in a row; with an explicit expected version it fails its own check, as
+above. An append of no events writes nothing and answers the version it read.
+
+A scavenged stream that still has events is refused: the version is the count
+of live version nodes, a scavenge deletes old ones without renumbering the
+rest, and the append checks both the node it would write and the node before
+it, so every prefix shape answers
+`{error, {version_unverifiable, Version, Reason}}` (5.12.0 reads a per-stream
+counter and is exact again). A scavenge that deletes every event is the
+exception: `get_version/2` answers -1 and the next `ANY_VERSION` append
+lands at version 0 again - a one-event append answers `{ok, 0}`, a batch of N
+answers `{ok, N - 1}` - nothing is overwritten, and a subscriber that
+re-reads by version sees 0, 1, ... again. See
+`guides/storage_internals.md` for the store's view. reckon-gater does not
+know either error yet, treats an unrecognised one as transient, and so burns
+ten retries - about 81 to 89 seconds - before answering
+`{error, {retries_exhausted, Reason}}`; reckon-evoq and evoq pass both
+through unchanged.
 
 ## Designing Events
 

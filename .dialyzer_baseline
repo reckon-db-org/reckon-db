@@ -1,5 +1,5 @@
 # Known dialyzer findings, recorded as a ratchet. See scripts/dialyzer_ratchet.sh.
-# dialyzer reported 199 when this was written (files for lint, warnings for dialyzer).
+# dialyzer reported 198 when this was written (files for lint, warnings for dialyzer).
 # A new finding fails CI. A fixed finding should have its line deleted here.
 src/reckon_db_app.erl	229929d0a14f	Expression produces a value of type 'ok' | {'error','already_exists'}, but this value is unmatched
 src/reckon_db_app.erl	f0ceac231f4c	The specification for reckon_db_app:start/0 states that the function might also return {'ok',pid()} but the in
@@ -181,7 +181,6 @@ src/reckon_db_streams.erl	b1d3dacbe5bd	Type specification reckon_db_streams:warn
 src/reckon_db_streams.erl	b52d9de6c8fb	The pattern [SingleCondition] can never match the type []
 src/reckon_db_streams.erl	cc3c36522356	The pattern Violation = {'integrity_violation', _} can never match the type {'ok',[#event{event_id::binary(),e
 src/reckon_db_streams.erl	db3918da04e2	The pattern Error = {'error', _} can never match the type {'ok',non_neg_integer()}
-src/reckon_db_streams.erl	ef9d2229aeec	The pattern 'ok' can never match the type {'error',_} | {'ok',_}
 src/reckon_db_subscription_health.erl	40d783a36299	The variable _ can never match since previous clauses completely covered the type 'undefined' | pid()
 src/reckon_db_subscription_health.erl	91066c59e846	Expression produces a value of type 'ok' | {'error','not_found' | 'restarting' | 'running' | 'simple_one_for_o
 src/reckon_db_subscription_health.erl	98c0b1f9e2e8	The variable _ can never match since previous clauses completely covered the type map()

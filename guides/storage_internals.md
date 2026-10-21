@@ -348,16 +348,48 @@ end.
 
 ### Conditional Updates
 
+Use `reckon_db_streams:append/4` for a conditional write. It reads the
+version, builds the records and their index entries, and verifies inside the
+write transaction that the version node the batch would occupy is still free.
+
 ```erlang
 %% Optimistic concurrency via expected version
-case khepri:get(StoreId, [streams, StreamId, PaddedExpectedVersion]) of
-    {ok, _} ->
-        %% Version exists, write next
-        khepri:put(StoreId, [streams, StreamId, PaddedNextVersion], NewEvent);
-    {error, {khepri, node_not_found, _}} ->
-        {error, wrong_expected_version}
+case reckon_db_streams:append(StoreId, StreamId, ExpectedVersion, Events) of
+    {ok, NewVersion} ->
+        NewVersion;
+    {error, {wrong_expected_version, Expected, Current}} ->
+        {error, {wrong_expected_version, Expected, Current}};
+    {error, {version_conflict, Expected, Current}} ->
+        %% Lost the race 60 times in a row: the stream is under heavy
+        %% contention and this append was not written.
+        {error, {version_conflict, Expected, Current}};
+    {error, {version_unverifiable, Version, _Reason}} = Error ->
+        %% The version could not be checked against the stream: its older
+        %% events were scavenged (see below), or it was deleted underneath
+        %% the append. Retrying will not help.
+        Error
 end.
 ```
+
+Do not write the version check by hand as a `khepri:get` followed by a
+`khepri:put`: between the two, another writer can take the same version and
+your put overwrites its events, with both calls answering ok. That is the
+data loss 5.11.13 fixed in `append/4`, and a hand-written check reopens it.
+
+The version is the count of the stream's live version nodes minus one, and a
+scavenge (`reckon_db_scavenge:scavenge/3`) deletes old nodes without
+renumbering the rest. On a scavenged stream the count is therefore below the
+newest event, and the append refuses with
+`{error, {version_unverifiable, _, _}}` rather than overwriting: either the
+node it would write already holds a live event, or the node before it is
+gone. Which of the two depends on how much was scavenged: the first holds
+for a short prefix, the second for a batch that would fit below the
+survivors. The check covers the node before the batch as well, because
+a batch short enough can fit entirely below the surviving events. A scavenge
+that deletes every event leaves no nodes at all, so the count reads -1 and
+the next `ANY_VERSION` append starts the stream again at version 0. 5.12.0
+keeps the version in a per-stream counter, written in the same transaction as
+the events, and is exact again after a scavenge.
 
 ## Performance Tips
 
