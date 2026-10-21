@@ -64,7 +64,7 @@
 %% deleted) and `PrevHash' the chain hash of the last event that was. A
 %% boundary already recorded deeper than this one is left alone; the same one
 %% is rewritten with a fresh MAC (the key may have been rotated).
--spec record(atom(), binary(), non_neg_integer(), binary()) -> ok.
+-spec record(atom(), binary(), non_neg_integer(), binary()) -> ok | {error, term()}.
 record(StoreId, StreamId, Version, PrevHash)
         when is_integer(Version), Version >= 0, is_binary(PrevHash) ->
     case reckon_db_integrity_key:is_enabled(StoreId) of
@@ -118,6 +118,8 @@ delete(StoreId, StreamId) ->
 record_if_deepest(StoreId, StreamId, Version, PrevHash) ->
     case lookup(StoreId, StreamId) of
         {ok, #{version := Existing}} when Existing > Version ->
+            %% A deeper cut is already recorded, and it is the one a read can
+            %% meet first. Nothing to write.
             ok;
         _ ->
             write(StoreId, StreamId, Version, PrevHash)
@@ -133,23 +135,17 @@ write(StoreId, StreamId, Version, PrevHash) ->
             ok
     end.
 
-%% @private A boundary that could not be written is not a reason to fail the
-%% scavenge - the events are already deleted - but it must be said out loud:
-%% the reads that follow it will refuse until it is there.
--spec put_boundary(atom(), binary(), non_neg_integer(), binary(), binary()) -> ok.
+%% @private A boundary that cannot be written is handed back to the caller,
+%% and the caller must not delete anything: a stream whose predecessors are
+%% gone and whose boundary is not recorded refuses every integrity read until
+%% somebody scavenges it again.
+-spec put_boundary(atom(), binary(), non_neg_integer(), binary(), binary())
+        -> ok | {error, term()}.
 put_boundary(StoreId, StreamId, Version, PrevHash, Key) ->
     Boundary = #{version => Version,
                  prev_hash => PrevHash,
                  mac => mac(Key, StreamId, Version, PrevHash)},
-    case khepri:put(StoreId, ?BOUNDARY_PATH ++ [StreamId], Boundary) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            logger:warning("store ~p: could not record the scavenge boundary "
-                           "of ~p at version ~p: ~p",
-                           [StoreId, StreamId, Version, Reason]),
-            ok
-    end.
+    khepri:put(StoreId, ?BOUNDARY_PATH ++ [StreamId], Boundary).
 
 %% @private A MAC over exactly what the anchor claims: this stream, this
 %% version, this hash.

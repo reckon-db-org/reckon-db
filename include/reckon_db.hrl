@@ -38,7 +38,7 @@
 %%
 %% It exists because a stream's latest version is NOT its child count:
 %% scavenging deletes old version nodes without renumbering the rest
-%% (that is deliberate — a version is a name, not a position), so after a
+%% (that is deliberate: a version is a name, not a position), so after a
 %% scavenge `count - 1' answers a version LOWER than the newest event and
 %% the next append writes over live events. The counter lives outside the
 %% `streams' subtree so it is not a child of the stream node: it does not

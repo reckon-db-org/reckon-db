@@ -166,6 +166,7 @@
 
     %% For reckon_db_link_worker, which runs one link.
     get_link/2,
+    mark_failed/2,
     source_streams/2,
     source_matches/2,
     process_events/2,
@@ -339,7 +340,21 @@ do_start_worker(StoreId, Name) ->
                      shutdown => 30000,
                      type => worker,
                      modules => [reckon_db_link_worker]},
-            started(supervisor:start_child(Sup, Spec), StoreId, Name)
+            started(start_child(Sup, Name, Spec), StoreId, Name)
+    end.
+
+%% @private A link that failed left its spec behind: a transient child that
+%% exits with `shutdown' is not restarted, and its spec stays until someone
+%% deletes it. Starting the link again means deleting that spec first.
+-spec start_child(pid(), binary(), supervisor:child_spec()) ->
+    {ok, pid()} | {error, term()}.
+start_child(Sup, Name, Spec) ->
+    case supervisor:start_child(Sup, Spec) of
+        {error, already_present} ->
+            _ = supervisor:delete_child(Sup, Name),
+            supervisor:start_child(Sup, Spec);
+        Result ->
+            Result
     end.
 
 %% @private
@@ -391,6 +406,17 @@ info(StoreId, Name) ->
         Error ->
             Error
     end.
+
+%% @doc Record that a running link stopped on its own.
+%%
+%% The status is what an operator reads to see that a link is neither running
+%% nor deliberately stopped, and that its link stream is behind. Starting it
+%% again sets it back to running and resumes from the fence.
+-spec mark_failed(atom(), binary()) -> ok.
+mark_failed(StoreId, Name) ->
+    update_status(StoreId, Name, error),
+    emit_telemetry(StoreId, Name, failed),
+    ok.
 
 %% @private
 -spec stop_worker(atom(), binary()) -> ok.

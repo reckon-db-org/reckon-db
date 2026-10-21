@@ -102,7 +102,7 @@ ok = reckon_db_links:start(my_store, <<"high-value-orders">>).
 
 This:
 1. Subscribes to the source stream(s), so nothing appended from here on is missed
-2. Records each source stream's newest version — the link's *fence*
+2. Records each source stream's newest version: the link's *fence*
 3. Backfills every source event up to that fence, then links what arrives above it
 
 Each source event is linked exactly once: what was appended before the fence
@@ -111,8 +111,8 @@ delivery, and the two meet at the fence.
 
 A start resumes where the last one stopped. The link records the version it
 has linked to, per source stream, in
-`[links, StoreId, Name, fences, StreamId]`; a restart — after a crash, or a
-`stop` and `start` — backfills from there instead of appending the whole link
+`[links, StoreId, Name, fences, StreamId]`; a restart (after a crash, or a
+`stop` and `start`) backfills from there instead of appending the whole link
 stream again. `backfill => false` still applies to a stream the link has
 never linked: it records the fence and links nothing that already existed.
 

@@ -6,6 +6,7 @@
 %% 1. CoreSystem (one_for_all) - persistence, notification, store management
 %% 2. ClusterSystem (cluster mode only) - discovery, coordination, monitoring
 %% 3. GatewaySystem - external interface workers
+%% 4. LinkSystem - the workers that run links, deliberately outside 1.
 %%
 %% @author rgfaber
 
@@ -63,12 +64,21 @@ init(#store_config{store_id = StoreId, mode = Mode} = Config) ->
         node_monitor_spec(Config)
     ],
 
-    %% Gateway children (always present, starts last)
+    %% Gateway children (always present)
     GatewayChildren = [
         gateway_sup_spec(Config)
     ],
 
-    Children = CoreChildren ++ ClusterChildren ++ MonitorChildren ++ GatewayChildren,
+    %% Links last, and outside core_sup's one_for_all: a link is derived data,
+    %% and a link that keeps failing must not take persistence, notification
+    %% or the gateway with it. Last, because this supervisor is rest_for_one
+    %% and a links_sup restart takes nothing after it with it.
+    LinkChildren = [
+        links_sup_spec(Config)
+    ],
+
+    Children = CoreChildren ++ ClusterChildren ++ MonitorChildren ++
+               GatewayChildren ++ LinkChildren,
 
     logger:info("Starting reckon-db system for store ~p in ~p mode", [StoreId, Mode]),
 
@@ -127,4 +137,16 @@ gateway_sup_spec(#store_config{store_id = StoreId} = Config) ->
         shutdown => infinity,
         type => supervisor,
         modules => [reckon_db_gateway_sup]
+    }.
+
+%% @private The links supervisor owns one worker per running link.
+-spec links_sup_spec(store_config()) -> supervisor:child_spec().
+links_sup_spec(#store_config{store_id = StoreId}) ->
+    #{
+        id => reckon_db_naming:links_sup_name(StoreId),
+        start => {reckon_db_links_sup, start_link, [StoreId]},
+        restart => permanent,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [reckon_db_links_sup]
     }.

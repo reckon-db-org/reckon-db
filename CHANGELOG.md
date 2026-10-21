@@ -10,9 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed: khepri `~> 0.17.11`, still Ra machine version 2
 
 `rebar.config` pinned `{khepri, "0.17.2"}` exactly. That is not the rule here
-(`~> MAJOR.MINOR` against released versions). It is `~> 0.17.11` now — a
+(`~> MAJOR.MINOR` against released versions). It is `~> 0.17.11` now, a
 floor, so the scavenge fix below cannot resolve away, and still inside 0.17,
-so it cannot float to 0.18 — resolving to 0.17.11, which runs Ra 2.16.13 and
+so it cannot float to 0.18, resolving to 0.17.11, which runs Ra 2.16.13 and
 Horus 0.5.1.
 
 What that brings: the 0.17.x patch set (a `keep_while` index leak, a dedup ack
@@ -30,8 +30,8 @@ Our own drift for the bump was written and is parked; it lands once upstream
 carries the converter fix, proposed as rabbitmq/khepri#443.
 
 `reckon_db_upgrade_store_SUITE` is the guard for that day. Its fixture is a
-real Ra directory written by 5.11.13 — a three-event stream with a stream
-subscription in its log — and the suite opens it, checks the events, the
+real Ra directory written by 5.11.13 (a three-event stream with a stream
+subscription in its log), and the suite opens it, checks the events, the
 subscription and a fresh append, and must stay green through the bump,
 unchanged. It is green here, because 0.17.11 reads a 0.17.2 store as it is.
 
@@ -41,14 +41,14 @@ A link on a real store was a link in name only, for three reasons.
 
 The worker joined the emitter process group itself, under the subscription
 *name*, while the trigger broadcasts under the *key* the subscription was
-stored with — and, even under the right key, a broadcast goes to one random
+stored with, and even under the right key, a broadcast goes to one random
 member and arrives as `{forward_to_local, Topic, Event}`, which the worker
 dropped and which was then gone for the real emitters too. Nothing was ever
 delivered. The suite made it look otherwise by posting `{events, [...]}` to
 the worker by hand.
 
 The worker is now the subscription's subscriber, so delivery is the store's
-own path — trigger, emitter pool, subscriber — and a `catchup => false`
+own path (trigger, emitter pool, subscriber) and a `catchup => false`
 subscription option switches off the global replay that the backfill replaces.
 A `stream_pattern` or `all` source subscribes to the whole store and applies
 its pattern to the events that arrive: a subscription filter matches event
@@ -57,7 +57,7 @@ content, not stream-id shape, and `stream_pattern` used to map onto
 
 The fence written after every batch was never read: a start always fenced at
 "newest now" and backfilled from 0, so a restart, a crash, or a stop and start
-appended the whole link stream again — and duplicates are what this release
+appended the whole link stream again, and duplicates are what this release
 exists to prevent, since the link stream is appended with `-2`. A start now
 resumes at the fence the last run recorded, and records each batch's highest
 source version rather than the whole range at the first batch.
@@ -81,13 +81,13 @@ worker. All six cases fail on the previous tip.
 
 The read path anchored a batch on whatever `prev_event_hash` its first event
 carried whenever that event's predecessor was not in the store. A scavenge
-removes a prefix, so this is exactly what a scavenged stream looks like — and
+removes a prefix, so this is exactly what a scavenged stream looks like, and
 exactly what a prefix deleted by hand looks like too. Tampering with a
 protected stream's first *k* events verified clean, forward and backward.
 
 A scavenge now records its boundary: the oldest version it left, with the
 chain hash of the last event it removed, MAC'd under the store's integrity key
-(`reckon_db_scavenge_boundary`). The read anchors there, and only there — the
+(`reckon_db_scavenge_boundary`). The read anchors there, and only there: the
 batch must begin at that version, carry that hash, and the MAC must verify. A
 missing predecessor anywhere else is `{integrity_violation,
 #{kind := missing_predecessor}}` in both directions, with no `function_clause`
@@ -98,7 +98,7 @@ on the backward path.
 Upstream's. On 0.17.2, scavenging a stream that has a live subscription took
 the whole store down: khepri evaluated the delete against the trigger's
 filter, `does_path_match` badmatched on `node_not_found`, the badmatch was
-applied inside Ra's machine, and the failure was replayed on every member —
+applied inside Ra's machine, and the failure was replayed on every member:
 reads and appends stopped, not just that subscription. Our filters carry
 `#if_has_data{}` and the pinned version computed the path match before it
 looked at `on_actions`, so `on_actions => [create]` did not protect us
@@ -115,7 +115,7 @@ by exactly what had been deleted: the next append reused versions that still
 held live events and wrote over them.
 
 Concretely: scavenge versions 0 and 1 of a ten-event stream, append five
-more, and events 9 and 10 (versions 8 and 9) are destroyed — five appends
+more, and events 9 and 10 (versions 8 and 9) are destroyed: five appends
 land where eight events had been, so the two at the boundary are replaced.
 Nobody saw those two go: they were delivered when they were appended, and
 what a subscriber never sees is the two events that replaced them, because
@@ -126,7 +126,7 @@ This is not new. `get_version/2` has counted version nodes and
 `reckon_db_scavenge` has deleted them without renumbering since 1.0.0, so
 every release from 1.0.0 to 5.11.12 loses events this way on a stream that is
 scavenged and then appended to. The overwritten events are not recoverable
-from the store, and `archive_and_scavenge` does not have them either — its
+from the store, and `archive_and_scavenge` does not have them either: its
 archive is written before the delete and holds what was scavenged, not what
 was later overwritten. Only a snapshot or a copy outside the store has them.
 
@@ -141,15 +141,15 @@ transaction.
 
 `reckon_db_scavenge_version_SUITE` pins five cases. The one that is red on
 the released code is the tree-only one: ten events, scavenge two, append
-five, read back — 5.11.12 answers version 7 for a stream whose newest event
+five, read back, 5.11.12 answers version 7 for a stream whose newest event
 is at 9, then reuses 8 and 9, while 5.11.13 refuses that append with
 `{version_unverifiable, 7, target_occupied}`. The others cover the
 counter-less stream, the dry run, delete-then-recreate, and delivery.
 
 ### Fixed: a rollback cannot strand, hole or reorder a stream
 
-The counter is this release's, so reading a store with 5.11.x again — a
-rollback — leaves version nodes nothing counts and a counter that no longer
+The counter is this release's, so reading a store with 5.11.x again (a
+rollback) leaves version nodes nothing counts and a counter that no longer
 describes the tree. Three shapes followed, and each answered ok while it did
 the wrong thing:
 
@@ -161,7 +161,7 @@ the wrong thing:
 - **5.11.x deleted and re-created a stream.** A fresh tree of 0..2 sat under
   a counter of 4. An `ANY_VERSION` append built version 5, which was free,
   so nothing collided and nothing reconciled, and versions 3 and 4 stayed
-  empty for the rest of the stream's life — 150 of 150 race runs. A caller
+  empty for the rest of the stream's life: 150 of 150 race runs. A caller
   naming the version the tree offered (2) was then refused on every attempt.
 - **5.11.x scavenged, or re-created and then scavenged.** With the counter
   at 9 over events 13..15, an `ANY_VERSION` append wrote 10, 11 and 12 BELOW
@@ -172,8 +172,8 @@ the wrong thing:
   events, the newest included.
 
 Two changes. Every append now asks the tree whether the counter is the
-tree's before it writes from it — one read of the version node the counter
-names — and reconciles first when that node is gone. That check is what
+tree's before it writes from it (one read of the version node the counter
+names), and reconciles first when that node is gone. That check is what
 reaches the shapes above: none of them is introduced by a collision, so a
 reconcile that runs only when a write collides never ran. A healthy stream
 pays one point read per append. And a scavenge takes its cutoff from the
@@ -184,7 +184,7 @@ direction. A tree with no version node at all is left alone: this release's
 own scavenge deletes events without renumbering, so an empty tree with a
 counter above 0 is a stream whose prefix was scavenged, and the counter is
 the only record of how far it got. The tree does not have to be contiguous
-from 0 — a re-created stream that 5.11.x then scavenged from the bottom
+from 0, a re-created stream that 5.11.x then scavenged from the bottom
 (counter 4, events 1..2) has tip 2, and insisting on a whole re-created
 stream left its counter at 4 and its tip unwritable.
 
@@ -329,7 +329,7 @@ to one stream left 25 of the 100 in the store.
 The version is now verified inside the transaction that writes the events
 (`reckon_db_streams:append_guard/6`): if the counter moved, or the first
 version node the batch would occupy already exists, the command aborts and
-the append re-reads and tries again — with a delay that doubles from 1 ms to
+the append re-reads and tries again, with a delay that doubles from 1 ms to
 a 50 ms cap, jittered per attempt, for up to 60 attempts. After that it
 answers `{error, {version_conflict, ExpectedVersion, CurrentVersion}}`, the
 version being the one the last attempt read; `ExpectedVersion` alone is -2
@@ -347,7 +347,7 @@ transaction.
 The re-read after a lost race asks for a consistent answer
 (`#{favor => consistency}`): a follower can answer the same version twice
 while the stream has moved on the leader, and the retry would read that as
-having lost again — sixty times, on a stream nobody else is writing. khepri
+having lost again, sixty times, on a stream nobody else is writing. khepri
 implements that as a local query fenced to the leader's last applied index,
 not as a read on the leader. Only the retry pays for it; the first read of an
 append stays local.
@@ -360,7 +360,7 @@ read, and four deleted-stream edges.
 
 The gateway worker read the stream's version and passed it back as an
 EXPLICIT expected version. That is a different promise from the one
-`reckon_gater_api:append_events/3` makes — the caller left the version out —
+`reckon_gater_api:append_events/3` makes (the caller left the version out)
 and the version it read was stale as soon as another worker of the same pool
 took it. The append was then refused with `wrong_expected_version`, which
 gater 3.11.2 reads as permanent and does not retry. Measured: a four-worker
@@ -382,8 +382,8 @@ counts the live version nodes now.
 
 ### Still wrapped, and still unwrapped by us
 
-`khepri:transaction/2` returns `{ok, {error, noproc}}` — not
-`{error, noproc}` — when the store is not running, and 0.17.11 still does
+`khepri:transaction/2` returns `{ok, {error, noproc}}`, not
+`{error, noproc}`, when the store is not running, and 0.17.11 still does
 (rabbitmq/khepri#400 is open; #436, which makes transaction funs transparent
 and raises Ra errors, is unmerged). The four call sites that unwrap it
 (`reckon_db_dcb`, `reckon_db_dcb_reindex`, `reckon_db_store_healer`,
@@ -495,7 +495,7 @@ the reconcile above is what keeps the streams usable.
 
 Downstream: every two-part constraint (`~> 5.2`, `~> 5.4`, `~> 5.5`,
 `~> 5.9`, `~> 5.11`) floats to 5.12.0, so those consumers pick this up on
-their next dependency update — which is why this is a minor release and not a
+their next dependency update, which is why this is a minor release and not a
 patch. A three-part constraint does not float: `~> 5.11.7` means
 `>= 5.11.7 and < 5.12.0`, and macula-realm pins exactly that in
 `apps/macula_realm` and `apps/guide_realm_lifecycle`. Those two need an
@@ -507,7 +507,7 @@ explicit bump; until then macula-realm stays on 5.11.x.
 because khepri 0.17.2 used the deprecated `catch` expression. 0.17.11 does
 not (it was replaced with try/catch in 0.17.8): a clean rebuild of the
 dependency produces no such warning. Any repo carrying the override can drop
-it when it next bumps — mcl-om, mcl-tube, mcl-chess, mcl-jobs, mcl-agora,
+it when it next bumps: mcl-om, mcl-tube, mcl-chess, mcl-jobs, mcl-agora,
 macula, macula-station, barrel (four apps) and, worth doing first,
 `mcl-om/priv/templates/mcl_service/rebar.config`, which is what a new service
 is scaffolded from.

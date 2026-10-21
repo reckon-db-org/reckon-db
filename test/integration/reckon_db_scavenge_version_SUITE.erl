@@ -2,7 +2,7 @@
 %% number of version nodes it happens to have.
 %%
 %% Scavenging deletes old version nodes and deliberately does NOT renumber
-%% the rest — a version is a name, not a position. Deriving the version
+%% the rest: a version is a name, not a position. Deriving the version
 %% from `khepri:count' therefore became wrong the moment a stream was
 %% scavenged: the count fell, the next append reused versions that still
 %% held live events, wrote over them, and the trigger never fired for the

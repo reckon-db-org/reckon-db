@@ -25,7 +25,8 @@
          stop_then_start_restarts_the_link/1,
          a_restarted_link_links_each_event_once/1,
          a_killed_worker_resumes_from_its_fence/1,
-         a_failed_append_does_not_advance_the_fence/1]).
+         a_failed_append_does_not_advance_the_fence/1,
+         a_failing_link_does_not_take_the_store_with_it/1]).
 
 suite() -> [{timetrap, {minutes, 2}}].
 
@@ -35,7 +36,8 @@ all() ->
      stop_then_start_restarts_the_link,
      a_restarted_link_links_each_event_once,
      a_killed_worker_resumes_from_its_fence,
-     a_failed_append_does_not_advance_the_fence].
+     a_failed_append_does_not_advance_the_fence,
+     a_failing_link_does_not_take_the_store_with_it].
 
 %%====================================================================
 %% CT callbacks
@@ -188,8 +190,8 @@ a_killed_worker_resumes_from_its_fence(Config) ->
 
 %% @doc GIVEN a link whose append to the link stream fails
 %%      WHEN the next source event arrives
-%%      THEN the fence does not move past it, and once appends work again
-%%           the event is linked
+%%      THEN the link stops with status error, the fence does not move past
+%%           the event, and once appends work again starting the link links it
 %%
 %% A failed append that still advanced the fence would lose the event for
 %% good: the backfill resumes above it and the live path skips it.
@@ -207,13 +209,59 @@ a_failed_append_does_not_advance_the_fence(Config) ->
                      fun(_S, _N, _E) -> {error, injected} end),
 
     {ok, 2} = append(StoreId, StreamId, 1),
-    timer:sleep(300),
+    ok = wait_for_status(StoreId, Name, error),
 
     ?assertEqual(1, fence(StoreId, Name, StreamId)),
     ?assertEqual([0, 1], link_versions(StoreId, Name)),
 
     ok = meck:unload(reckon_db_links),
+    ok = reckon_db_links:start(StoreId, Name),
     ok = wait_for_versions(StoreId, Name, [0, 1, 2]).
+
+%% @doc GIVEN two running links on one store
+%%      WHEN one of them cannot append to its own link stream
+%%      THEN it stops with status error, the store's core is untouched, and
+%%           the other link keeps delivering
+%%
+%% A link is derived data. Its failure used to restart the links supervisor
+%% past its intensity, and that supervisor sat inside the core's
+%% one_for_all group, so a broken link took persistence, notification and
+%% the gateway with it, and every other running link with them.
+a_failing_link_does_not_take_the_store_with_it(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    SourceA = reckon_db_test_helpers:sid(<<"orders-broken">>),
+    SourceB = reckon_db_test_helpers:sid(<<"orders-healthy">>),
+    A = <<"broken">>,
+    B = <<"healthy">>,
+    ok = create_link(StoreId, A, #{type => stream, stream_id => SourceA}),
+    ok = create_link(StoreId, B, #{type => stream, stream_id => SourceB}),
+    ok = reckon_db_links:start(StoreId, A),
+    ok = reckon_db_links:start(StoreId, B),
+    {ok, 0} = append(StoreId, SourceA, 1),
+    {ok, 0} = append(StoreId, SourceB, 1),
+    ok = wait_for_versions(StoreId, A, [0]),
+    ok = wait_for_versions(StoreId, B, [0]),
+
+    Core = core_pids(StoreId),
+
+    ok = meck:new(reckon_db_links, [passthrough, no_link]),
+    ok = meck:expect(reckon_db_links, append_to_link,
+                     fun(_S, Name, _E) when Name =:= A -> {error, injected};
+                        (S, Name, Events) -> meck:passthrough([S, Name, Events])
+                     end),
+
+    {ok, 1} = append(StoreId, SourceA, 1),
+    ok = wait_for_status(StoreId, A, error),
+
+    {ok, 1} = append(StoreId, SourceB, 1),
+    ok = wait_for_versions(StoreId, B, [0, 1]),
+
+    ?assertEqual(Core, core_pids(StoreId)),
+    ?assertEqual([0], link_versions(StoreId, A)),
+
+    ok = meck:unload(reckon_db_links),
+    ok = reckon_db_links:start(StoreId, A),
+    ok = wait_for_versions(StoreId, A, [0, 1]).
 
 %%====================================================================
 %% Helpers
@@ -244,6 +292,23 @@ source_streams_linked(StoreId, Name) ->
         {ok, Events} -> [maps:get(source_stream, E#event.metadata) || E <- Events];
         {error, _} -> []
     end.
+
+%% The pids that make the store a store. If a failing link restarts any of
+%% them, this list changes.
+core_pids(StoreId) ->
+    [whereis(reckon_db_naming:core_sup_name(StoreId)),
+     whereis(reckon_db_naming:persistence_sup_name(StoreId)),
+     whereis(reckon_db_naming:notification_sup_name(StoreId)),
+     whereis(reckon_db_naming:gateway_sup_name(StoreId)),
+     whereis(reckon_db_naming:links_sup_name(StoreId))].
+
+wait_for_status(StoreId, Name, Expected) ->
+    Status = fun() -> case reckon_db_links:info(StoreId, Name) of
+                          {ok, #{status := S}} -> S;
+                          _ -> unknown
+                      end
+              end,
+    wait_for(Status, Expected, Name, StoreId).
 
 fence(StoreId, Name, StreamId) ->
     case khepri:get(StoreId, [links, StoreId, Name, fences, StreamId]) of

@@ -1010,7 +1010,7 @@ convert_result_to_event(_, _) ->
 %% the append transaction, never the number of version nodes. Counting was
 %% wrong the moment a stream was scavenged: scavenging deletes old version
 %% nodes and does not renumber the rest, so the count fell and the next
-%% append reused — and silently overwrote — live versions.
+%% append reused (and silently overwrote) live versions.
 %%
 %% Streams written by a store that predates the counter have no counter
 %% node yet; for those the newest version node is read once (names only)
@@ -1290,7 +1290,11 @@ delete_validated(StoreId, StreamId) ->
     CounterPath = reckon_db_stream_path:version_counter_path(StreamId),
     Fun = fun() -> delete_stream_tx(Path, CounterPath) end,
     case khepri:transaction(StoreId, Fun) of
-        {ok, ok}           -> ok;
+        {ok, ok} ->
+            %% The stream's integrity metadata goes with it, outside the
+            %% transaction: a stale scavenge boundary would otherwise anchor a
+            %% read of a stream re-created under the same id.
+            ok = reckon_db_scavenge_boundary:delete(StoreId, StreamId);
         {ok, {error, E}}   -> {error, E};
         {error, _} = Error -> Error
     end.
@@ -1727,7 +1731,7 @@ append_events_to_stream(StoreId, StreamId, CurrentVersion, CounterExisted,
     %% Write the whole batch — every event record and every index entry —
     %% in ONE transaction. Either all land or none do, so the index is
     %% never left partially populated (a dropped index write would make
-    %% queries silently incomplete — worse than slow). One Ra command per
+    %% queries silently incomplete, worse than slow). One Ra command per
     %% batch.
     %%
     %% The optimistic-version check runs INSIDE the transaction
@@ -1735,8 +1739,8 @@ append_events_to_stream(StoreId, StreamId, CurrentVersion, CounterExisted,
     %% concurrent appends that both read it would build the same versions and
     %% one would silently overwrite the other's events.
     %%
-    %% A failed transaction — most importantly {error, noproc} while the
-    %% store's Ra server is mid-(re)start — MUST surface as a retriable
+    %% A failed transaction (most importantly {error, noproc} while the
+    %% store's Ra server is mid-(re)start) MUST surface as a retriable
     %% {error, _} return, NOT a hard `ok =` badmatch (the boot-time
     %% crash-loop lesson the old per-put loop encoded). khepri:transaction
     %% returns {error, _} for a not-ready store; reckon-gater retries.

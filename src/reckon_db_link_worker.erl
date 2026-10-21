@@ -116,8 +116,26 @@ init_link(StoreId, Name, Link) ->
     %% until the fences are taken waits in the mailbox and is at or below them.
     case subscribe(StoreId, Link, Name) of
         {ok, Key} -> start_subscribed(StoreId, Name, Link, Key);
-        {error, Reason} -> {stop, Reason}
+        {error, Reason} -> fail(StoreId, Name, {link_subscribe_failed, Reason})
     end.
+
+%% @private A link that cannot do its job stops, and says so in the store.
+%%
+%% `{shutdown, _}' on purpose: the child is `transient', so an abnormal exit
+%% is restarted at once, and a link whose link stream refuses appends would
+%% restart, re-backfill, fail again, and take the links supervisor past its
+%% intensity with it. The fence is where it was, so an operator starting the
+%% link again resumes rather than repeats.
+fail(StoreId, Name, Reason) ->
+    ok = record_failure(StoreId, Name, Reason),
+    {stop, {shutdown, Reason}}.
+
+%% @private
+record_failure(StoreId, Name, Reason) ->
+    logger:error("link ~p on store ~p stopped: ~p", [Name, StoreId, Reason]),
+    _ = reckon_db_links:mark_failed(StoreId, Name),
+    ok.
+
 
 %% @private Deliveries are already stacking up in the mailbox; the fences are
 %% taken now and the backfill runs behind them.
@@ -127,7 +145,7 @@ start_subscribed(StoreId, Name, Link, Key) ->
                    key = Key, fences = Fences},
     case backfill(State) of
         {ok, State1} -> {ok, State1};
-        {error, Reason} -> {stop, Reason}
+        {error, Reason} -> fail(StoreId, Name, Reason)
     end.
 
 %% @private
@@ -139,8 +157,12 @@ handle_cast(_Request, State) -> {noreply, State}.
 %% @private The live path: what the store's emitter delivers, above the fence.
 handle_info({events, Events}, State) ->
     case link_live(Events, State) of
-        {ok, State1} -> {noreply, State1};
-        {error, Reason} -> {stop, Reason, State}
+        {ok, State1} ->
+            {noreply, State1};
+        {error, Reason} ->
+            #state{store_id = StoreId, name = Name} = State,
+            ok = record_failure(StoreId, Name, Reason),
+            {stop, {shutdown, Reason}, State}
     end;
 handle_info(_Info, State) ->
     {noreply, State}.

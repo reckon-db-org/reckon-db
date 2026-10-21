@@ -206,7 +206,7 @@ event_types_with_events() ->
         #event{event_type = <<"user_archived_v1">>}
     ],
     %% fold_event_batches/6 is (StoreId, StreamId, BatchSize, Direction, Fun,
-    %% Acc) — BatchSize before Direction, as in read_all/4. The mock once
+    %% Acc): BatchSize before Direction, as in read_all/4. The mock once
     %% encoded the swapped order, which is why the unit test passed while the
     %% real worker crashed, and it stubbed read_all/4 after the summary moved
     %% to the fold, which only showed up as an undef here.

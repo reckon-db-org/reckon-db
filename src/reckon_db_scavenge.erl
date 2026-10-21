@@ -212,33 +212,53 @@ execute_or_preview(StoreId, StreamId, Opts, false, Events, FromVersion,
     %% (reckon-db#4), and nothing has been deleted yet.
     case reckon_db_streams:ensure_version_counter(StoreId, StreamId, NewestVersion) of
         ok ->
-            delete_event_versions(StoreId, StreamId, FromVersion, ToVersion),
-            ok = record_chain_boundary(StoreId, StreamId, Events),
-            {ok, build_scavenge_result(StreamId, Events, FromVersion, ToVersion, Opts)};
+            record_then_delete(StoreId, StreamId, Opts, Events,
+                               FromVersion, ToVersion);
         {error, _} = Error ->
             Error
     end.
 
-%% @private Record where this scavenge cut the chain, so a later read of a
-%% scavenged stream can anchor at the cut and at nothing else (see
+%% @private The boundary first, the deletes second. A boundary that could not
+%% be written stops the scavenge before anything is removed: a stream whose
+%% predecessors are gone and whose anchor is not there refuses every integrity
+%% read, and the archive is the only thing left holding the events.
+-spec record_then_delete(atom(), binary(), scavenge_opts(), [event(), ...],
+                         non_neg_integer(), non_neg_integer())
+        -> {ok, scavenge_result()} | {error, term()}.
+record_then_delete(StoreId, StreamId, Opts, Events, FromVersion, ToVersion) ->
+    case record_chain_boundary(StoreId, StreamId, Events) of
+        ok ->
+            delete_event_versions(StoreId, StreamId, FromVersion, ToVersion),
+            {ok, build_scavenge_result(StreamId, Events, FromVersion, ToVersion,
+                                       Opts)};
+        {error, Reason} ->
+            {error, {scavenge_boundary_not_recorded, Reason}}
+    end.
+
+%% @private Record where this scavenge is about to cut the chain, so a later
+%% read of a scavenged stream can anchor at the cut and at nothing else (see
 %% reckon_db_scavenge_boundary).
 %%
-%% The boundary is the version right after the last one deleted, together with
-%% the chain hash of that last deleted event - which is the `prev_event_hash'
-%% the oldest survivor carries. The hash of a deleted event is recomputed from
-%% the event itself and its own predecessor, both of which are still in hand
-%% here: nothing else is left in the tree to derive it from afterwards.
--spec record_chain_boundary(atom(), binary(), [event(), ...]) -> ok.
+%% The boundary is the version right after the last one about to be deleted,
+%% together with the chain hash of that last event, which is the
+%% `prev_event_hash' the oldest survivor will carry. It is written BEFORE the
+%% deletes: recording it while the predecessors still exist is harmless (the
+%% read only consults it when one is missing), and the other order leaves a
+%% window in which the predecessors are gone and the anchor is not there yet,
+%% which is a stream that refuses every integrity read.
+%%
+%% Returns an error rather than a log line, so the caller can decline to
+%% delete anything.
+-spec record_chain_boundary(atom(), binary(), [event(), ...]) -> ok | {error, term()}.
 record_chain_boundary(StoreId, StreamId, Events) ->
-    #event{version = LastDeleted, prev_event_hash = PrevHash} = lists:last(Events),
+    Last = lists:last(Events),
+    #event{version = LastDeleted, prev_event_hash = PrevHash} = Last,
     case is_binary(PrevHash) of
         false ->
             %% A legacy tail: there is no chain to anchor.
             ok;
         true ->
-            ChainHashAtLast =
-                reckon_gater_integrity:compute_chain_hash(
-                  lists:last(Events), PrevHash),
+            ChainHashAtLast = reckon_gater_integrity:compute_chain_hash(Last, PrevHash),
             reckon_db_scavenge_boundary:record(StoreId, StreamId,
                                                LastDeleted + 1, ChainHashAtLast)
     end.
