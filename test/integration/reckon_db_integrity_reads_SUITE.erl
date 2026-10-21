@@ -195,7 +195,7 @@ intact_chain_reads_clean(Config) ->
     {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 100, forward),
     ?assertEqual(10, length(Events)),
     [?assert(is_binary(E#event.prev_event_hash)) || E <- Events],
-    [?assertMatch({1, _}, E#event.mac) || E <- Events],
+    [?assertMatch({v2, 1, _}, E#event.mac) || E <- Events],
     ok.
 
 %% Reading exactly one event at version 0 (the chain start) should
@@ -250,8 +250,8 @@ tampered_timestamp_is_caught(Config) ->
 
 tampered_mac_is_caught(Config) ->
     expect_mac_mismatch(Config, reckon_db_test_helpers:sid(<<"t-mac">>),
-        fun(#event{mac = {KeyId, _}} = E) ->
-            E#event{mac = {KeyId, <<0:256>>}}
+        fun(#event{mac = {v2, KeyId, _}} = E) ->
+            E#event{mac = {v2, KeyId, <<0:256>>}}
         end).
 
 %% Tampering with prev_event_hash breaks the chain check (not the MAC
@@ -413,7 +413,7 @@ skip_legacy_passes_legacy_events_through(Config) ->
     LegacyEvents = lists:sublist(Events, 3),
     IntegrityEvents = lists:nthtail(3, Events),
     [?assertEqual(undefined, E#event.mac) || E <- LegacyEvents],
-    [?assertMatch({1, _}, E#event.mac) || E <- IntegrityEvents],
+    [?assertMatch({v2, 1, _}, E#event.mac) || E <- IntegrityEvents],
     ok.
 
 %% Strict mode refuses to return legacy events when integrity is
@@ -735,8 +735,10 @@ an_append_refuses_a_watermark_ahead_of_the_stream(Config) ->
     %% A sealed watermark above the stream cannot be produced through the
     %% API any more (sealing refuses one, and the migration refuses one), so
     %% it is written the only way it can now arise: with the key.
+    Life = crypto:strong_rand_bytes(16),
+    ok = khepri:put(StoreId, life_path(StreamId), Life),
     ok = khepri:put(StoreId, watermark_path(StreamId),
-                    sealed_watermark(Key, StreamId, 1000)),
+                    sealed_watermark(Key, StoreId, StreamId, Life, 1000)),
     ?assertMatch({ok, {sealed, 1000}},
                  reckon_db_chain_watermark:lookup(StoreId, StreamId)),
 
@@ -778,11 +780,16 @@ a_deleted_watermark_is_not_minted_by_an_append(Config) ->
                  reckon_db_streams:read_all(StoreId, StreamId, 100, forward)).
 
 %% @private The authenticated watermark shape, MAC'd under the store's key.
-sealed_watermark(Key, StreamId, Version) ->
+sealed_watermark(Key, StoreId, StreamId, Life, Version) ->
     Mac = crypto:mac(hmac, sha256, Key,
-                     term_to_binary({reckon_db_chain_watermark, StreamId, Version},
+                     term_to_binary({reckon_db_chain_watermark, seal, StoreId,
+                                     StreamId, Life, Version, Version},
                                     [deterministic])),
-    #{version => Version, mac => Mac}.
+    #{version => Version, v2_from => Version, life => Life, mac => Mac}.
+
+%% @private
+life_path(StreamId) ->
+    ?INTEGRITY_STREAM_LIFE_PATH ++ [StreamId].
 
 %% @private
 watermark_path(StreamId) ->

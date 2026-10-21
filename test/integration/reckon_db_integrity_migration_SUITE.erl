@@ -35,7 +35,11 @@
     the_operator_act_seals_only_the_streams_it_names/1,
     a_node_local_anchor_stops_a_second_migration/1,
     the_migration_writes_no_in_progress_record/1,
-    deleting_a_stream_deletes_its_watermark/1
+    deleting_a_stream_deletes_its_watermark/1,
+    a_sealed_watermark_does_not_survive_delete_and_recreate/1,
+    a_junk_watermark_refuses_only_its_own_stream/1,
+    a_junk_marker_does_not_count_as_migrated/1,
+    a_snapshot_authenticated_cut_is_sealed/1
 ]).
 
 -define(KEY_ENV, "RECKON_DB_MIGRATION_TEST_KEY").
@@ -55,7 +59,11 @@ all() ->
         the_operator_act_seals_only_the_streams_it_names,
         a_node_local_anchor_stops_a_second_migration,
         the_migration_writes_no_in_progress_record,
-        deleting_a_stream_deletes_its_watermark
+        deleting_a_stream_deletes_its_watermark,
+        a_sealed_watermark_does_not_survive_delete_and_recreate,
+        a_junk_watermark_refuses_only_its_own_stream,
+        a_junk_marker_does_not_count_as_migrated,
+        a_snapshot_authenticated_cut_is_sealed
     ].
 
 suite() ->
@@ -608,3 +616,128 @@ event_path(StreamId, Version) ->
 
 pad_version(Version) ->
     list_to_binary(io_lib:format("~*..0B", [?VERSION_PADDING, Version])).
+
+%% @doc GIVEN a sealed watermark and its life token saved from a stream's
+%%           first life
+%%      WHEN the stream is deleted, re-created, and both are put back
+%%      THEN the stream refuses: the new life's events were MAC'd under a
+%%           life the restored token contradicts
+%%
+%% The life token is a tree node, so it replays with the seal. What refuses
+%% the replay is the v2 event MAC, which covers the life: a surviving MAC'd
+%% event of the new life cannot verify under the restored token.
+a_sealed_watermark_does_not_survive_delete_and_recreate(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"life-replay">>),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 2} = append_events(StoreId, StreamId, 3),
+    {ok, OldRecord} = current_watermark(StoreId, StreamId),
+    {ok, OldLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    {ok, 2} = append_events(StoreId, StreamId, 3),
+
+    %% The replay: the old life token and the old sealed record, together.
+    ok = khepri:put(StoreId, life_path(StreamId), OldLife),
+    ok = khepri:put(StoreId, watermark_path(StreamId), OldRecord),
+
+    ?assertMatch({error, {integrity_violation, _}},
+                 read_raw(StoreId, StreamId)).
+
+%% @doc GIVEN one stream whose watermark is a map with a junk MAC
+%%      WHEN the store starts
+%%      THEN that stream is refused and every other stream is sealed and
+%%           readable; the migration is not aborted
+%%
+%% The compare-and-swap is against the raw tree value, so a value of an
+%% unexpected shape refuses its own stream instead of aborting the store's
+%% whole migration.
+a_junk_watermark_refuses_only_its_own_stream(Config) ->
+    {StoreId, DataDir} = store(Config),
+    Forged = stream(<<"junk-watermark">>),
+    Innocent = stream(<<"junk-innocent">>),
+
+    ok = start_store(StoreId, DataDir, disabled),
+    ok = write_legacy(StoreId, Forged, 3),
+    ok = write_legacy(StoreId, Innocent, 3),
+    ok = khepri:put(StoreId, watermark_path(Forged),
+                    #{version => 3, mac => <<0:256>>}),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {sealed, 3}},
+                 reckon_db_chain_watermark:lookup(StoreId, Innocent)),
+    ?assertEqual(3, length(events(StoreId, Innocent))),
+    ?assertMatch({ok, {unsealed, _}},
+                 reckon_db_chain_watermark:lookup(StoreId, Forged)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 read_raw(StoreId, Forged)),
+    ?assertMatch({ok, _}, khepri:get(StoreId, ?INTEGRITY_MIGRATION_PATH)).
+
+%% @doc GIVEN a store whose marker path holds a value that does not verify
+%%      WHEN it starts with integrity enabled
+%%      THEN nothing is sealed, the anchor is not written, and the store is
+%%           not called migrated
+%%
+%% Presence alone is not evidence of a migration: only a marker that
+%% verifies under the store's key is.
+a_junk_marker_does_not_count_as_migrated(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"junk-marker">>),
+
+    ok = start_store(StoreId, DataDir, disabled),
+    ok = write_legacy(StoreId, StreamId, 3),
+    ok = khepri:put(StoreId, ?INTEGRITY_MIGRATION_PATH, #{junk => true}),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, undefined},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 read_raw(StoreId, StreamId)),
+    ?assertNot(filelib:is_regular(anchor_file(DataDir))).
+
+%% @doc GIVEN a stream whose prefix was removed by a scavenge the store
+%%           recorded a snapshot for, so the genesis event is gone
+%%      WHEN the store starts
+%%      THEN the stream is sealed at the cut, not read as deletion evidence
+%%
+%% A snapshot whose anchor_hash is the hash the surviving event carries, at
+%% one below its version, is proof the store wrote. Without it the stream is
+%% refused (see the evidence case above).
+a_snapshot_authenticated_cut_is_sealed(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"snapshot-cut">>),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 9} = append_events(StoreId, StreamId, 10),
+    ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{state => s}),
+    ok = delete_events(StoreId, StreamId, 0, 4),
+    ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
+    ok = delete_watermark(StoreId, StreamId),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {sealed, 5}},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+    ?assertEqual(5, length(events(StoreId, StreamId))).
+
+%% @private
+current_watermark(StoreId, StreamId) ->
+    khepri:get(StoreId, watermark_path(StreamId)).
+
+%% @private
+delete_events(StoreId, StreamId, From, To) ->
+    lists:foreach(
+      fun(V) ->
+              _ = khepri:delete(StoreId,
+                                reckon_db_stream_path:event_path(
+                                  StreamId, pad_version(V)))
+      end, lists:seq(From, To)),
+    ok.
+
+%% @private
+life_path(StreamId) ->
+    ?INTEGRITY_STREAM_LIFE_PATH ++ [StreamId].

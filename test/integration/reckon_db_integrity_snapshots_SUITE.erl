@@ -141,8 +141,8 @@ save_with_integrity_populates_fields(Config) ->
     {ok, Snap} = reckon_db_snapshots:load(StoreId, StreamId),
     ?assert(is_binary(Snap#snapshot.anchor_hash)),
     ?assertEqual(32, byte_size(Snap#snapshot.anchor_hash)),
-    ?assertMatch({1, _}, Snap#snapshot.mac),
-    {1, MacBytes} = Snap#snapshot.mac,
+    ?assertMatch({v2, 1, _}, Snap#snapshot.mac),
+    {v2, 1, MacBytes} = Snap#snapshot.mac,
     ?assertEqual(32, byte_size(MacBytes)),
     ok.
 
@@ -242,8 +242,8 @@ tampered_snapshot_anchor_is_caught(Config) ->
 %% mutated the anchor); if it does pass, the MAC check catches it.
 tampered_snapshot_mac_is_caught(Config) ->
     expect_load_violation(Config, reckon_db_test_helpers:sid(<<"snap-t-mac">>),
-        fun(#snapshot{mac = {KeyId, _}} = S) ->
-            S#snapshot{mac = {KeyId, <<0:256>>}}
+        fun(#snapshot{mac = {v2, KeyId, _}} = S) ->
+            S#snapshot{mac = {v2, KeyId, <<0:256>>}}
         end,
         snapshot_mac_mismatch).
 

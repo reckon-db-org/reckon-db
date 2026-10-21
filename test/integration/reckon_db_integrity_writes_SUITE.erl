@@ -134,14 +134,18 @@ enabled_store_writes_integrity_fields(Config) ->
     Genesis = reckon_gater_integrity:genesis_prev_hash(),
     ?assertEqual(Genesis, Event#event.prev_event_hash),
 
-    %% MAC populated as {1, <<32 bytes>>}.
-    ?assertMatch({1, _}, Event#event.mac),
-    {1, MacBytes} = Event#event.mac,
+    %% MAC populated as the store- and life-bound scheme 2 shape.
+    ?assertMatch({v2, 1, _}, Event#event.mac),
+    {v2, 1, MacBytes} = Event#event.mac,
     ?assertEqual(32, byte_size(MacBytes)),
 
-    %% Verifier accepts the event.
+    %% Verifier accepts the event, with the store and life it was written in.
+    {ok, #{life := Life, v2_from := V2From}} =
+        reckon_db_chain_watermark:binding(StoreId, StreamId),
     ?assertEqual(ok,
-        reckon_gater_integrity:verify_event(Event, Genesis, Key)),
+        reckon_gater_integrity:verify_event(
+          Event, Genesis, Key,
+          #{store_id => StoreId, life => Life, v2_from => V2From})),
 
     %% Watermark recorded, in the authenticated shape.
     {ok, {sealed, 0}} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
@@ -174,7 +178,7 @@ chain_continues_across_appends(Config) ->
     ?assertEqual(5, length(Events)),
 
     Genesis = reckon_gater_integrity:genesis_prev_hash(),
-    walk_chain_and_verify(Events, Genesis, Key),
+    walk_chain_and_verify(Events, Genesis, verify_ctx(StoreId, StreamId, Key)),
     ok.
 
 %% First append on each stream creates the watermark. The watermark
@@ -225,14 +229,14 @@ different_keys_produce_different_macs(Config) ->
     %% Append with Key1
     load_key_directly(StoreId, Key1),
     {ok, 0} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, [EventPayload]),
-    {ok, [#event{mac = {_, Mac1}}]} =
+    {ok, [#event{mac = {v2, _, Mac1}}]} =
         reckon_db_streams:read(StoreId, StreamId, 0, 10, forward),
 
     %% Reload with Key2 and append to a different stream so we can compare.
     Stream2 = reckon_db_test_helpers:sid(<<"stream-mac-vs-2">>),
     load_key_directly(StoreId, Key2),
     {ok, 0} = reckon_db_streams:append(StoreId, Stream2, ?NO_STREAM, [EventPayload]),
-    {ok, [#event{mac = {_, Mac2}}]} =
+    {ok, [#event{mac = {v2, _, Mac2}}]} =
         reckon_db_streams:read(StoreId, Stream2, 0, 10, forward),
 
     ?assertNotEqual(Mac1, Mac2),
@@ -257,10 +261,17 @@ load_key_directly(StoreId, Key) when is_binary(Key), byte_size(Key) =:= 32 ->
     persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
     ok.
 
-walk_chain_and_verify([], _PrevTip, _Key) ->
+walk_chain_and_verify([], _PrevTip, _Ctx) ->
     ok;
-walk_chain_and_verify([Event | Rest], PrevTip, Key) ->
+walk_chain_and_verify([Event | Rest], PrevTip, Ctx) ->
     ?assertEqual(ok,
-        reckon_gater_integrity:verify_event(Event, PrevTip, Key)),
+        reckon_gater_integrity:verify_event(Event, PrevTip, maps:get(key, Ctx),
+                                            Ctx)),
     NextTip = reckon_gater_integrity:compute_chain_hash(Event, PrevTip),
-    walk_chain_and_verify(Rest, NextTip, Key).
+    walk_chain_and_verify(Rest, NextTip, Ctx).
+
+%% @private The context a scheme-2 verifier needs for this stream.
+verify_ctx(StoreId, StreamId, Key) ->
+    {ok, #{life := Life, v2_from := V2From}} =
+        reckon_db_chain_watermark:binding(StoreId, StreamId),
+    #{key => Key, store_id => StoreId, life => Life, v2_from => V2From}.

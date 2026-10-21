@@ -41,6 +41,8 @@
 
 -export([
     record/4,
+    boundary_record/4,
+    boundary_path/1,
     lookup/2,
     verify/3,
     delete/2
@@ -125,6 +127,22 @@ record_if_deepest(StoreId, StreamId, Version, PrevHash) ->
         _ ->
             write(StoreId, StreamId, Version, PrevHash)
     end.
+
+%% @doc The record a boundary write stores, MAC'd and ready to be put inside
+%% a caller's transaction (the migration mints a boundary where a snapshot
+%% authenticated a cut that no scavenge recorded).
+-spec boundary_record(atom(), binary(), non_neg_integer(), binary()) -> map().
+boundary_record(StoreId, StreamId, Version, PrevHash) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    true = is_binary(Key),
+    #{version => Version,
+      prev_hash => PrevHash,
+      mac => mac(Key, StreamId, Version, PrevHash)}.
+
+%% @doc The tree path a stream's boundary lives at.
+-spec boundary_path(binary()) -> [atom() | binary()].
+boundary_path(StreamId) ->
+    ?BOUNDARY_PATH ++ [StreamId].
 
 %% @private
 -spec write(atom(), binary(), non_neg_integer(), binary())

@@ -770,41 +770,53 @@ verify_catchup_batch(StoreId, Events) ->
             ok;
         true ->
             Key = reckon_db_integrity_key:get(StoreId),
-            verify_each_event_mac(Events, Key)
+            verify_each_event_mac(Events, StoreId, Key)
     end.
 
-verify_each_event_mac([], _Key) ->
+verify_each_event_mac([], _StoreId, _Key) ->
     ok;
-verify_each_event_mac([Event | Rest], Key) ->
-    case verify_one_event_mac(Event, Key) of
-        ok -> verify_each_event_mac(Rest, Key);
+verify_each_event_mac([Event | Rest], StoreId, Key) ->
+    case verify_one_event_mac(Event, StoreId, Key) of
+        ok -> verify_each_event_mac(Rest, StoreId, Key);
         {error, _} = Err -> Err
     end.
 
 %% Legacy events have no MAC field; pass through.
 %% Integrity-bearing events must verify; otherwise short-circuit.
-verify_one_event_mac(#event{mac = undefined}, _Key) ->
+verify_one_event_mac(#event{mac = undefined}, _StoreId, _Key) ->
     ok;
-verify_one_event_mac(#event{mac = {_KeyId, _}} = Event, Key) ->
-    %% MAC-only check (no chain). reckon_gater_integrity:verify_event/3
-    %% requires both a chain tip and a key; we only have a key here.
-    %% Roll the MAC-only piece inline to avoid forcing the gater
-    %% module to expose a separate verifier surface.
-    Stripped = Event#event{mac = undefined, signature = undefined},
-    Bytes = reckon_gater_canonical:encode_for_mac(event, Stripped),
-    Expected = crypto:mac(hmac, sha256, Key, Bytes),
-    {_, StoredMac} = Event#event.mac,
-    case crypto:hash_equals(StoredMac, Expected) of
-        true -> ok;
-        false ->
-            {error, {integrity_violation, #{
-                layer => storage,
-                stream_id => Event#event.stream_id,
-                version => Event#event.version,
-                kind => mac_mismatch,
-                context => #{detected_at => catchup_replay}
-            }}}
+verify_one_event_mac(#event{} = Event, StoreId, Key) ->
+    %% MAC-only check (no chain): the event's own prev_event_hash is the tip
+    %% the chain check is given, so only the MAC can fail here. The context
+    %% carries the store and life a scheme-2 MAC binds; a scheme-2 MAC with
+    %% no context is a violation in gater, which is what a stream without a
+    %% sealed watermark should be.
+    Ctx = catchup_mac_context(StoreId, Event#event.stream_id, Key),
+    case reckon_gater_integrity:verify_event(Event, peer_tip(Event), Key, Ctx) of
+        ok -> ok;
+        {integrity_violation, Violation} -> {error, wrap_catchup_violation(Violation)}
     end.
+
+%% @private
+peer_tip(#event{prev_event_hash = undefined}) ->
+    reckon_gater_integrity:genesis_prev_hash();
+peer_tip(#event{prev_event_hash = Prev}) ->
+    Prev.
+
+%% @private
+catchup_mac_context(StoreId, StreamId, Key) ->
+    Base = #{store_id => StoreId, key => Key},
+    case reckon_db_chain_watermark:binding(StoreId, StreamId) of
+        {ok, #{life := Life, v2_from := V2From}} ->
+            Base#{life => Life, v2_from => V2From};
+        {ok, undefined} ->
+            Base
+    end.
+
+%% @private
+wrap_catchup_violation(Violation) ->
+    {integrity_violation, Violation#{context =>
+                                     #{detected_at => catchup_replay}}}.
 
 %% @private Deliver a verified+filtered batch to the subscriber and continue.
 %% Offset advances by the RAW batch size (not the filtered count) so

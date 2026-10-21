@@ -9,115 +9,35 @@
 %% == Storage ==
 %%
 %% The watermark lives in Khepri under
-%% `[metadata, integrity, chain_start, StreamId]' (the macro
-%% `?INTEGRITY_CHAIN_START_PATH' from `reckon_db.hrl', plus the stream ID).
-%% The value is either a bare `non_neg_integer()', which is what releases
-%% before 5.12.0 wrote and which anybody who can write the tree can write,
-%% or a sealed record `#{version := V, mac := Mac}' authenticated under the
-%% store's integrity key.
+%% `[metadata, integrity, chain_start, StreamId]' and the stream's life token
+%% under `[metadata, integrity, stream_life, StreamId]'. A sealed watermark is
+%% `#{version := V, v2_from := N, life := Life, mac := Mac}', MAC'd under the
+%% store's integrity key over the store id, the stream id, the life token,
+%% the version and `v2_from'. A release before 5.12.0 wrote a bare integer.
 %%
-%% == Lazy enablement ==
+%% The life token is a random value minted with the watermark and deleted
+%% with the stream. It is what makes a sealed record from an earlier life of
+%% the same stream id stop verifying after the stream is deleted and
+%% re-created, and it is covered by every scheme-2 event MAC as well.
 %%
-%% The watermark is created on the first integrity-bearing append to a
-%% stream. There is no explicit "enable integrity on this stream"
-%% operation - the act of appending under a store with integrity
-%% enabled implicitly sets the watermark if it does not already exist.
-%%
-%% For a fresh stream (never had any events) this means the watermark
-%% is set to 0 when the first event is written.
-%%
-%% For an existing legacy stream (events 0..N-1 already stored) being
-%% appended to for the first time AFTER integrity was enabled on the
-%% store, the watermark is set to N - the version that the new event
-%% is about to take. The first N legacy events stay legacy.
+%% `v2_from' is the version from which this stream's events are MAC'd under
+%% scheme 2 (store- and life-bound). A scheme-1 MAC at or above it is refused,
+%% so an old-scheme writer on the same key cannot put a store-blind MAC above
+%% the point where the stream began writing scheme 2.
 %%
 %% == Read-side use ==
 %%
-%% The read path consults the watermark to decide whether to verify
-%% integrity on an event. This module's responsibility ends at
-%% read/write of the watermark itself; verification logic lives in
+%% `lookup/2' answers the shape; `binding/2' answers the recorded life and
+%% `v2_from' that the read and write paths need. Verification itself lives in
 %% gater's integrity module and in `reckon_db_streams'.
 %%
 %% == The migration ==
 %%
-%% Releases before 5.12.0 wrote a bare integer. 5.12.0 refuses a bare
-%% integer, because anybody who can write the tree can write one, so an
-%% upgraded store seals what the earlier version wrote, once, at store
-%% start (`migrate/1') - before the store serves anything, on a store with
-%% an integrity key and no authenticated marker.
-%%
-%% The scan runs outside the tree. Every decision it makes is then
-%% committed by ONE `khepri:transaction': each seal compare-and-swaps the
-%% value the scan saw, and the authenticated done marker is written with
-%% them. There is no in-progress record, so a crash leaves either a
-%% migrated store or an untouched one - and nothing with a constant MAC
-%% that a writer could replay to make the migration seal a claim nobody
-%% made. A value that changed between the scan and the transaction aborts
-%% the whole migration, and the next start runs it again.
-%%
-%% What the scan decides, per stream:
-%%
-%% <ul>
-%% <li>Already sealed: nothing to do.</li>
-%% <li>Bare watermark at the version the chain begins: seal it. That is
-%% the value the earlier version wrote, and nothing below it carries a
-%% hash.</li>
-%% <li>Bare watermark over a chain-bearing event, or over a chain-bearing
-%% stream at any version other than where its chain begins: refuse. A
-%% genuine watermark sits exactly where integrity began, so one that is
-%% anywhere else was moved to excuse events whose chain somebody
-%% removed.</li>
-%% <li>No watermark and no chain-bearing event: seal at `newest + 1'. The
-%% whole stream predates integrity, or the earlier version crashed between
-%% minting the watermark and appending the event that would have carried a
-%% chain.</li>
-%% <li>No watermark and a chain-bearing event: this is the state the
-%% earlier version cannot produce - it minted the watermark before it
-%% stamped a chain - so it is evidence that a watermark was deleted. How
-%% the stream is treated depends on whether the store shows that evidence
-%% anywhere (see below).</li>
-%% </ul>
-%%
-%% == Deletion evidence ==
-%%
-%% A stream that carries a chain and has no authenticated watermark at the
-%% version its chain begins is evidence that a watermark was deleted.
-%%
-%% Once one stream shows that evidence, the store is telling the truth
-%% about nothing: for every OTHER stream, "no watermark over chain-less
-%% events" is no longer the benign shape it is on an untouched store, it is
-%% a stream whose watermark was deleted and whose events were stripped.
-%% Sealing those would vouch for exactly the data the attacker rewrote. So:
-%%
-%% <ul>
-%% <li>A chain-bearing stream with no watermark is rebuilt from its own
-%% evidence: the lowest event whose `prev_event_hash' is the genesis value
-%% AND whose MAC verifies is where the store began that chain - nothing
-%% else can carry a genesis predecessor with a valid MAC - and the
-%% watermark is sealed there. If no such event survives (the genesis event
-%% itself was stripped or deleted), that stream is refused.</li>
-%% <li>A chain-less stream with a missing or bare watermark is refused and
-%% named. `migrate(StoreId, #{accept_missing => [StreamId]})' is the
-%% operator act that vouches for the named streams and only those; it
-%% reconstructs the same way and cannot excuse a hash-less event at or
-%% above the chain start.</li>
-%% </ul>
-%%
-%% On a store with no such evidence everything is sealed as above, and an
-%% interrupted upgrade costs nothing: nothing was written.
-%%
-%% == The node-local anchor ==
-%%
-%% Sealed watermarks and the marker are all tree nodes, so a writer with
-%% tree access can delete every one of them and leave a store that looks
-%% like it was never migrated. When the store is given a `data_dir', the
-%% migration also writes `<data_dir>/integrity_migration.done', an HMAC over
-%% the store id, and any later start that verifies the marker but finds no
-%% anchor writes one too, so every node in a cluster ends up with one. A
-%% start that finds the anchor and no verified marker reports a violation
-%% and seals nothing. What that does not cover: a data directory that is
-%% wiped, and a node that never held the store. Both are named in the
-%% threat model rather than hidden - see reckon-db-org/reckon-db#18.
+%% See the threat model, reckon-db-org/reckon-db#18. In short: the scan reads
+%% every stream outside the tree; one Khepri transaction compare-and-swaps
+%% each watermark it seals against the raw value the scan saw, writes the
+%% life token and a scavenge boundary where one is needed, and writes the
+%% authenticated done marker with them. There is no in-progress record.
 %% @end
 -module(reckon_db_chain_watermark).
 
@@ -126,20 +46,19 @@
 
 -export([
     lookup/2,
+    binding/2,
+    life/2,
     path/1,
+    life_path/1,
     set_if_absent/3,
     delete/2,
-    seal/2,
-    seal_all/1,
     migrate/1,
     migrate/2
 ]).
 
--export_type([watermark/0]).
+-export_type([watermark/0, binding/0]).
 
-%% Events read per page while the migration scans a stream. The scan is one
-%% pass over each stream at boot, and this is what keeps it from reading a
-%% whole stream into memory in one call.
+%% Events read per page while the migration scans a stream.
 -define(SCAN_PAGE, 500).
 
 %% The node-local anchor, beside the store's data directory.
@@ -147,98 +66,120 @@
 -define(ANCHOR_VERSION, 1).
 
 %% What lookup/2 answers about a stream's chain start.
-%%
-%% `unsealed' is the shape a store written before the watermark was
-%% authenticated has: a bare integer, which anybody who can write the tree can
-%% set. It is not trusted to make an event legacy.
 -type watermark() :: {sealed, non_neg_integer()} |
-                     {unsealed, non_neg_integer()} |
+                     {unsealed, term()} |
                      undefined.
+
+%% What binding/2 answers: everything a verifier needs to check this
+%% stream's scheme-2 MACs.
+-type binding() :: #{version := non_neg_integer(),
+                     v2_from := non_neg_integer(),
+                     life := binary()}.
 
 %% One stream as the migration scan found it.
 -type scan() :: #{store_id := atom(),
                   stream_id := binary(),
                   watermark := watermark(),
+                  raw := term(),
+                  life := binary() | undefined,
                   newest := integer(),
                   chain_start := {ok, non_neg_integer()} | none,
                   genesis := {ok, non_neg_integer()} | none,
-                  boundary := {ok, non_neg_integer()} | none,
+                  cut := {ok, non_neg_integer()} | none,
                   error => term()}.
 
 %% A decision the scan made, ready to commit.
--type plan() :: {seal, binary(), non_neg_integer(), term(), map()} |
-                {refuse, binary(), term()} |
-                skip.
+-type plan() :: #{kind := seal,
+                  stream_id := binary(),
+                  version := non_neg_integer(),
+                  expected := term(),
+                  writes := [{[atom() | binary()], term()}]} |
+                #{kind := refuse, stream_id := binary(), reason := term()} |
+                #{kind := skip}.
 
 %%====================================================================
 %% Public API
 %%====================================================================
 
 %% @doc Read the chain-start version for a stream.
-%%
-%% Returns the version at which integrity began for the stream, or
-%% 'undefined' if no watermark has been recorded (i.e., the stream
-%% has never had an integrity-bearing append).
--spec lookup(StoreId :: atom(), StreamId :: binary()) ->
-    {ok, watermark()}.
+-spec lookup(StoreId :: atom(), StreamId :: binary()) -> {ok, watermark()}.
 lookup(StoreId, StreamId) ->
     case khepri:get(StoreId, path(StreamId)) of
-        {ok, #{version := Version, mac := Mac}} when is_integer(Version) ->
-            {ok, sealed_shape(StoreId, StreamId, Version, Mac)};
+        {ok, #{version := Version} = Record} ->
+            {ok, sealed_or_bare(StoreId, StreamId, Version, Record)};
         {ok, Version} when is_integer(Version), Version >= 0 ->
-            %% The pre-authentication shape. Reported as what it is.
             {ok, {unsealed, Version}};
+        {ok, Other} ->
+            {ok, {unsealed, Other}};
         _ ->
             {ok, undefined}
     end.
 
 %% @private
--spec sealed_shape(atom(), binary(), non_neg_integer(), term()) ->
-    {sealed, non_neg_integer()} | {unsealed, non_neg_integer()}.
-sealed_shape(StoreId, StreamId, Version, Mac) ->
-    case seals(StoreId, StreamId, Version, Mac) of
+sealed_or_bare(StoreId, StreamId, Version, #{mac := Mac} = Record)
+        when is_integer(Version), is_binary(Mac) ->
+    case seal_verifies(StoreId, StreamId, Record) of
         true -> {sealed, Version};
-        false -> {unsealed, Version}
+        false -> {unsealed, Record}
+    end;
+sealed_or_bare(_StoreId, _StreamId, _Version, Other) ->
+    {unsealed, Other}.
+
+%% @doc The life token, `v2_from' and version of a stream's sealed
+%% watermark, or `undefined' when the stream has none the store can vouch
+%% for. This is what a verifier needs; `lookup/2' is the shape.
+-spec binding(atom(), binary()) -> {ok, binding() | undefined}.
+binding(StoreId, StreamId) ->
+    case khepri:get(StoreId, path(StreamId)) of
+        {ok, #{version := Version, v2_from := V2From, life := Life} = Record}
+                when is_integer(Version), is_integer(V2From),
+                     is_binary(Life) ->
+            binding_or_undefined(StoreId, StreamId,
+                                 #{version => Version, v2_from => V2From,
+                                   life => Life}, Record);
+        _ ->
+            {ok, undefined}
     end.
+
+%% @private
+binding_or_undefined(StoreId, StreamId, Binding, Record) ->
+    case seal_verifies(StoreId, StreamId, Record) of
+        true -> {ok, Binding};
+        false -> {ok, undefined}
+    end.
+
+%% @doc A stream's life token, or `undefined'.
+-spec life(atom(), binary()) -> {ok, binary() | undefined}.
+life(StoreId, StreamId) ->
+    case khepri:get(StoreId, life_path(StreamId)) of
+        {ok, Life} when is_binary(Life) -> {ok, Life};
+        _ -> {ok, undefined}
+    end.
+
+%% @doc The tree path a stream's watermark lives at.
+-spec path(binary()) -> [atom() | binary()].
+path(StreamId) ->
+    ?INTEGRITY_CHAIN_START_PATH ++ [StreamId].
+
+%% @doc The tree path a stream's life token lives at.
+-spec life_path(binary()) -> [atom() | binary()].
+life_path(StreamId) ->
+    ?INTEGRITY_STREAM_LIFE_PATH ++ [StreamId].
 
 %% @doc Read or mint a stream's chain-start watermark for the append that is
 %% about to run at `Version'.
 %%
-%% Returns the version the store vouches integrity begins at - either the one
-%% it minted for this brand new stream, or the one already recorded.
-%%
-%% This function intentionally tolerates write-write races: multiple
-%% writers attempting to set the same watermark all converge on
-%% the same outcome, because the writer's "next version about to write"
-%% is itself serialized by reckon-db's per-stream append ordering.
-%% If two concurrent writers somehow both reach this code path with
-%% the same NextVersion, the watermark ends up equal to NextVersion
-%% regardless of who won.
-%%
-%% == When it mints, and when it refuses ==
-%%
-%% Only for a NEW stream, at version 0. That is the one case where the value
-%% is not a claim about existing data: the stream has no events, so nothing
-%% is being excused by it.
-%%
-%% An existing stream with no watermark is refused with
-%% `{chain_start_missing, StreamId}'. It is not minted, because minting one
-%% would vouch for a chain start the store never chose: delete a stream's
-%% watermark, append once, and the next read of that stream would come back
-%% clean no matter what had been rewritten underneath. A stream that predates
-%% integrity gets its watermark from the migration at store start, which is
-%% the only place the value can be decided against the stream's contents.
-%%
-%% An UNSEALED watermark is refused the same way, as
-%% `{chain_start_unauthenticated, Value}': sealing is the migration's job,
-%% and an append that sealed a bare integer would authenticate whatever is
-%% written there.
+%% Mints only for a NEW stream, at version 0: that is the one case where the
+%% value is not a claim about existing data. An existing stream with no
+%% watermark is refused with `{chain_start_missing, StreamId}', and an
+%% unauthenticated one with `{chain_start_unauthenticated, Value}'. Only the
+%% migration seals an existing stream's chain start.
 -spec set_if_absent(
     StoreId :: atom(),
     StreamId :: binary(),
     Version :: non_neg_integer()
 ) -> {ok, RecordedVersion :: non_neg_integer()}
-   | {error, {chain_start_unauthenticated, non_neg_integer()}
+   | {error, {chain_start_unauthenticated, term()}
             | {chain_start_missing, binary()}}.
 set_if_absent(StoreId, StreamId, Version)
         when is_integer(Version), Version >= 0 ->
@@ -250,62 +191,33 @@ set_if_absent(StoreId, StreamId, Version)
         {ok, undefined} when Version =:= 0 ->
             mint_watermark(StoreId, StreamId);
         {ok, undefined} ->
-            %% An existing stream has a watermark, or the migration gave it
-            %% one. No watermark here means somebody removed it.
             {error, {chain_start_missing, StreamId}}
     end.
 
-%% @private The first append of a new stream, the only place a watermark is
-%% minted at runtime.
+%% @private The first append of a new stream: mint its life token and its
+%% watermark at version 0, under scheme 2 from the first event.
 mint_watermark(StoreId, StreamId) ->
-    Path = ?INTEGRITY_CHAIN_START_PATH ++ [StreamId],
-    ok = khepri:put(StoreId, Path, sealed_record(StoreId, StreamId, 0)),
-    %% Re-read to handle the rare race where two writers both saw
-    %% 'undefined' and both wrote. Whoever's write Khepri/Ra serialised
-    %% last wins; we return that value.
+    Life = new_life(),
+    ok = khepri:put(StoreId, life_path(StreamId), Life),
+    ok = khepri:put(StoreId, path(StreamId),
+                    sealed_record(StoreId, StreamId, Life, 0, 0)),
     {ok, Recorded} = lookup(StoreId, StreamId),
     recorded_or_version(Recorded, 0).
 
-%% @private Prefer the re-read value; fall back to our own write (defensive;
-%% lookup should not be undefined immediately after a put).
+%% @private
 recorded_or_version(undefined, Version) -> {ok, Version};
 recorded_or_version({sealed, Recorded}, _Version) -> {ok, Recorded};
 recorded_or_version({unsealed, Recorded}, _Version) ->
-    %% A concurrent writer put a bare integer between our write and our
-    %% read: it is not ours to seal, and it is not to be believed.
     {error, {chain_start_unauthenticated, Recorded}}.
 
-%% @doc The upgrade, run at store start: seal the watermarks an earlier
-%% version wrote as bare integers.
-%%
-%% An earlier version stored a watermark as a plain integer. This version
-%% refuses one for the good reason that anybody who can write the tree can
-%% write an integer, but refusing it means a store upgraded in place stops
-%% serving: every append to those streams fails and every read is a
-%% violation until somebody runs the sealing step by hand. Downtime that
-%% waits for a human act is not an acceptable shape for a security fix, so
-%% the sealing happens by itself, once, here.
-%%
-%% Never fails the store start: a store that cannot be migrated stays
-%% fail-closed on the affected streams, reports them, and retries on its
-%% next boot.
+%% @doc The upgrade, run at store start.
 -spec migrate(atom()) -> ok.
 migrate(StoreId) ->
     _ = migrate(StoreId, #{}),
     ok.
 
-%% @doc The upgrade with options.
-%%
-%% Options:
-%% <ul>
-%% <li>`data_dir' - where to write the node-local anchor. Store start passes
-%% it; without it no anchor is written or read.</li>
-%% <li>`accept_missing' - the operator act. A list of stream ids the human
-%% running it vouches for. It seals only those streams, and only when the
-%% store's migration already ran; see `accept_missing/3'.</li>
-%% <li>`operator' - an optional name recorded in the log line, so the log
-%% says who vouched for them.</li>
-%% </ul>
+%% @doc The upgrade with options: `data_dir' (the anchor), `accept_missing'
+%% (the operator act) and `operator' (a name recorded in the log).
 -spec migrate(atom(), map()) -> ok | {ok, non_neg_integer()} | {error, term()}.
 migrate(StoreId, Opts) when is_map(Opts) ->
     case maps:find(accept_missing, Opts) of
@@ -323,53 +235,12 @@ migrate_at_start(StoreId, Opts) ->
         true -> migrate_store(StoreId, anchor_path(Opts))
     end.
 
-%% @doc Run the watermark migration, as store start does.
-%%
-%% Returns how many watermarks it sealed, zero on a store already migrated,
-%% and `{error, migration_marker_missing}' on a store whose watermarks are
-%% sealed but whose marker is absent or does not verify. It never re-seals on
-%% that anomaly: re-sealing is precisely what a writer who stripped a stream
-%% and deleted the marker would want.
--spec seal_all(atom()) -> {ok, non_neg_integer()} | {error, term()}.
-seal_all(StoreId) ->
-    migrate_at_start(StoreId, #{}).
-
-%% @doc Seal one stream's bare-integer watermark.
-%%
-%% Rarely needed: `migrate/1' runs this shape automatically at store start.
-%% It refuses once that migration has run, because a bare integer on a
-%% migrated store is not a leftover from an earlier version, it is a forgery,
-%% and this is exactly the call that would bless it.
--spec seal(atom(), binary()) -> ok | {error, term()}.
-seal(StoreId, StreamId) ->
-    case migration_state(StoreId, undefined) of
-        migrated ->
-            {error, already_migrated};
-        unauthorised ->
-            {error, migration_marker_missing};
-        not_migrated ->
-            seal_one(StoreId, StreamId)
-    end.
-
-%% @private
-seal_one(StoreId, StreamId) ->
-    case plan_for_one(StoreId, StreamId) of
-        {seal, _, _, _, _} = Seal ->
-            commit_seals(StoreId, [Seal]);
-        {refuse, _, _} ->
-            ok;
-        skip ->
-            ok
-    end.
-
-%% @private Plan a single stream outside the migration, for seal/2.
-plan_for_one(StoreId, StreamId) ->
-    case scan_stream(StoreId, StreamId) of
-        #{error := Reason} ->
-            {refuse, StreamId, {unreadable, Reason}};
-        Scan ->
-            plan_stream(Scan, deletion_evidence([Scan]))
-    end.
+%% @doc Delete a stream's integrity metadata (watermark and life token).
+-spec delete(StoreId :: atom(), StreamId :: binary()) -> ok.
+delete(StoreId, StreamId) ->
+    _ = khepri:delete(StoreId, path(StreamId)),
+    _ = khepri:delete(StoreId, life_path(StreamId)),
+    ok.
 
 %%====================================================================
 %% The migration
@@ -382,22 +253,13 @@ migrate_store(StoreId, AnchorPath) ->
             _ = ensure_anchor(StoreId, AnchorPath),
             {ok, 0};
         unauthorised ->
-            migration_violation(StoreId, AnchorPath),
+            migration_violation(StoreId),
             {error, migration_marker_missing};
         not_migrated ->
             run_migration(StoreId, AnchorPath)
     end.
 
-%% @private What the store says about having been migrated.
-%%
-%% An authenticated marker is the whole answer. Without one, a store that has
-%% already been migrated says so in two other places: the node-local anchor,
-%% and its sealed watermarks. Either is a refusal to migrate again, not an
-%% invitation to seal whatever bare integers are lying around: re-running
-%% would let a writer strip a stream, delete the marker and be sealed back to
-%% a clean read.
--spec migration_state(atom(), file:filename_all() | undefined) ->
-    migrated | unauthorised | not_migrated.
+%% @private
 migration_state(StoreId, AnchorPath) ->
     case read_marker(StoreId) of
         {ok, _Refused} -> migrated;
@@ -440,12 +302,12 @@ marker_matches(StoreId, Version, Refused, Mac) ->
 marker_mac_verifies(StoreId, Version, Refused, Mac) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) ->
-            crypto:hash_equals(Mac, migration_mac(StoreId, Version, Refused));
+            crypto:hash_equals(Mac, migration_mac(StoreId, Key, Version, Refused));
         _ ->
             false
     end.
 
-%% @private Whether any watermark in the store verifies in the sealed shape.
+%% @private
 any_sealed(StoreId) ->
     Path = ?INTEGRITY_CHAIN_START_PATH ++ [?KHEPRI_WILDCARD_STAR],
     case khepri:get_many(StoreId, Path) of
@@ -457,15 +319,14 @@ any_sealed(StoreId) ->
 
 %% @private
 any_sealed_entry(StoreId, Entries) ->
-    lists:any(fun({Path, Value}) -> watermark_verifies(StoreId, Path, Value) end,
+    lists:any(fun({Path, _Value}) -> sealed_of(StoreId, lists:last(Path)) end,
               Entries).
 
 %% @private
-watermark_verifies(StoreId, Path, Value) ->
-    StreamId = lists:last(Path),
-    case unsealed_version(StoreId, StreamId, Value) of
-        undefined -> true;
-        _ -> false
+sealed_of(StoreId, StreamId) ->
+    case lookup(StoreId, StreamId) of
+        {ok, {sealed, _}} -> true;
+        {ok, _} -> false
     end.
 
 %% @private
@@ -481,140 +342,184 @@ run_migration(StoreId, AnchorPath) ->
 %% @private
 commit_migration(StoreId, StreamIds, AnchorPath) ->
     Scans = [scan_stream(StoreId, StreamId) || StreamId <- StreamIds],
-    Evidence = deletion_evidence(Scans),
-    Plans = [plan_stream(Scan, Evidence) || Scan <- Scans],
-    Refused = [{StreamId, Why} || {refuse, StreamId, Why} <- Plans],
-    case commit_plans(StoreId, Plans, Refused) of
-        committed ->
+    Evidence = deletion_evidence(StoreId, Scans),
+    Plans = [plan_stream(StoreId, Scan, Evidence) || Scan <- Scans],
+    case commit_plans(StoreId, Plans) of
+        {ok, committed} ->
             _ = ensure_anchor(StoreId, AnchorPath),
-            report_migration(StoreId, length(StreamIds), Plans, Evidence),
-            {ok, length([S || {seal, _, _, _, _} = S <- Plans])};
+            report_migration(StoreId, StreamIds, Plans, Evidence),
+            {ok, committed_seals(Plans)};
+        {ok, already_migrated} ->
+            cluster_loser(StoreId, AnchorPath);
+        {error, {marker_present, _}} ->
+            cluster_loser(StoreId, AnchorPath);
         {error, Reason} ->
             migration_failed(StoreId, Reason),
             {error, Reason}
     end.
 
-%% @private Whether any stream shows that a watermark was deleted: it carries
-%% a chain, and it has no authenticated watermark at the version its chain
-%% begins. Nothing else in the tree can put a stream in that state, because
-%% the earlier version minted the watermark before it stamped the chain.
--spec deletion_evidence([scan()]) -> boolean().
-deletion_evidence(Scans) ->
+%% @private The store already carries a marker: after verifying it, this
+%% node writes its own anchor, so every node in a cluster ends up with one.
+cluster_loser(StoreId, AnchorPath) ->
+    case read_marker(StoreId) of
+        {ok, _Refused} ->
+            _ = ensure_anchor(StoreId, AnchorPath),
+            {ok, 0};
+        none ->
+            logger:error("integrity migration on store ~p found a marker that "
+                         "does not verify; sealing nothing", [StoreId]),
+            telemetry:execute([reckon, db, integrity, migration_marker_unverified],
+                              #{system_time => erlang:system_time(millisecond)},
+                              #{store_id => StoreId}),
+            {error, migration_marker_unverified}
+    end.
+
+%% @private
+committed_seals(Plans) ->
+    length([P || #{kind := seal} = P <- Plans]).
+
+%% @private A stream that shows a watermark was deleted: it carries a chain,
+%% and it has no authenticated watermark at the version its chain begins -
+%% unless an authenticated cut explains the missing chain start.
+-spec deletion_evidence(atom(), [scan()]) -> boolean().
+deletion_evidence(_StoreId, Scans) ->
     lists:any(fun shows_deletion/1, Scans).
 
 %% @private
-shows_deletion(#{chain_start := {ok, ChainStart}} = Scan) ->
-    case maps:get(watermark, Scan) of
-        {sealed, _} -> false;
-        {unsealed, ChainStart} -> false;
-        _ -> true
-    end;
+shows_deletion(#{chain_start := {ok, ChainStart}, watermark := Watermark,
+                 cut := Cut} = Scan) ->
+    _ = Scan,
+    not sealed_at(Watermark, ChainStart) andalso Cut =:= none;
 shows_deletion(_Scan) ->
     false.
 
 %% @private
--spec plan_stream(scan(), boolean()) -> plan().
-plan_stream(#{error := Reason} = Scan, _Evidence) ->
-    {refuse, maps:get(stream_id, Scan), {unreadable, Reason}};
-plan_stream(#{watermark := {sealed, _}}, _Evidence) ->
-    skip;
-plan_stream(#{chain_start := none} = Scan, Evidence) ->
-    plan_chainless(Scan, Evidence);
-plan_stream(#{chain_start := {ok, ChainStart}} = Scan, Evidence) ->
-    plan_chain_bearing(Scan, ChainStart, Evidence).
-
-%% @private A stream that carries no chain at all. Its watermark cannot be
-%% checked against anything, so it is sealed on the shape alone - unless the
-%% store shows that watermarks have been deleted, in which case a chain-less
-%% stream with no authenticated watermark is refused rather than vouched for.
-plan_chainless(#{watermark := Watermark, newest := Newest} = Scan, Evidence) ->
-    StreamId = maps:get(stream_id, Scan),
-    case {Watermark, Evidence} of
-        {undefined, true} -> {refuse, StreamId, needs_accept_missing};
-        {{unsealed, _}, true} -> {refuse, StreamId, needs_accept_missing};
-        {undefined, false} -> seal_plan(Scan, Newest + 1, undefined);
-        {{unsealed, Version}, false} -> plan_bare_chainless(Scan, Version, Newest);
-        {_, _} -> skip
-    end.
-
-%% @private A bare watermark over a chain-less stream. At or below `newest +
-%% 1' is the shape the earlier version wrote. ABOVE it is refused: the one
-%% way it arises honestly needs a crash between the earlier version's mint
-%% and its append, and then a scavenge, and a chain-less tail records no
-%% MAC'd boundary that could account for the gap - so a bare number above
-%% the stream is a claim nobody can check, and the operator act is the way
-%% back for the honest store that does hit it.
-plan_bare_chainless(Scan, Version, Newest) when Version =< Newest + 1 ->
-    seal_plan(Scan, Version, Version);
-plan_bare_chainless(Scan, Version, _Newest) ->
-    {refuse, maps:get(stream_id, Scan), {above_newest, Version}}.
-
-%% @private A stream that carries a chain is sealed at the version the store
-%% can PROVE the chain began, never at the value it happens to hold. The proof
-%% is the event that only a store can write at a chain start: its predecessor
-%% is the genesis value and its MAC verifies under the store's key. A bare
-%% watermark is not proof of anything - delete the chain fields off the first
-%% three chain-bearing events and move the bare watermark up three, and the
-%% new "first chain-bearing event" sits at a version nobody can account for,
-%% which is why sealing at whatever value is on the node is the attack.
-plan_chain_bearing(Scan, ChainStart, _Evidence) ->
-    case maps:get(genesis, Scan) of
-        {ok, ChainStart} ->
-            seal_plan(Scan, ChainStart, raw_watermark(Scan));
-        {ok, Other} ->
-            {refuse, maps:get(stream_id, Scan),
-             {genesis_not_at_chain_start, Other, ChainStart}};
-        none ->
-            plan_unproven_chain_start(Scan, ChainStart)
-    end.
-
-%% @private The chain-start event does not verify: either somebody stripped
-%% it, or a scavenge removed it. A verified scavenge boundary is the one
-%% thing that can tell those apart - only a scavenge can write one - and it
-%% answers only when it sits exactly where the surviving chain begins, which
-%% is the shape a scavenge leaves when it cuts through the chain start. Any
-%% other version is refused: with the marker gone, a stream the store cannot
-%% account for is exactly what an attacker who stripped a prefix leaves.
-plan_unproven_chain_start(#{boundary := {ok, ChainStart}} = Scan, ChainStart) ->
-    seal_plan(Scan, ChainStart, raw_watermark(Scan));
-plan_unproven_chain_start(Scan, ChainStart) ->
-    {refuse, maps:get(stream_id, Scan), {chain_start_unproven, ChainStart}}.
+sealed_at({sealed, Version}, Version) -> true;
+sealed_at(_Watermark, _ChainStart) -> false.
 
 %% @private
-seal_plan(Scan, Version, Expected) ->
+-spec plan_stream(atom(), scan(), boolean()) -> plan().
+plan_stream(_StoreId, #{error := Reason} = Scan, _Evidence) ->
+    refuse(Scan, {unreadable, Reason});
+plan_stream(_StoreId, #{watermark := {sealed, _}}, _Evidence) ->
+    #{kind => skip};
+plan_stream(StoreId, #{chain_start := none} = Scan, Evidence) ->
+    plan_chainless(StoreId, Scan, Evidence);
+plan_stream(_StoreId, #{chain_start := {ok, ChainStart}} = Scan, _Evidence) ->
+    plan_chain_bearing(Scan, ChainStart).
+
+%% @private A stream that carries no chain at all.
+plan_chainless(_StoreId, #{watermark := undefined, newest := Newest} = Scan, false) ->
+    seal_at(Scan, Newest + 1);
+plan_chainless(_StoreId, #{watermark := {unsealed, Watermark},
+                           newest := Newest} = Scan, false) ->
+    plan_bare_chainless(Scan, Watermark, Newest);
+plan_chainless(_StoreId, Scan, true) ->
+    refuse(Scan, needs_accept_missing).
+
+%% @private A bare watermark over a chain-less stream: at or below newest + 1
+%% is the shape the earlier version wrote; above it is a claim nothing can
+%% check.
+plan_bare_chainless(Scan, Watermark, Newest) when is_integer(Watermark),
+                                                  Watermark =< Newest + 1 ->
+    seal_at(Scan, Watermark);
+plan_bare_chainless(Scan, Watermark, _Newest) ->
+    refuse(Scan, {above_newest, Watermark}).
+
+%% @private A stream that carries a chain is sealed at a version the store
+%% can PROVE: the event at the chain start is the genesis-prev event whose
+%% MAC verifies, or an authenticated cut explains why it is gone.
+plan_chain_bearing(Scan, ChainStart) ->
+    case maps:get(genesis, Scan) of
+        {ok, ChainStart} -> seal_at(Scan, ChainStart);
+        {ok, Other} -> refuse(Scan, {genesis_not_at_chain_start, Other, ChainStart});
+        none -> plan_unproven_chain_start(Scan, ChainStart)
+    end.
+
+%% @private
+plan_unproven_chain_start(#{cut := {ok, ChainStart}} = Scan, ChainStart) ->
+    seal_at(Scan, ChainStart);
+plan_unproven_chain_start(Scan, ChainStart) ->
+    refuse(Scan, {chain_start_unproven, ChainStart}).
+
+%% @private
+refuse(Scan, Reason) ->
+    #{kind => refuse, stream_id => maps:get(stream_id, Scan), reason => Reason}.
+
+%% @private Build a seal plan: the version, the raw value the CAS compares
+%% against, and the writes it carries (a life token when the stream has none,
+%% and a boundary where a cut needs recording).
+seal_at(Scan, Version) ->
     StoreId = maps:get(store_id, Scan),
     StreamId = maps:get(stream_id, Scan),
-    {seal, StreamId, Version, Expected, sealed_record(StoreId, StreamId, Version)}.
+    Life = plan_life(Scan),
+    V2From = maps:get(newest, Scan) + 1,
+    Seal = sealed_record(StoreId, StreamId, Life, Version, V2From),
+    Writes = [{life_path(StreamId), Life} | boundary_writes(StoreId, Scan)],
+    #{kind => seal, stream_id => StreamId, version => Version,
+      expected => maps:get(raw, Scan),
+      writes => Writes ++ [{path(StreamId), Seal}]}.
+
+%% @private
+plan_life(#{life := Life}) when is_binary(Life) -> Life;
+plan_life(_Scan) -> new_life().
+
+%% @private Where a cut was authenticated by something other than a boundary
+%% the store already holds, the migration mints the boundary in the same
+%% transaction, so later reads anchor at the cut.
+boundary_writes(StoreId, #{stream_id := StreamId, cut := {ok, ChainStart},
+                           chain_start := {ok, ChainStart}}) ->
+    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
+        {ok, Boundary} when is_map(Boundary) -> [];
+        _ -> boundary_write(StoreId, StreamId, ChainStart)
+    end;
+boundary_writes(_StoreId, _Scan) ->
+    [].
+
+%% @private
+boundary_write(StoreId, StreamId, ChainStart) ->
+    case carried_hash(StoreId, StreamId, ChainStart) of
+        undefined ->
+            [];
+        Carried ->
+            [{reckon_db_scavenge_boundary:boundary_path(StreamId),
+              reckon_db_scavenge_boundary:boundary_record(
+                StoreId, StreamId, ChainStart, Carried)}]
+    end.
+
+%% @private The hash the event at `Version' carries in its predecessor field.
+carried_hash(StoreId, StreamId, Version) ->
+    case reckon_db_streams:read(StoreId, StreamId, Version, 1, forward,
+                                #{verify => skip_all}) of
+        {ok, [#event{prev_event_hash = Prev}]} when is_binary(Prev) -> Prev;
+        _ -> undefined
+    end.
 
 %%====================================================================
 %% Committing
 %%====================================================================
 
-%% @private Commit every plan in one transaction: seals compare-and-swapped,
-%% marker written with them, refused streams named in its payload.
-commit_plans(StoreId, Plans, Refused) ->
-    Seals = [Seal || {seal, _, _, _, _} = Seal <- Plans],
-    Marker = marker_record(StoreId, [StreamId || {StreamId, _Why} <- Refused]),
+%% @private One transaction: every seal compare-and-swapped, the life tokens
+%% and boundaries written with them, and the marker.
+commit_plans(StoreId, Plans) ->
+    Seals = [P || #{kind := seal} = P <- Plans],
+    Refused = [maps:get(stream_id, P) || #{kind := refuse} = P <- Plans],
+    Marker = marker_record(StoreId, Refused),
     Fun = fun() -> migration_tx(Seals, Marker) end,
     case khepri:transaction(StoreId, Fun) of
-        {ok, committed} -> committed;
-        {ok, already_migrated} -> committed;
-        %% Khepri 0.17.x wraps a process_command error as {ok, Err} when Ra
-        %% is not ready yet (the same shape the DCB write path unwraps).
+        {ok, committed} -> {ok, committed};
+        {ok, already_migrated} -> {ok, already_migrated};
         {ok, {error, Reason}} -> {error, Reason};
         {error, Reason} -> {error, Reason}
     end.
 
-%% @private The migration transaction. Pure khepri_tx operations only:
-%% everything it writes was computed outside. It is the whole migration -
-%% either every seal and the marker land together, or the transaction aborts
-%% and the next start runs the migration again from scratch.
+%% @private
 migration_tx(Seals, Marker) ->
     case marker_present() of
         true ->
             already_migrated;
         false ->
-            lists:foreach(fun cas_seal/1, Seals),
+            lists:foreach(fun write_plan/1, Seals),
             ok = khepri_tx:put(?INTEGRITY_MIGRATION_PATH, Marker),
             committed
     end.
@@ -626,59 +531,41 @@ marker_present() ->
         _ -> false
     end.
 
-%% @private Seal one watermark only if it still holds the value the scan
-%% saw. Anything else means another writer (or another node's migration)
-%% moved it while this one was scanning, and sealing a claim nobody made is
-%% exactly what this refuses to do.
-cas_seal({seal, StreamId, _Version, Expected, Record}) ->
-    Path = ?INTEGRITY_CHAIN_START_PATH ++ [StreamId],
+%% @private Compare-and-swap on the RAW value the scan saw, then write the
+%% plan's other nodes. A value that moved aborts the whole migration.
+write_plan(#{stream_id := StreamId, expected := Expected, writes := Writes}) ->
+    Path = path(StreamId),
     case current_raw(Path) of
-        Expected ->
-            ok = khepri_tx:put(Path, Record);
-        Other ->
-            khepri_tx:abort({watermark_changed, StreamId, Expected, Other})
+        Expected -> write_nodes(Writes);
+        Other -> khepri_tx:abort({watermark_changed, StreamId, Expected, Other})
     end.
 
-%% @private What the path holds right now, with an absent node and a node
-%% with no data both reported as undefined - which is what the scan recorded
-%% for a stream it found no watermark on.
+%% @private
+write_nodes(Writes) ->
+    lists:foreach(fun({P, V}) -> ok = khepri_tx:put(P, V) end, Writes),
+    ok.
+
+%% @private
 current_raw(Path) ->
     case khepri_tx:get(Path) of
         {ok, Value} -> Value;
         _ -> undefined
     end.
 
-%% @private Seal without a marker, for seal/2. Same compare-and-swap, so a
-%% value that moved is refused rather than blessed.
-commit_seals(StoreId, Seals) ->
-    Fun = fun() -> tx_seals(Seals) end,
-    case khepri:transaction(StoreId, Fun) of
-        {ok, committed} -> ok;
-        {ok, {error, Reason}} -> {error, Reason};
-        {error, Reason} -> {error, Reason}
-    end.
-
 %% @private
-tx_seals(Seals) ->
-    lists:foreach(fun cas_seal/1, Seals),
-    committed.
-
-%% @private Write the authenticated migration marker. Its payload names the
-%% streams the migration refused, so a later operator act knows what was
-%% left behind without re-deriving it.
 marker_record(StoreId, Refused) ->
     Sorted = lists:usort(Refused),
-    #{version => ?INTEGRITY_MIGRATION_VERSION,
-      refused => Sorted,
-      mac => migration_mac(StoreId, ?INTEGRITY_MIGRATION_VERSION, Sorted)}.
-
-%% @private
--spec migration_mac(atom(), non_neg_integer(), list()) -> binary().
-migration_mac(StoreId, Version, Refused) ->
     Key = reckon_db_integrity_key:get(StoreId),
     true = is_binary(Key),
+    #{version => ?INTEGRITY_MIGRATION_VERSION,
+      refused => Sorted,
+      mac => migration_mac(StoreId, Key, ?INTEGRITY_MIGRATION_VERSION, Sorted)}.
+
+%% @private
+-spec migration_mac(atom(), binary(), non_neg_integer(), list()) -> binary().
+migration_mac(StoreId, Key, Version, Refused) ->
     crypto:mac(hmac, sha256, Key,
-               term_to_binary({?MODULE, migration, Version, Refused},
+               term_to_binary({?MODULE, StoreId, migration, Version, Refused},
                               [deterministic])).
 
 %% @private
@@ -689,38 +576,36 @@ migration_failed(StoreId, Reason) ->
     ok.
 
 %% @private
-migration_violation(StoreId, AnchorPath) ->
+migration_violation(StoreId) ->
     logger:error("store ~p says it was migrated (marker: no; sealed "
                  "watermarks or a node-local anchor: yes) but has no "
-                 "authenticated migration marker; refusing to seal anything "
-                 "(anchor: ~ts)", [StoreId, anchor_label(AnchorPath)]),
+                 "authenticated migration marker; refusing to seal anything",
+                 [StoreId]),
     telemetry:execute([reckon, db, integrity, migration_marker_missing],
                       #{system_time => erlang:system_time(millisecond)},
                       #{store_id => StoreId}),
     ok.
 
 %% @private
-anchor_label(undefined) -> "not used";
-anchor_label(Path) -> Path.
-
-%% @private
-report_migration(StoreId, StreamCount, Plans, Evidence) ->
-    Sealed = length([S || {seal, _, _, _, _} = S <- Plans]),
-    Refused = [{StreamId, Why} || {refuse, StreamId, Why} <- Plans],
+report_migration(StoreId, StreamIds, Plans, Evidence) ->
+    Sealed = committed_seals(Plans),
+    Refused = [{maps:get(stream_id, P), maps:get(reason, P)}
+               || #{kind := refuse} = P <- Plans],
     logger:info("integrity migration on store ~p: sealed ~b watermark(s), "
                 "refused ~b of ~b stream(s), deletion evidence ~p",
-                [StoreId, Sealed, length(Refused), StreamCount, Evidence]),
+                [StoreId, Sealed, length(Refused), length(StreamIds), Evidence]),
     telemetry:execute([reckon, db, integrity, migrated],
                       #{system_time => erlang:system_time(millisecond)},
                       #{store_id => StoreId, sealed => Sealed,
                         refused => length(Refused),
-                        streams => StreamCount,
+                        streams => length(StreamIds),
                         deletion_evidence => Evidence}),
-    lists:foreach(fun(RefusedStream) -> report_refused(StoreId, RefusedStream) end,
-                  Refused).
+    lists:foreach(fun({StreamId, Why}) ->
+                          report_refused(StoreId, StreamId, Why)
+                  end, Refused).
 
 %% @private
-report_refused(StoreId, {StreamId, Why}) ->
+report_refused(StoreId, StreamId, Why) ->
     logger:warning("integrity migration refused stream ~p on store ~p (~p); "
                    "it stays refused until an operator vouches for it with "
                    "migrate(~p, #{accept_missing => [~p]})",
@@ -735,18 +620,11 @@ report_refused(StoreId, {StreamId, Why}) ->
 %%====================================================================
 
 %% @private The operator act: seal the streams the migration refused, and
-%% only those. The streams are named one by one, never a store-wide yes, and
-%% the log line says who ran it and when.
-%%
-%% It recomputes each stream's chain start from the stream's own evidence,
-%% so it cannot launder a stripped stream: a hash-less event at or above the
-%% version it seals at still fails `missing_integrity'.
+%% only those.
 accept_missing(StoreId, StreamIds, Opts) ->
     case read_marker(StoreId) of
-        {ok, Refused} ->
-            accept_refused(StoreId, StreamIds, Refused, Opts);
-        none ->
-            {error, migration_marker_missing}
+        {ok, Refused} -> accept_refused(StoreId, StreamIds, Refused, Opts);
+        none -> {error, migration_marker_missing}
     end.
 
 %% @private
@@ -758,50 +636,35 @@ accept_refused(StoreId, StreamIds, Refused, Opts) ->
 
 %% @private
 accept_scanned(StoreId, StreamIds, Refused, Opts) ->
-    Scans = [{StreamId, scan_stream(StoreId, StreamId)} || StreamId <- StreamIds],
+    Scans = [scan_stream(StoreId, StreamId) || StreamId <- StreamIds],
     case plans_for_accepted(Scans) of
-        {ok, Plans} ->
-            commit_accept(StoreId, StreamIds, Refused, Plans, Opts);
-        {error, Reason} ->
-            {error, Reason}
+        {ok, Plans} -> commit_accept(StoreId, StreamIds, Refused, Plans, Opts);
+        {error, Reason} -> {error, Reason}
     end.
 
-%% @private Under the operator act, a stream's chain start comes from its own
-%% evidence: the genesis-prev event with a valid MAC where one survives, and
-%% `newest + 1' for a stream that carries no chain at all (the operator is
-%% vouching that the whole stream predates integrity).
+%% @private
 plans_for_accepted(Scans) ->
     plans_for_accepted(Scans, []).
 
 %% @private
 plans_for_accepted([], Acc) ->
     {ok, lists:reverse(Acc)};
-plans_for_accepted([{_StreamId, #{error := Reason}} | _Rest], _Acc) ->
+plans_for_accepted([#{error := Reason} | _Rest], _Acc) ->
     {error, {unreadable, Reason}};
-plans_for_accepted([{StreamId, #{chain_start := {ok, ChainStart}} = Scan} | Rest], Acc) ->
+plans_for_accepted([#{chain_start := {ok, ChainStart}} = Scan | Rest], Acc) ->
     case maps:get(genesis, Scan) of
-        {ok, Version} ->
-            plans_for_accepted(Rest, [seal_plan(Scan, Version, raw_watermark(Scan)) | Acc]);
-        none ->
-            accept_unproven(Scan, StreamId, ChainStart, Rest, Acc)
+        {ok, _} -> plans_for_accepted(Rest, [seal_at(Scan, ChainStart) | Acc]);
+        none -> accept_unproven(Scan, ChainStart, Rest, Acc)
     end;
-plans_for_accepted([{_StreamId, #{chain_start := none} = Scan} | Rest], Acc) ->
-    Version = maps:get(newest, Scan) + 1,
-    plans_for_accepted(Rest, [seal_plan(Scan, Version, raw_watermark(Scan)) | Acc]).
+plans_for_accepted([#{chain_start := none} = Scan | Rest], Acc) ->
+    plans_for_accepted(Rest, [seal_at(Scan, maps:get(newest, Scan) + 1) | Acc]).
 
-%% @private The operator act vouches for a stream the migration could not
-%% prove, but only where an authenticated scavenge boundary already accounts
-%% for the gap: the human is vouching for the data, not for the cut.
-accept_unproven(#{boundary := {ok, ChainStart}} = Scan, _StreamId, ChainStart, Rest, Acc) ->
-    plans_for_accepted(Rest, [seal_plan(Scan, ChainStart, raw_watermark(Scan)) | Acc]);
-accept_unproven(_Scan, StreamId, ChainStart, _Rest, _Acc) ->
-    {error, {cannot_vouch, StreamId, {chain_start_unproven, ChainStart}}}.
-
-%% @private The raw value the transaction compares against: what the scan
-%% found at the watermark path, or undefined when it found nothing.
-raw_watermark(#{watermark := {unsealed, Version}}) -> Version;
-raw_watermark(#{watermark := undefined}) -> undefined;
-raw_watermark(#{watermark := {sealed, Version}}) -> {sealed, Version}.
+%% @private
+accept_unproven(#{cut := {ok, ChainStart}} = Scan, ChainStart, Rest, Acc) ->
+    plans_for_accepted(Rest, [seal_at(Scan, ChainStart) | Acc]);
+accept_unproven(Scan, ChainStart, _Rest, _Acc) ->
+    {error, {cannot_vouch, maps:get(stream_id, Scan),
+             {chain_start_unproven, ChainStart}}}.
 
 %% @private
 commit_accept(StoreId, StreamIds, Refused, Plans, Opts) ->
@@ -820,7 +683,7 @@ commit_accept(StoreId, StreamIds, Refused, Plans, Opts) ->
 
 %% @private
 accept_tx(Plans, Marker) ->
-    lists:foreach(fun cas_seal/1, Plans),
+    lists:foreach(fun write_plan/1, Plans),
     ok = khepri_tx:put(?INTEGRITY_MIGRATION_PATH, Marker),
     committed.
 
@@ -841,25 +704,35 @@ report_accept(StoreId, StreamIds, Opts) ->
 %% Scanning
 %%====================================================================
 
-%% @private Everything the migration needs to know about one stream, read
-%% outside the tree: its watermark, its newest version, where its chain
-%% begins, and whether that chain-start event is one only the store could
-%% have written.
+%% @private
 -spec scan_stream(atom(), binary()) -> scan().
 scan_stream(StoreId, StreamId) ->
     {ok, Watermark} = lookup(StoreId, StreamId),
     Base = #{store_id => StoreId,
              stream_id => StreamId,
              watermark => Watermark,
+             raw => raw_watermark(StoreId, StreamId),
+             life => current_life(StoreId, StreamId),
              newest => -1,
              chain_start => none,
              genesis => none,
-             boundary => boundary_version(StoreId, StreamId)},
+             cut => none},
     case newest_version(StoreId, StreamId) of
-        {ok, Newest} ->
-            scan_versions(StoreId, Base#{newest => Newest});
-        {error, Reason} ->
-            Base#{error => Reason}
+        {ok, Newest} -> scan_versions(StoreId, Base#{newest => Newest});
+        {error, Reason} -> Base#{error => Reason}
+    end.
+
+%% @private
+current_life(StoreId, StreamId) ->
+    {ok, Life} = life(StoreId, StreamId),
+    Life.
+
+%% @private The RAW tree value, which is what the compare-and-swap compares:
+%% a bare integer, a map (authentic or not), or undefined.
+raw_watermark(StoreId, StreamId) ->
+    case khepri:get(StoreId, path(StreamId)) of
+        {ok, Value} -> Value;
+        _ -> undefined
     end.
 
 %% @private
@@ -868,51 +741,115 @@ scan_versions(StoreId, #{stream_id := StreamId, newest := Newest} = Scan) ->
         {ok, none} ->
             Scan;
         {ok, Event} ->
-            Scan#{chain_start => {ok, Event#event.version},
-                  genesis => genesis_version(StoreId, Event)};
+            ChainStart = Event#event.version,
+            Scan#{chain_start => {ok, ChainStart},
+                  genesis => genesis_version(StoreId, Scan, Event),
+                  cut => authenticated_cut(StoreId, StreamId, ChainStart,
+                                            maps:get(life, Scan))};
         {error, Reason} ->
             Scan#{error => Reason}
     end.
 
-%% @private Whether this event is one only the store could have written at a
-%% chain start: its predecessor is the genesis value, and its MAC verifies
-%% under the store's key. A copied or moved event fails the MAC, because the
-%% MAC covers the stream and the version it was written at.
-genesis_version(StoreId, Event) ->
+%% @private
+genesis_version(StoreId, Scan, Event) ->
     case reckon_db_integrity_key:get(StoreId) of
-        Key when is_binary(Key) -> verify_genesis(Event, Key);
+        Key when is_binary(Key) -> verify_genesis(StoreId, Scan, Event, Key);
         _ -> none
     end.
 
-%% @private The version a verified scavenge boundary names, if the store has
-%% one for this stream. Only a scavenge can write one: it is MAC'd under the
-%% store's key over the stream, the version and the hash it cut at.
-boundary_version(StoreId, StreamId) ->
-    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
-        {ok, Boundary} when is_map(Boundary) -> vetted_boundary(StoreId, StreamId, Boundary);
+%% @private The chain-start event is verified against the store and life it
+%% was written in, so a scheme-2 event verifies and a scheme-1 one still does
+%% (v2_from is set above its own version, which is where an old-line event
+%% necessarily sits).
+verify_genesis(StoreId, Scan, Event, Key) ->
+    Version = Event#event.version,
+    Ctx = genesis_context(StoreId, Scan, Key, Version),
+    case reckon_gater_integrity:verify_event(
+           Event, reckon_gater_integrity:genesis_prev_hash(), Key, Ctx) of
+        ok -> {ok, Version};
         _ -> none
     end.
 
 %% @private
-vetted_boundary(StoreId, StreamId, Boundary) ->
+genesis_context(StoreId, Scan, Key, Version) ->
+    Base = #{store_id => StoreId, key => Key, v2_from => Version + 1},
+    case maps:get(life, Scan) of
+        Life when is_binary(Life) -> Base#{life => Life};
+        _ -> Base
+    end.
+
+%% @private An authenticated cut at exactly this chain start: a scavenge
+%% boundary the store wrote, or a snapshot of this stream whose anchor_hash
+%% is the hash the surviving event carries and whose version is one below it.
+authenticated_cut(StoreId, StreamId, ChainStart, Life) ->
+    case boundary_cut(StoreId, StreamId, ChainStart) of
+        {ok, V} -> {ok, V};
+        none -> snapshot_cut(StoreId, StreamId, ChainStart, Life)
+    end.
+
+%% @private
+boundary_cut(StoreId, StreamId, ChainStart) ->
+    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
+        {ok, #{version := ChainStart} = Boundary} ->
+            boundary_cut_verified(StoreId, StreamId, Boundary, ChainStart);
+        _ ->
+            none
+    end.
+
+%% @private
+boundary_cut_verified(StoreId, StreamId, Boundary, ChainStart) ->
     case reckon_db_scavenge_boundary:verify(StoreId, StreamId, Boundary) of
-        true -> {ok, maps:get(version, Boundary)};
+        true -> {ok, ChainStart};
         false -> none
     end.
 
 %% @private
-verify_genesis(Event, Key) ->
-    case reckon_gater_integrity:verify_event(
-           Event, reckon_gater_integrity:genesis_prev_hash(), Key) of
-        ok -> {ok, Event#event.version};
-        _ -> none
+snapshot_cut(StoreId, StreamId, ChainStart, Life) ->
+    case reckon_db_snapshots_store:get_latest(StoreId, StreamId) of
+        undefined ->
+            none;
+        Snapshot ->
+            snapshot_cut_matches(StoreId, StreamId, ChainStart, Snapshot, Life)
     end.
 
-%% @private The lowest version whose event carries a chain, found in pages
-%% and stopped at the first hit: one call per stream over its whole range is
-%% what this replaces.
--spec lowest_chain_event(atom(), binary(), non_neg_integer(), integer()) ->
-    {ok, event() | none} | {error, term()}.
+%% @private
+snapshot_cut_matches(StoreId, StreamId, ChainStart, Snapshot, Life) ->
+    Carried = carried_hash(StoreId, StreamId, ChainStart),
+    Vouched = snapshot_mac_ok(StoreId, Life, Snapshot),
+    Anchored = snapshot_anchor_matches(Snapshot, ChainStart, Carried),
+    case Vouched andalso Anchored of
+        true -> {ok, ChainStart};
+        false -> none
+    end.
+
+%% @private A snapshot's MAC, verified on its own: the load path also checks
+%% that the event at the snapshot's version still exists, which is exactly
+%% what a cut has removed. The shape of the stored MAC says which scheme
+%% wrote it, so a scheme-2 snapshot is verified against the life token the
+%% stream still holds even after its watermark is gone.
+snapshot_mac_ok(StoreId, Life, Snapshot) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    case {is_binary(Key), Snapshot#snapshot.mac, is_binary(Life)} of
+        {true, {v2, _, _}, true} ->
+            Ctx = #{store_id => StoreId, life => Life},
+            reckon_gater_integrity:verify_snapshot(
+              Snapshot, Snapshot#snapshot.anchor_hash, Key, Ctx) =:= ok;
+        {true, {_, _}, _} ->
+            reckon_gater_integrity:verify_snapshot(
+              Snapshot, Snapshot#snapshot.anchor_hash, Key) =:= ok;
+        _ ->
+            false
+    end.
+
+%% @private
+snapshot_anchor_matches(#snapshot{version = Version, anchor_hash = Anchor},
+                        ChainStart, Carried)
+        when is_binary(Carried) ->
+    Version =:= ChainStart - 1 andalso Anchor =:= Carried;
+snapshot_anchor_matches(_Snapshot, _ChainStart, _Carried) ->
+    false.
+
+%% @private
 lowest_chain_event(_StoreId, _StreamId, From, To) when From > To ->
     {ok, none};
 lowest_chain_event(StoreId, StreamId, From, To) ->
@@ -925,16 +862,11 @@ lowest_chain_event(StoreId, StreamId, From, To) ->
 %% @private
 first_chain_event(Events, StoreId, StreamId, From, Count, To) ->
     case [E || E <- Events, chain_bearing(E)] of
-        [#event{} = First | _] ->
-            {ok, First};
-        [] ->
-            lowest_chain_event(StoreId, StreamId, From + Count, To)
+        [#event{} = First | _] -> {ok, First};
+        [] -> lowest_chain_event(StoreId, StreamId, From + Count, To)
     end.
 
-%% @private Read a page of a stream, unverified: this is metadata for the
-%% migration, not a read the store serves.
--spec read_page(atom(), binary(), non_neg_integer(), pos_integer()) ->
-    {ok, [event()]} | {error, term()}.
+%% @private
 read_page(StoreId, StreamId, From, Count) ->
     reckon_db_streams:read(StoreId, StreamId, From, Count, forward,
                            #{verify => skip_all}).
@@ -953,9 +885,7 @@ anchor_path(#{data_dir := DataDir}) when is_list(DataDir) ->
 anchor_path(_) ->
     undefined.
 
-%% @private Write the anchor when it is missing or does not verify: any start
-%% that verifies the in-tree marker gets one, so every node in a cluster ends
-%% up with its own.
+%% @private
 ensure_anchor(_StoreId, undefined) ->
     ok;
 ensure_anchor(StoreId, Path) ->
@@ -1035,8 +965,7 @@ rename_anchor(Temp, Path) ->
         {error, Reason} -> anchor_write_failed(Path, Reason)
     end.
 
-%% @private An anchor that cannot be written never fails the store start: it
-%% is what bounds a tree-only writer, not what makes the store work.
+%% @private
 anchor_write_failed(Path, Reason) ->
     logger:warning("integrity migration could not write its anchor ~ts: ~p",
                    [Path, Reason]),
@@ -1062,66 +991,46 @@ newest_version(StoreId, StreamId) ->
         {error, _} = Error -> Error
     end.
 
-%% @private The version of a watermark that needs sealing, or undefined when
-%% it is already sealed (or is not a watermark at all).
--spec unsealed_version(atom(), binary(), term()) -> non_neg_integer() | undefined.
-unsealed_version(StoreId, StreamId, #{version := Version, mac := Mac})
-        when is_integer(Version) ->
-    case seals(StoreId, StreamId, Version, Mac) of
-        true -> undefined;
-        false -> Version
-    end;
-unsealed_version(_StoreId, _StreamId, Version)
-        when is_integer(Version), Version >= 0 ->
-    Version;
-unsealed_version(_StoreId, _StreamId, _Other) ->
-    undefined.
+%% @private A fresh life token. Random, so a record sealed under one life
+%% cannot be made to fit another.
+-spec new_life() -> binary().
+new_life() ->
+    crypto:strong_rand_bytes(16).
 
-%% @doc The tree path a stream's watermark lives at.
--spec path(binary()) -> [atom() | binary()].
-path(StreamId) ->
-    ?INTEGRITY_CHAIN_START_PATH ++ [StreamId].
-
-%% @doc Delete a stream's watermark.
-%%
-%% Called when deleting the entire stream, in the same transaction: the
-%% watermark is part of the stream's metadata and must not outlive it, or a
-%% stream re-created under the same id inherits a chain start it never had.
--spec delete(StoreId :: atom(), StreamId :: binary()) -> ok.
-delete(StoreId, StreamId) ->
-    _ = khepri:delete(StoreId, path(StreamId)),
-    ok.
-
-%% @private The authenticated record: the version, and an HMAC over it under
-%% the store's integrity key. Without the MAC the node is just another tree
-%% node, and moving it is how a reader is talked into skipping the chain.
--spec sealed_record(atom(), binary(), non_neg_integer()) ->
-    #{version := non_neg_integer(), mac := binary() | undefined}.
-sealed_record(StoreId, StreamId, Version) ->
-    #{version => Version, mac => mac(StoreId, StreamId, Version)}.
+%% @private The authenticated record: the version, the version scheme 2
+%% begins at, the life token, and an HMAC over all of it under the store's
+%% integrity key - store id and stream id included, so the record does not
+%% fit another store or another life of the same stream.
+-spec sealed_record(atom(), binary(), binary(), non_neg_integer(),
+                    non_neg_integer()) -> map().
+sealed_record(StoreId, StreamId, Life, Version, V2From) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    true = is_binary(Key),
+    #{version => Version,
+      v2_from => V2From,
+      life => Life,
+      mac => seal_mac(StoreId, Key, StreamId, Life, Version, V2From)}.
 
 %% @private
--spec seals(atom(), binary(), non_neg_integer(), term()) -> boolean().
-seals(StoreId, StreamId, Version, Mac) when is_binary(Mac) ->
+seal_verifies(StoreId, StreamId,
+              #{version := Version, v2_from := V2From, life := Life,
+                mac := Mac})
+        when is_integer(Version), is_integer(V2From), is_binary(Life),
+             is_binary(Mac) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) ->
-            crypto:hash_equals(Mac, mac_with(Key, StreamId, Version));
+            crypto:hash_equals(
+              Mac, seal_mac(StoreId, Key, StreamId, Life, Version, V2From));
         _ ->
             false
     end;
-seals(_StoreId, _StreamId, _Version, _Mac) ->
+seal_verifies(_StoreId, _StreamId, _Record) ->
     false.
 
 %% @private
--spec mac(atom(), binary(), non_neg_integer()) -> binary() | undefined.
-mac(StoreId, StreamId, Version) ->
-    case reckon_db_integrity_key:get(StoreId) of
-        Key when is_binary(Key) -> mac_with(Key, StreamId, Version);
-        _ -> undefined
-    end.
-
-%% @private
--spec mac_with(binary(), binary(), non_neg_integer()) -> binary().
-mac_with(Key, StreamId, Version) ->
+-spec seal_mac(atom(), binary(), binary(), binary(), non_neg_integer(),
+               non_neg_integer()) -> binary().
+seal_mac(StoreId, Key, StreamId, Life, Version, V2From) ->
     crypto:mac(hmac, sha256, Key,
-               term_to_binary({?MODULE, StreamId, Version}, [deterministic])).
+               term_to_binary({?MODULE, seal, StoreId, StreamId, Life,
+                               Version, V2From}, [deterministic])).

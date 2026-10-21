@@ -121,6 +121,14 @@
 %% under the store's integrity key. Its presence is what makes a bare-integer
 %% watermark a forgery rather than a leftover: nothing seals one after it.
 -define(INTEGRITY_MIGRATION_PATH, [metadata, integrity, migration]).
+
+%% Per-stream life token (5.12.0+).
+%% Path: [metadata, integrity, stream_life, StreamId] -> binary()
+%% A random value minted when the stream's watermark is minted, deleted with
+%% the stream, and covered by the watermark's MAC and by every scheme-2 event
+%% MAC. It is what makes a sealed watermark from an earlier life of the same
+%% stream id stop verifying after the stream is deleted and re-created.
+-define(INTEGRITY_STREAM_LIFE_PATH, [metadata, integrity, stream_life]).
 -define(INTEGRITY_MIGRATION_VERSION, 1).
 
 %%====================================================================

@@ -230,13 +230,30 @@ seal_if_enabled(true, StoreId, StreamId, Version, Snapshot) ->
     seal_with_anchor(compute_event_chain_hash(StoreId, StreamId, Version),
                      StoreId, Snapshot).
 
-seal_with_anchor({ok, AnchorHash}, StoreId, Snapshot) ->
+seal_with_anchor({ok, AnchorHash}, StoreId,
+                 #snapshot{stream_id = StreamId} = Snapshot) ->
     Key = reckon_db_integrity_key:get(StoreId),
     Snapshot1 = Snapshot#snapshot{anchor_hash = AnchorHash},
-    Mac = reckon_gater_integrity:compute_snapshot_mac(Snapshot1, Key),
+    Mac = snapshot_mac(Snapshot1, Key, StoreId, StreamId),
     {ok, Snapshot1#snapshot{mac = Mac}};
 seal_with_anchor({error, _} = Err, _StoreId, _Snapshot) ->
     Err.
+
+%% @private A snapshot MAC binds the store and the stream's life when the
+%% stream has both; a stream with no sealed watermark has no life, and a
+%% snapshot written then is scheme 1.
+snapshot_mac(Snapshot, Key, StoreId, StreamId) ->
+    case mac_context(StoreId, StreamId) of
+        {ok, Ctx} -> reckon_gater_integrity:compute_snapshot_mac(Snapshot, Key, Ctx);
+        none -> reckon_gater_integrity:compute_snapshot_mac(Snapshot, Key)
+    end.
+
+%% @private
+mac_context(StoreId, StreamId) ->
+    case reckon_db_chain_watermark:binding(StoreId, StreamId) of
+        {ok, #{life := Life}} -> {ok, #{store_id => StoreId, life => Life}};
+        {ok, undefined} -> none
+    end.
 
 %%====================================================================
 %% Tamper-resistance — load side
@@ -259,10 +276,19 @@ verify_if_needed(true, StoreId, StreamId, Version, Snapshot) ->
 
 verify_against_anchor({ok, ActualAnchor}, StoreId, StreamId, Version, Snapshot) ->
     Key = reckon_db_integrity_key:get(StoreId),
-    check_snapshot_mac(reckon_gater_integrity:verify_snapshot(Snapshot, ActualAnchor, Key),
+    check_snapshot_mac(verify_snapshot_mac(Snapshot, ActualAnchor, Key,
+                                           StoreId, StreamId),
                        StoreId, StreamId, Version, Snapshot);
 verify_against_anchor({error, _} = Err, _StoreId, _StreamId, _Version, _Snapshot) ->
     Err.
+
+verify_snapshot_mac(Snapshot, ActualAnchor, Key, StoreId, StreamId) ->
+    case mac_context(StoreId, StreamId) of
+        {ok, Ctx} ->
+            reckon_gater_integrity:verify_snapshot(Snapshot, ActualAnchor, Key, Ctx);
+        none ->
+            reckon_gater_integrity:verify_snapshot(Snapshot, ActualAnchor, Key)
+    end.
 
 check_snapshot_mac(ok, _StoreId, _StreamId, _Version, Snapshot) ->
     {ok, Snapshot};
