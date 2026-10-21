@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [5.12.0] - 2026-10-21
 
+### Changed: a store config with no mode is a single-node store
+
+`#store_config{}` defaulted `mode` to `cluster`. A cluster-mode store is a Ra
+cluster across nodes, and it upgrades only when every member runs the new code
+in one window: a stale member stalls. An app that built a config by hand and
+forgot the field therefore became an accidental cluster, and a forgotten
+detail turned into a coordinated rollout.
+
+The default is `single` now, so a forgotten field gives one Ra member on one
+node, which upgrades with an ordinary restart. `cluster` has to be named.
+Nothing in the fleet relied on the old default: every service that opens a
+store sets `mode => single` explicitly, and every cluster case in the test
+suites sets `mode = cluster` explicitly.
+
 ### Changed: khepri `~> 0.17.11`, still Ra machine version 2
 
 `rebar.config` pinned `{khepri, "0.17.2"}` exactly. That is not the rule here

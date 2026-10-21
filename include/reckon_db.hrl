@@ -177,8 +177,13 @@
     %% Data directory for Khepri/Ra
     data_dir :: string(),
 
-    %% Mode: single | cluster (cluster = default for resilience/backup)
-    mode = cluster :: single | cluster,
+    %% Mode: single | cluster. Defaults to `single' on purpose: a store that
+    %% does not say is one Ra member on one node, which upgrades with an
+    %% ordinary restart. `cluster' forms a Ra cluster across nodes and
+    %% upgrades only when every member runs the new code in one window, so it
+    %% has to be asked for by name rather than arrived at by a forgotten
+    %% field.
+    mode = single :: single | cluster,
 
     %% Default timeout for operations
     timeout = ?DEFAULT_TIMEOUT :: pos_integer(),

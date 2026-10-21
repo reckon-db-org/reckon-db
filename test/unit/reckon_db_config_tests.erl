@@ -71,6 +71,16 @@ config_test_() ->
             {ok, Config} = reckon_db_config:get_store_config(cluster_store),
             ?assertEqual(cluster, Config#store_config.mode)
         end},
+        {"a store config that does not name a mode is a single-node store", fun() ->
+            %% The record's default is what an app gets when it builds a
+            %% config by hand and forgets the field. It must be `single':
+            %% cluster mode is a Ra cluster that upgrades only when every
+            %% member runs the new code in one window, and an accidental one
+            %% turns a forgotten field into a coordinated rollout.
+            ?assertEqual(single,
+                         (#store_config{store_id = unnamed_mode,
+                                        data_dir = "/tmp/unnamed_mode"})#store_config.mode)
+        end},
         {"default pool sizes are used when not specified", fun() ->
             %% cluster_store doesn't specify pool sizes, should use defaults
             {ok, Config} = reckon_db_config:get_store_config(cluster_store),
