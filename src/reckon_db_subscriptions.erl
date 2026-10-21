@@ -807,7 +807,7 @@ verify_one_event_mac(#event{} = Event, StoreId, Key) ->
     %% carries the store and life a scheme-2 MAC binds; a scheme-2 MAC with
     %% no context is a violation in gater, which is what a stream without a
     %% sealed watermark should be.
-    Ctx = catchup_mac_context(StoreId, Event#event.stream_id, Key),
+    Ctx = catchup_mac_context(StoreId, Event#event.stream_id),
     case reckon_gater_integrity:verify_event(Event, peer_tip(Event), Key, Ctx) of
         ok -> ok;
         {integrity_violation, Violation} -> {error, wrap_catchup_violation(Violation)}
@@ -820,7 +820,7 @@ peer_tip(#event{prev_event_hash = Prev}) ->
     Prev.
 
 %% @private
-catchup_mac_context(StoreId, StreamId, _Key) ->
+catchup_mac_context(StoreId, StreamId) ->
     Base = #{store_id => StoreId},
     case reckon_db_chain_watermark:binding(StoreId, StreamId) of
         {ok, #{life := Life, v2_from := V2From}} ->
