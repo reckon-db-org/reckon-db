@@ -366,7 +366,7 @@ case reckon_db_streams:append(StoreId, StreamId, ExpectedVersion, Events) of
     {error, {version_unverifiable, Version, _Reason}} = Error ->
         %% The store could not answer the version check: a read failed for
         %% some reason other than the node being absent, or the node the
-        %% batch was built from is no longer there. Retrying will not help.
+        %% batch was built from is no longer there.
         %%
         %% Two shapes do NOT land here. A stream deleted while the append was
         %% in flight, where a counter exists, sees the delete in its
@@ -374,10 +374,16 @@ case reckon_db_streams:append(StoreId, StreamId, ExpectedVersion, Events) of
         %% landing on a stream that is not there: ANY_VERSION writes at 0,
         %% an explicit version is refused wrong_expected_version. A stream
         %% with no counter yet (written before 5.12.0) whose target node is
-        %% occupied also aborts as version_changed and retries. The same
-        %% counter-less stream deleted under the append DOES land here: with
-        %% no number to compare, the version node it was built from is the
-        %% evidence, and it is gone.
+        %% occupied also aborts as version_changed and retries.
+        %%
+        %% The same counter-less stream deleted under the append DOES land
+        %% here: with no number to compare, the version node it was built
+        %% from is the evidence, and it is gone. This attempt cannot tell
+        %% that apart from a store that did not answer, so it answers, and a
+        %% retry is the way to find out - it reads again, and a stream that
+        %% is gone answers as one. What retrying cannot fix is a store whose
+        %% reads are failing; that is the reason it is not done here, on the
+        %% caller's behalf and unbounded.
         Error
 end.
 ```

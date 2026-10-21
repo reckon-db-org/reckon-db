@@ -35,6 +35,8 @@
     dry_run_scavenge_leaves_versions_alone/1,
     stream_without_a_counter_reports_its_newest_version/1,
     a_counter_below_the_tree_is_not_the_newest_version/1,
+    read_all_answers_from_the_end_it_is_asked_from/1,
+    read_all_folds_from_the_live_end_after_a_scavenge/1,
     deleting_a_stream_resets_its_versions/1
 ]).
 
@@ -47,6 +49,8 @@ all() ->
      append_after_scavenge_keeps_versions_and_delivery,
      stream_without_a_counter_reports_its_newest_version,
      a_counter_below_the_tree_is_not_the_newest_version,
+     read_all_answers_from_the_end_it_is_asked_from,
+     read_all_folds_from_the_live_end_after_a_scavenge,
      deleting_a_stream_resets_its_versions].
 
 init_per_suite(Config) ->
@@ -200,13 +204,19 @@ stream_without_a_counter_reports_its_newest_version(Config) ->
 
 %% @doc GIVEN a stream whose counter is below the newest event
 %%      WHEN the newest version is asked for, and a keep_versions scavenge runs
-%%      THEN the tree answers, not the counter, and the scavenge keeps the
-%%           newest events rather than measuring from a version that is not
-%%           the newest
+%%      THEN the tree answers, not the counter; the scavenge keeps the newest
+%%           events rather than measuring from a version that is not the
+%%           newest; it raises the counter to what it kept; and the events it
+%%           kept are readable from either end
 %%
 %% The shape is a 5.11.x writer: that release kept no counter, so it could
 %% append past one. Counter 9 over a tree holding 0..15 answered 9, and
 %% keep_versions 3 then deleted {0,6} instead of {0,12}.
+%%
+%% The read at the end is the point of the case. A scavenge leaves a counter
+%% below the newest event and a tree that starts at 13, and a positional read
+%% from 0 answers {ok, []} over events the store holds - data hidden from
+%% readers. Each of the three assertions at the end fails without its own fix.
 a_counter_below_the_tree_is_not_the_newest_version(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     StreamId = reckon_db_test_helpers:sid(<<"scavver-005">>),
@@ -214,7 +224,7 @@ a_counter_below_the_tree_is_not_the_newest_version(Config) ->
                                         [event(T) || T <- typed(<<"before_">>, 16)]),
     ?assertEqual(15, reckon_db_streams:get_version(StoreId, StreamId)),
 
-    %% The counter sits above the tree it was written with: 9, where the tree
+    %% The counter sits below the tree it was written with: 9, where the tree
     %% holds 0..15.
     CounterPath = reckon_db_stream_path:version_counter_path(StreamId),
     ok = khepri:put(StoreId, CounterPath, 9),
@@ -227,7 +237,63 @@ a_counter_below_the_tree_is_not_the_newest_version(Config) ->
     %% at 6 and leaves {7,15} behind, thirteen events where three belong.
     ?assertMatch(#{deleted_versions := {0, 12}}, Result),
     ?assertEqual(3, reckon_db_streams:live_event_count(StoreId, StreamId)),
-    ?assertEqual({ok, 15}, reckon_db_streams:newest_event_version(StoreId, StreamId)).
+    ?assertEqual({ok, 15}, reckon_db_streams:newest_event_version(StoreId, StreamId)),
+
+    %% The counter is raised to what the stream is, not left at the 9 that
+    %% says the stream never got past version 9.
+    ?assertEqual({ok, 15}, khepri:get(StoreId, CounterPath)),
+    ?assertEqual(15, reckon_db_streams:get_version(StoreId, StreamId)),
+
+    %% A batch smaller than the thirteen versions that were deleted: the
+    %% positional window over 0..2 holds no event at all.
+    ?assertEqual({ok, [13, 14, 15]},
+                 versions(reckon_db_streams:read_all(StoreId, StreamId, 3, forward))),
+    ?assertEqual({ok, [15, 14, 13]},
+                 versions(reckon_db_streams:read_all(StoreId, StreamId, 3, backward))),
+    ?assertEqual({ok, [13, 14, 15]},
+                 versions(reckon_db_streams:read(StoreId, StreamId, 13, 3, forward))).
+
+%% @doc GIVEN a stream longer than one batch, with no scavenge
+%%      WHEN it is read a batch at a time, forwards and backwards
+%%      THEN each call answers a full batch from the end it asks from, and
+%%           the fold visits every event exactly once
+%%
+%% The backward half is the one that was wrong for every stream, scavenged or
+%% not: read_all/4 passed a start version of 0, and a backward window from 0
+%% is version 0 alone.
+read_all_answers_from_the_end_it_is_asked_from(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"scavver-006">>),
+    {ok, 9} = reckon_db_streams:append(StoreId, StreamId, -2,
+                                       [event(T) || T <- typed(<<"plain_">>, 10)]),
+
+    ?assertEqual({ok, [0, 1, 2, 3]},
+                 versions(reckon_db_streams:read_all(StoreId, StreamId, 4, forward))),
+    ?assertEqual({ok, [9, 8, 7, 6]},
+                 versions(reckon_db_streams:read_all(StoreId, StreamId, 4, backward))),
+
+    ?assertEqual({ok, lists:seq(0, 9)}, versions(fold_all(StoreId, StreamId, 4, forward))),
+    ?assertEqual({ok, lists:seq(9, 0, -1)},
+                 versions(fold_all(StoreId, StreamId, 4, backward))).
+
+%% @doc GIVEN a scavenged stream whose live events are all above the batch
+%%      WHEN the whole stream is folded a batch at a time
+%%      THEN the fold starts at the live end and visits every surviving event
+%%
+%% The cursor a fold carries is a version, and the versions a scavenge removed
+%% are still versions: starting from 0 with a batch of 3 stops at {ok, []} and
+%% never reaches version 13.
+read_all_folds_from_the_live_end_after_a_scavenge(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"scavver-007">>),
+    {ok, 15} = reckon_db_streams:append(StoreId, StreamId, -2,
+                                        [event(T) || T <- typed(<<"folded_">>, 16)]),
+    {ok, #{deleted_versions := {0, 12}}} =
+        reckon_db_scavenge:scavenge(StoreId, StreamId,
+            #{before_version => 13, require_snapshot => false}),
+
+    ?assertEqual({ok, [13, 14, 15]}, versions(fold_all(StoreId, StreamId, 3, forward))),
+    ?assertEqual({ok, [15, 14, 13]}, versions(fold_all(StoreId, StreamId, 3, backward))).
 
 %% @doc GIVEN a stream and then no stream
 %%      WHEN it is deleted and appended to again under the same id
@@ -251,6 +317,18 @@ deleting_a_stream_resets_its_versions(Config) ->
 
 event(Type) ->
     #{event_type => Type, data => #{<<"k">> => Type}}.
+
+%% The versions a read answered, so a case asserts the numbers it means rather
+%% than a list of records.
+versions({ok, Events}) when is_list(Events) ->
+    {ok, [E#event.version || E <- Events]};
+versions(Other) ->
+    Other.
+
+fold_all(StoreId, StreamId, BatchSize, Direction) ->
+    Collect = fun(Events, Acc) -> Acc ++ Events end,
+    reckon_db_streams:fold_event_batches(StoreId, StreamId, BatchSize, Direction,
+                                         Collect, []).
 
 typed(Prefix, N) ->
     [<<Prefix/binary, (integer_to_binary(I))/binary>> || I <- lists:seq(1, N)].

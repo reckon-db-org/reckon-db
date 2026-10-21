@@ -167,6 +167,53 @@ above a tree, which the append reconciles, where the other order loses the
 number. `a_fully_scavenged_counter_less_stream_keeps_its_version` is its
 case, red on the commit before this fix (`get_version/2` answered -1).
 
+### Fixed: a scavenge raises a counter that sat below the newest event
+
+The scavenge writes a version counter before it deletes anything, so that
+deleting the version nodes does not lose how far the stream got. It wrote one
+only when none was there. A 5.11.x writer kept no counter, so it could append
+past one, and the shape is then a counter at 9 over a tree holding 0..15:
+the scavenge left the 9 in place and deleted down to the newest three events,
+and the stream went on reporting 9 for a stream whose newest event is 15.
+
+The counter is now compared, not trusted, and raised when it is behind -
+never lowered. The get and the put are one call inside one transaction, so a
+concurrent append that has already moved it further is left alone. A store
+whose counter holds something that is not an integer is answered
+`{error, {version_unverifiable, Version, {not_a_version, Value}}}` rather
+than written over.
+
+### Fixed: `read_all/4` answers a stream's live events, from either end
+
+`read_all/4` was `read(StoreId, StreamId, 0, BatchSize, Direction)`, and
+`read/5` is positional - it asks for `Count` numbered versions from
+`StartVersion` and answers the ones that hold an event. That is right for a
+caller holding a cursor and wrong for this one, because a scavenge removes a
+prefix of a stream without renumbering the rest:
+
+- forward, a window from 0 answers nothing at all once the scavenge has
+  removed more versions than the batch holds - three live events at 13..15
+  under a scavenge of {0,12} answer `{ok, []}` for any batch up to 13 - and it
+  is truncated on every stream longer than the batch;
+- backward, `calculate_versions(0, N, backward)` is `[0]`, so
+  `read_all(..., backward)` answered at most version 0: never the newest
+  events, which is what a backward caller is asking for.
+
+Both ends now start at the live end - the oldest live version forward, the
+newest backward - and the common case still costs one window read: only a
+window that comes back short asks the tree which versions are live.
+
+`read/5` keeps its positional meaning, and the two callers that were reading
+positionally by intent say so: the scavenge's cutoff window and a temporal
+query's 0..V are windows over numbered versions, not "the events that exist".
+
+`fold_event_batches/6` is the paging sibling, for callers that want every
+event rather than a page. Two of them were silently doing neither: a link
+backfill read `read(..., 0, 10000, forward)` and an event-type summary used
+`read_all(..., 10000)`, so both answered nothing after a deep prefix
+scavenge and stopped at ten thousand events. A backfill that misses events is
+worse than one that does not run, because the link stream then looks complete.
+
 ### Fixed: a version-node read that failed is no longer read as an empty tree
 
 `version_nodes/3` folded every read error into `[]`, and `[]` is exactly what
@@ -210,7 +257,7 @@ error, no log, the events simply gone. Four writers appending 25 events each
 to one stream left 25 of the 100 in the store.
 
 The version is now verified inside the transaction that writes the events
-(`reckon_db_streams:append_guard/5`): if the counter moved, or the first
+(`reckon_db_streams:append_guard/6`): if the counter moved, or the first
 version node the batch would occupy already exists, the command aborts and
 the append re-reads and tries again — with a delay that doubles from 1 ms to
 a 50 ms cap, jittered per attempt, for up to 60 attempts. After that it
@@ -348,7 +395,17 @@ otherwise, and an append that cannot settle the disagreement answers
 
 What the reconcile costs on the normal path is one read of the version node
 the counter names. While that node is there, nothing else is read; the walk
-over the version nodes happens only when it is gone. `reckon_db_upgrade_store_SUITE`
+over the version nodes happens only when it is gone.
+
+A stream written before this release has no counter, so every version read
+of it walks its version nodes until its first append here writes one: 130-250
+ms on a 50 000-event stream. That is the cost of reading a legacy stream, it
+is paid once per read rather than once per append, and it goes away with the
+stream's first append after the upgrade. Nothing is rewritten in place on
+upgrade - no pass is run over the store - so a store with many legacy streams
+pays it stream by stream, on first touch.
+
+`reckon_db_upgrade_store_SUITE`
 opens a store written through both releases for the first two shapes, and
 `reckon_db_stale_counter_SUITE` builds each shape in one VM.
 

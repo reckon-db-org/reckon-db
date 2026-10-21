@@ -155,6 +155,11 @@ do_read_range(StoreId, StreamId, FromTimestamp, ToTimestamp, Opts) ->
     end.
 
 %% @private Read all events from a stream
+%%
+%% Positional on purpose, unlike `read_all/4': a temporal query here is "as of
+%% version V", so the window is 0..V and every version a scavenge removed is
+%% simply one that is not in the answer. Starting at the live end would answer
+%% a different question - as of the oldest event that is still there.
 -spec read_all_events(atom(), binary()) -> {ok, [event()]}.
 read_all_events(StoreId, StreamId) ->
     Version = reckon_db_streams:get_version(StoreId, StreamId),

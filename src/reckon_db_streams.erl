@@ -23,6 +23,7 @@
     read/5,
     read/6,
     read_all/4,
+    fold_event_batches/6,
     read_all_global/3,
     read_by_event_types/3,
     read_by_tags/4,
@@ -270,11 +271,134 @@ read_validated(StoreId, StreamId, StartVersion, Count, Direction, Opts) ->
             Error
     end.
 
-%% @doc Read all events from a stream
+%% @doc Read a batch of a stream's live events, from the oldest or newest end.
+%%
+%% `read/5' is positional: it asks for `StartVersion' and the `Count'
+%% positions above it, and answers the ones that hold an event. That is right
+%% for a caller holding a cursor and wrong for this one, because a scavenge
+%% removes a prefix of a stream without renumbering the rest. Asking from 0
+%% for a stream whose first thirteen versions were scavenged answers `[]'
+%% over a stream that holds three events, and asking backwards from 0 answers
+%% at most version 0 - the newest events, which is what a backward caller
+%% wants, were never in the window.
+%%
+%% So this starts at the live end: the oldest version for `forward', the
+%% newest for `backward'. The first read is the same positional window this
+%% always did, and answers in full for a stream that holds at least
+%% `BatchSize' live events from that end; only when it comes back short does
+%% this ask the tree which versions are live and read from the first of them.
 -spec read_all(atom(), binary(), pos_integer(), direction()) ->
     {ok, [event()]} | {error, term()}.
 read_all(StoreId, StreamId, BatchSize, Direction) ->
-    read(StoreId, StreamId, 0, BatchSize, Direction).
+    %% The same stream-id gate as read/5, and before the backward direction
+    %% builds a counter path from the id.
+    case reckon_db_stream_path:validate(StreamId) of
+        ok -> read_live(StoreId, StreamId, BatchSize, Direction);
+        {error, _} = Invalid -> Invalid
+    end.
+
+%% @private
+read_live(StoreId, StreamId, BatchSize, forward) ->
+    shortened_window(StoreId, StreamId, BatchSize, forward,
+                     read(StoreId, StreamId, 0, BatchSize, forward));
+read_live(StoreId, StreamId, BatchSize, backward) ->
+    case newest_event_version(StoreId, StreamId) of
+        {ok, ?NO_STREAM} ->
+            {ok, []};
+        {ok, Newest} ->
+            shortened_window(StoreId, StreamId, BatchSize, backward,
+                             read(StoreId, StreamId, Newest, BatchSize, backward));
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private The window was not filled from the live end, so the stream is
+%% either shorter than the batch or hollow at that end: read again from the
+%% oldest (or newest) version the tree actually holds.
+shortened_window(_StoreId, _StreamId, BatchSize, _Direction, {ok, Events})
+        when length(Events) =:= BatchSize ->
+    {ok, Events};
+shortened_window(StoreId, StreamId, BatchSize, forward, {ok, _Short}) ->
+    from_the_live_end(StoreId, StreamId, BatchSize, forward, fun lists:min/1);
+shortened_window(StoreId, StreamId, BatchSize, backward, {ok, _Short}) ->
+    from_the_live_end(StoreId, StreamId, BatchSize, backward, fun lists:max/1);
+shortened_window(_StoreId, _StreamId, _BatchSize, _Direction, {error, _} = Error) ->
+    Error.
+
+%% @private
+from_the_live_end(StoreId, StreamId, BatchSize, Direction, End) ->
+    case version_nodes(StoreId, StreamId, #{favor => consistency}) of
+        {ok, []} ->
+            {ok, []};
+        {ok, Versions} ->
+            read(StoreId, StreamId, End(Versions), BatchSize, Direction);
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @doc Fold a function over a stream's live events, one batch at a time.
+%%
+%% For the callers that want every event rather than a page: a bulk backfill
+%% or an operator report. One batch is held at a time, so a stream of any size
+%% costs one `BatchSize' read rather than a list of everything, and the cursor
+%% is a version: each batch after the first starts at the version one past the
+%% last event the previous one returned, past the versions a scavenge removed
+%% and past a batch that is not full at the far end.
+%%
+%% Direction is the order the batches are visited in, and each batch is
+%% returned in that direction too, as `read/5' returns it.
+-spec fold_event_batches(
+    atom(), binary(), pos_integer(), direction(),
+    fun(([event()], Acc) -> Acc), Acc) -> {ok, Acc} | {error, term()} when Acc :: term().
+fold_event_batches(StoreId, StreamId, BatchSize, Direction, Fun, Acc0) ->
+    case read_all(StoreId, StreamId, BatchSize, Direction) of
+        {ok, []} ->
+            {ok, Acc0};
+        {ok, Events} ->
+            continue_fold(StoreId, StreamId, BatchSize, Direction, Fun,
+                          Fun(Events, Acc0), Events);
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private
+fold_batches_from(StoreId, StreamId, BatchSize, Direction, Fun, Acc, Start) ->
+    case read(StoreId, StreamId, Start, BatchSize, Direction) of
+        {ok, []} ->
+            {ok, Acc};
+        {ok, Events} ->
+            continue_fold(StoreId, StreamId, BatchSize, Direction, Fun,
+                          Fun(Events, Acc), Events);
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private Go on from the batch just folded. A batch that is shorter than the
+%% batch size is the end of the stream in that direction - read_all/4 starts at
+%% the live end, so there is nothing below it - and otherwise the next batch
+%% starts at the version one step past this one's far end.
+continue_fold(_StoreId, _StreamId, BatchSize, _Direction, _Fun, Acc, Events)
+        when length(Events) < BatchSize ->
+    {ok, Acc};
+continue_fold(StoreId, StreamId, BatchSize, Direction, Fun, Acc, Events) ->
+    case next_batch_start(Events, Direction) of
+        done       -> {ok, Acc};
+        {ok, Start} -> fold_batches_from(StoreId, StreamId, BatchSize,
+                                         Direction, Fun, Acc, Start)
+    end.
+
+%% @private The version one past the batch just visited, or done when there is
+%% no version left on that side of the stream.
+next_batch_start(Events, forward) ->
+    %% Read forward, the batch ends at its highest version.
+    {ok, (lists:last(Events))#event.version + 1};
+next_batch_start(Events, backward) ->
+    %% Read backward, the batch begins at its highest version and ends at its
+    %% lowest, which is where the next batch below it starts.
+    case lists:last(Events) of
+        #event{version = 0}      -> done;
+        #event{version = Lowest} -> {ok, Lowest - 1}
+    end.
 
 %% @doc Read all events across all streams in global order.
 %%
@@ -802,7 +926,17 @@ convert_result_to_event(_, _) ->
 %%
 %% Streams written by a store that predates the counter have no counter
 %% node yet; for those the newest version node is read once (names only)
-%% and the next append writes the counter.
+%% and the next append writes the counter. That read is the expensive one -
+%% the same walk, measured at 130-250 ms on a 50 000-event stream - and it is
+%% paid on every version read until the stream's first append after the
+%% upgrade writes the counter.
+%%
+%% This answers -1 for a store it could not read, and `append/4' answers the
+%% store's own error for the same failure. The difference is deliberate: this
+%% function has no error channel and its callers page by version, while an
+%% append must not write over a tree it could not read. `newest_event_version/2'
+%% answers `{ok, Version}' or the store's error from the same read, for a
+%% caller that has to tell -1 apart from a store that did not answer.
 -spec get_version(atom(), binary()) -> integer().
 get_version(StoreId, StreamId) ->
     case current_version_for_append(StoreId, StreamId) of
@@ -1089,7 +1223,7 @@ delete_stream_tx(Path, CounterPath) ->
 %% @private
 %%
 %% The version this batch writes from is read here and VERIFIED again inside
-%% the write transaction (append_guard/5). Reading it here is what lets the
+%% the write transaction (append_guard/6). Reading it here is what lets the
 %% event records and their index entries be built outside Ra's transaction -
 %% HMAC stamping and crypto cannot run inside one - but a read outside the
 %% transaction is a snapshot: two appends to the same stream that both read
@@ -1147,7 +1281,7 @@ append_from(StoreId, StreamId, CurrentVersion, CounterExisted, ExpectedVersion,
 %% collision ever brings the reconcile in.
 %%
 %% The other direction needs no check: a counter below the tree means the node
-%% the batch would occupy is taken, and write_batch_tx/7 refuses it.
+%% the batch would occupy is taken, and write_batch_tx/8 refuses it.
 %%
 %% A tree with no version node at all is not this shape. This release's own
 %% scavenge deletes events without renumbering and leaves the counter as the
@@ -1241,9 +1375,10 @@ reconcile_or_error(StoreId, StreamId, CurrentVersion, ExpectedVersion, Events,
 
 %% @private Try the append again once the counter has been repaired. The
 %% budget shrinks by one so a counter that keeps moving cannot loop here, and
-%% it has a floor: with nothing left to spend, the attempt answers the way a
-%% spent retry budget answers anywhere else in this module, rather than
-%% calling back in with a negative count.
+%% it has a floor: `Attempts' counts the attempts still to be made, so
+%% `Attempts =< 1' is the last one, and it answers the way a spent retry
+%% budget answers anywhere else in this module rather than spending itself on
+%% a re-read whose only possible outcome is the same cap one level down.
 retry_after_reconcile(_StoreId, _StreamId, CurrentVersion, ExpectedVersion,
                       _Events, Attempts) when Attempts =< 1 ->
     {error, {version_conflict, ExpectedVersion, CurrentVersion}};
@@ -1255,7 +1390,7 @@ retry_after_reconcile(StoreId, StreamId, _CurrentVersion, ExpectedVersion,
 %% @private An append of no events writes nothing and answers the version it
 %% read, which is what it answered before the version was verified in the
 %% transaction. Short-circuiting here is what keeps the batch that reaches
-%% write_batch_tx/5 non-empty - and keeps an empty append from crashing the
+%% write_batch_tx/8 non-empty - and keeps an empty append from crashing the
 %% caller (and, through the gateway pool, the worker) on hd([]).
 try_append(_StoreId, _StreamId, CurrentVersion, _CounterExisted,
            _ExpectedVersion, [], _Attempts) ->
@@ -1398,14 +1533,22 @@ repair_counter_tx(CounterPath, Stale, New) ->
         _           -> ok
     end.
 
-%% @doc Record the version a stream reached, when it has no counter yet.
+%% @doc Record the version a stream reached, raising a counter that is behind it.
 %%
 %% The scavenge calls this before it deletes anything. A stream written before
 %% this release keeps no counter, so the tree is its only memory of how far it
 %% got; delete every version node without leaving a number behind and the
-%% next append starts at 0 and reuses versions the stream already used. A
-%% counter that is already there is left alone - it is the newer number, and
-%% the reconcile owns the disagreement between it and the tree.
+%% next append starts at 0 and reuses versions the stream already used.
+%%
+%% A counter that is already there is compared, not trusted. A 5.11.x writer
+%% kept no counter, so it could append past one, and the scavenge then finds a
+%% counter BELOW the newest version it is about to keep. Leaving that number
+%% alone leaves the stream reporting a version it has already gone past: the
+%% next append compares against 9 while the tree holds 15, and the read that
+%% asks from the counter's version misses the events above it. So the number
+%% only ever moves up, never down, and the get and the put are one call inside
+%% one transaction - a concurrent append that has already raised it further is
+%% left alone, and the higher number wins.
 -spec ensure_version_counter(atom(), binary(), integer()) -> ok | {error, term()}.
 ensure_version_counter(_StoreId, _StreamId, Version) when Version < 0 ->
     %% Nothing was ever appended: there is no version to remember.
@@ -1419,10 +1562,20 @@ ensure_version_counter(StoreId, StreamId, Version) ->
         {error, _} = Err -> Err
     end.
 
-%% @private
+%% @private The transaction body: write the counter when it is absent, raise it
+%% when it is below the version the scavenge is keeping, never lower it.
+%%
+%% The comparison and the write are one read-modify-write inside one Ra
+%% command, so nothing can slip between them; a counter a concurrent writer has
+%% already raised past this version makes the write a no-op.
 ensure_version_counter_tx(Path, Version) ->
     case khepri_tx:get(Path) of
-        {ok, _} -> ok;
+        {ok, Current} when is_integer(Current), Current >= Version ->
+            ok;
+        {ok, Current} when is_integer(Current) ->
+            khepri_tx:put(Path, Version);
+        {ok, NotAVersion} ->
+            {error, {version_unverifiable, Version, {not_a_version, NotAVersion}}};
         {error, ?khepri_error(node_not_found, _)} ->
             khepri_tx:put(Path, Version);
         {error, Reason} ->
@@ -1490,7 +1643,7 @@ append_events_to_stream(StoreId, StreamId, CurrentVersion, CounterExisted,
     %% batch.
     %%
     %% The optimistic-version check runs INSIDE the transaction
-    %% (append_guard/5): the version read above is a snapshot, and two
+    %% (append_guard/6): the version read above is a snapshot, and two
     %% concurrent appends that both read it would build the same versions and
     %% one would silently overwrite the other's events.
     %%

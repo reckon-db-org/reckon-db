@@ -43,7 +43,8 @@ subscription_lag_test_() ->
 event_type_summary_test_() ->
     {foreach, fun setup/0, fun cleanup/1, [
         fun event_types_empty/0,
-        fun event_types_with_events/0
+        fun event_types_with_events/0,
+        fun event_types_across_batches/0
     ]}.
 
 stream_info_test_() ->
@@ -204,17 +205,34 @@ event_types_with_events() ->
         #event{event_type = <<"user_registered_v1">>},
         #event{event_type = <<"user_archived_v1">>}
     ],
-    %% read_all/4 is (StoreId, StreamId, BatchSize, Direction) — BatchSize
-    %% before Direction. The mock previously encoded the swapped order, which
-    %% is exactly why the unit test passed while the real worker crashed.
-    meck:expect(reckon_db_streams, read_all,
-        fun(?STORE, <<"s1">>, _, forward) -> {ok, Events} end),
+    %% fold_event_batches/6 is (StoreId, StreamId, BatchSize, Direction, Fun,
+    %% Acc) — BatchSize before Direction, as in read_all/4. The mock once
+    %% encoded the swapped order, which is why the unit test passed while the
+    %% real worker crashed, and it stubbed read_all/4 after the summary moved
+    %% to the fold, which only showed up as an undef here.
+    meck:expect(reckon_db_streams, fold_event_batches,
+        fun(?STORE, <<"s1">>, _, forward, Fun, Acc) -> {ok, Fun(Events, Acc)} end),
     {ok, Types} = reckon_db_store_inspector:event_type_summary(?STORE),
     ?assertEqual(2, length(Types)),
     %% Sorted by count descending
     First = hd(Types),
     ?assertEqual(<<"user_registered_v1">>, maps:get(event_type, First)),
     ?assertEqual(2, maps:get(count, First)).
+
+%% @doc A summary counts the whole stream, not its first batch: the fold is
+%% called once per batch and the counts accumulate across them.
+event_types_across_batches() ->
+    mock_streams([<<"s1">>]),
+    First = [#event{event_type = <<"user_registered_v1">>}],
+    Second = [#event{event_type = <<"user_archived_v1">>},
+              #event{event_type = <<"user_archived_v1">>}],
+    meck:expect(reckon_db_streams, fold_event_batches,
+        fun(?STORE, <<"s1">>, _, forward, Fun, Acc) ->
+                {ok, Fun(Second, Fun(First, Acc))}
+        end),
+    {ok, Types} = reckon_db_store_inspector:event_type_summary(?STORE),
+    ?assertEqual([{<<"user_archived_v1">>, 2}, {<<"user_registered_v1">>, 1}],
+                 [{maps:get(event_type, T), maps:get(count, T)} || T <- Types]).
 
 %%====================================================================
 %% stream_info tests

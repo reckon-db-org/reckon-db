@@ -202,6 +202,9 @@
 
 -define(LINKS_PATH, [links]).
 -define(LINK_STREAM_PREFIX, <<"$link:">>).
+%% Events read from one source stream per batch during a backfill. It bounds
+%% what is held in memory, not what is linked: the fold pages to the end.
+-define(BACKFILL_BATCH, 10000).
 
 %%====================================================================
 %% Link Record
@@ -417,9 +420,17 @@ backfill_link(StoreId, Link) ->
     ok.
 
 %% @private Read one source stream and feed its events into the link.
+%%
+%% Every event, a batch at a time. `read(StoreId, StreamId, 0, 10000,
+%% forward)' was a positional window from 0: it answered nothing at all once a
+%% scavenge had removed the stream's first versions, and it silently stopped
+%% at ten thousand events. A backfill that misses events is worse than one
+%% that does not run, because the link stream then looks complete.
 process_link_stream(StoreId, Link, StreamId) ->
-    case reckon_db_streams:read(StoreId, StreamId, 0, 10000, forward) of
-        {ok, Events} -> process_events_for_link(StoreId, Link, Events);
+    Feed = fun(Events, ok) -> process_events_for_link(StoreId, Link, Events) end,
+    case reckon_db_streams:fold_event_batches(
+            StoreId, StreamId, ?BACKFILL_BATCH, forward, Feed, ok) of
+        {ok, ok} -> ok;
         {error, _} -> ok
     end.
 

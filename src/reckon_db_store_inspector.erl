@@ -195,13 +195,19 @@ format_pid(Other) -> list_to_binary(io_lib:format("~p", [Other])).
 %%====================================================================
 
 count_types_in_stream(StoreId, StreamId, Acc) ->
-    %% read_all/4 is (StoreId, StreamId, BatchSize, Direction) — the batch size
-    %% comes before the direction. Passing (forward, 10000) swapped them, so
-    %% calculate_versions/3 got Count=forward / Direction=10000 and crashed the
+    %% fold_event_batches/6 is (StoreId, StreamId, BatchSize, Direction, Fun,
+    %% Acc) — the batch size comes before the direction, as it does in
+    %% read_all/4. Passing (forward, 10000) swapped them once and crashed the
     %% worker with a function_clause on every event-type-summary call.
-    case reckon_db_streams:read_all(StoreId, StreamId, 10000, forward) of
-        {ok, Events} -> lists:foldl(fun count_event_type/2, Acc, Events);
-        _ -> Acc
+    %%
+    %% Every event, not the first ten thousand, and from the live end: a
+    %% summary that stops at a batch, or that reads from a version a scavenge
+    %% has removed, reports a stream that is not there.
+    Count = fun(Events, SoFar) -> lists:foldl(fun count_event_type/2, SoFar, Events) end,
+    case reckon_db_streams:fold_event_batches(
+            StoreId, StreamId, 10000, forward, Count, Acc) of
+        {ok, Counted} -> Counted;
+        {error, _} -> Acc
     end.
 
 count_event_type(#event{event_type = T}, Acc) ->

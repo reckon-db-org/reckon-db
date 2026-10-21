@@ -282,6 +282,10 @@ candidates_up_to(StoreId, StreamId, Opts, CurrentVersion) ->
 read_candidates_up_to(_StoreId, _StreamId, SafeCutoff) when SafeCutoff < 0 ->
     {ok, [], {0, 0}};
 read_candidates_up_to(StoreId, StreamId, SafeCutoff) ->
+    %% Positional on purpose, unlike `read_all/4': the cutoff IS a window over
+    %% numbered versions (delete 0..SafeCutoff, whatever still holds an event),
+    %% so a version no event occupies is a version with nothing to delete, not
+    %% a hole to skip past.
     case reckon_db_streams:read(StoreId, StreamId, 0, SafeCutoff + 1, forward) of
         {ok, Events} ->
             {ok, Events, {0, SafeCutoff}};
