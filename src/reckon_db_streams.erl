@@ -1282,30 +1282,42 @@ delete(StoreId, StreamId) ->
 
 %% @private The delete itself, past the stream-id gate.
 %%
-%% The version counter goes with the stream, in the same transaction: a
-%% counter left behind would make a stream re-created under the same id
-%% start after the deleted one's last version instead of at 0.
+%% The version counter and the chain-start watermark go with the stream, in
+%% the same transaction: a counter left behind would make a stream re-created
+%% under the same id start after the deleted one's last version instead of at
+%% 0, and a watermark left behind would give it a chain start it never had -
+%% its earliest events would read as pre-integrity legacy (unverified), and an
+%% append below the leftover watermark would be refused.
 delete_validated(StoreId, StreamId) ->
     Path = reckon_db_stream_path:stream_path(StreamId),
     CounterPath = reckon_db_stream_path:version_counter_path(StreamId),
-    Fun = fun() -> delete_stream_tx(Path, CounterPath) end,
+    WatermarkPath = reckon_db_chain_watermark:path(StreamId),
+    Fun = fun() -> delete_stream_tx([Path, CounterPath, WatermarkPath]) end,
     case khepri:transaction(StoreId, Fun) of
         {ok, ok} ->
-            %% The stream's integrity metadata goes with it, outside the
-            %% transaction: a stale scavenge boundary would otherwise anchor a
-            %% read of a stream re-created under the same id.
+            %% The scavenge boundary goes with it, outside the transaction:
+            %% a stale one would otherwise anchor a read of a stream
+            %% re-created under the same id.
             ok = reckon_db_scavenge_boundary:delete(StoreId, StreamId);
         {ok, {error, E}}   -> {error, E};
         {error, _} = Error -> Error
     end.
 
-%% @private Both nodes in one command: the events and the counter go
-%% together or neither does.
-delete_stream_tx(Path, CounterPath) ->
-    Results = [khepri_tx:delete(P) || P <- [Path, CounterPath]],
+%% @private Every node in one command: they go together or none does.
+delete_stream_tx(Paths) ->
+    Results = [delete_if_present(P) || P <- Paths],
     case [E || {error, _} = E <- Results] of
         [] -> ok;
         [FirstError | _] -> FirstError
+    end.
+
+%% @private A path that is already absent is not a failure: a stream written
+%% before integrity was enabled has no watermark, and an empty stream may have
+%% no counter.
+delete_if_present(Path) ->
+    case khepri_tx:exists(Path) of
+        true -> khepri_tx:delete(Path);
+        _ -> ok
     end.
 
 %%====================================================================

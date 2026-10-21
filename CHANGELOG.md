@@ -470,16 +470,55 @@ human act is not an acceptable shape for a security fix, so the store seals
 them itself at start, before it serves anything.
 
 What the migration does, per stream: a bare watermark is sealed at the value
-it already has only if it can still be one the store wrote, meaning it is not
-above the stream's newest version and no event below it carries a chain (a
-genuine watermark was written at the version integrity began, so nothing
-below it has one). A stream with no watermark at all is sealed at its first
-chain-bearing version, or, if it has none, at newest + 1. Anything that fails
-those checks is left unsealed and reported in the log and in telemetry; its
-reads stay refused, one stream at a time, never the whole store.
+it already has only if it sits exactly where the chain begins (a genuine
+watermark was written at the version integrity began, so no event below it
+carries a chain), or, over a stream that carries no chain at all, at a value no
+higher than newest + 1. A stream with no watermark and no chain-bearing event is
+sealed at newest + 1: the whole stream predates integrity, or an earlier version
+crashed between minting its watermark and appending the event that would have
+carried the chain.
+
+**Deletion evidence changes the answer for every other stream.** An earlier
+version minted the watermark before it stamped the chain (`setup_integrity/3` on
+5.11.x), so a stream that carries a chain-bearing event and has no authenticated
+watermark at the version its chain begins is a state it cannot produce: a
+watermark was deleted. Once one stream shows that, "no watermark over chain-less
+events" is no longer the benign shape it is on an untouched store, so the
+migration stops vouching for anything it cannot check:
+
+- a chain-bearing stream is rebuilt from its own evidence - the lowest event
+  whose `prev_event_hash` is the genesis value AND whose MAC verifies under the
+  store's key is where the store began that chain, and nothing else can carry a
+  genesis predecessor with a valid MAC - and sealed there. If no such event
+  survives, that stream is refused.
+- a chain-less stream with a missing or bare watermark is refused, and named in
+  the log, in telemetry and in the marker.
+
+`migrate(StoreId, #{accept_missing => [StreamId, ...]})` is the operator act: it
+seals the named streams and only those, logs who ran it and when, and recomputes
+the same way from each stream's own evidence, so it cannot excuse a hash-less
+event at or above a chain start. Nothing else in the store waits on it: an
+attacker who deletes one stream's watermark refuses that stream, never the
+store.
 
 Then it writes `[metadata, integrity, migration]`, a record MAC'd under the
-store's integrity key, and never runs again.
+store's integrity key that names the streams it refused, and never runs again.
+
+**The migration is one transaction.** The scan reads every stream outside the
+tree; a single Khepri transaction then compare-and-swaps each watermark it seals
+against the value the scan saw and writes the done marker with them. There is no
+in-progress record, so nothing with a constant MAC exists for a writer to replay,
+and a crash leaves either a migrated store or an untouched one - the next start
+runs the whole migration again. A value that changed between the scan and the
+transaction aborts it rather than being sealed as a claim nobody made, which is
+also what makes two nodes starting at once safe: one transaction wins.
+
+**A node-local anchor.** Sealed watermarks and the marker are all tree nodes, so
+a writer with tree access can delete every one of them. When the store has a data
+directory, the migration writes `<data_dir>/integrity_migration.done` (an HMAC
+over the store id), and any later start that verifies the marker and finds no
+anchor writes one, so every node in a cluster gets its own. A start that finds
+the anchor and no verified marker reports the violation and seals nothing.
 
 **Only the migration seals, and only a new stream gets a watermark minted.**
 An append never seals a bare integer: it stops with
@@ -507,18 +546,29 @@ chain, which is exactly the shape of the attack: clear the integrity fields
 off every event, write a large bare number, and the stream came back
 unverified. It is now refused in every case.
 
-**What the migration cannot decide, said plainly.** A bare integer at or
-below the newest version over a stream whose integrity fields were ALL
-cleared is indistinguishable from a genuine pre-integrity watermark, because
-the events carry no evidence either way; sealing it preserves exactly what
-the previous version did with that store. Re-running the migration is
-prevented by the marker, and on a store whose marker is missing or does not
-verify the migration refuses to seal anything while the store already holds
-sealed watermarks, because re-sealing is what a writer who stripped a stream
-and deleted the marker would want. The residual: a writer who overwrites
-every sealed watermark in the store as well has removed all in-tree evidence
-of the migration. That is the capability the previous version already gave
-them; what is gone is doing it with one write to one stream.
+**What the migration cannot decide, said plainly.** A writer who deletes the
+marker, every sealed watermark AND the node-local anchor - a wiped data
+directory, or a node that never held the store - leaves a store that is
+indistinguishable, from the tree alone, from one that was never migrated. That
+is the capability the previous version already gave them: on 5.11.x a bare
+integer *was* believed. What is gone is doing it with one write to one stream, on
+a store whose data directory survives. A bare watermark above a chain-less
+stream's surviving newest event is refused for the same reason, because nothing
+authenticated accounts for the gap, and the operator act is the way back for the
+honest store that hits it. And nothing anchors a stream's head, so deleting the
+newest events leaves a shorter stream that still verifies: freshness and
+completeness are out of scope for this release, and a MAC'd head per stream is
+the shape that would close it.
+
+### Fixed: a deleted stream takes its watermark with it
+
+`reckon_db_chain_watermark:delete/2` documented that a stream's watermark must
+not outlive it, but nothing ever called it: deleting a stream removed its events
+and its version counter and left the watermark in the tree. A stream re-created
+under the same id then inherited a chain start it never had - its earliest events
+would read as pre-integrity legacy, unverified, and an append below the leftover
+watermark was refused. The watermark now goes in the same transaction as the
+events and the counter.
 
 ### Fixed: a wildcard link no longer links its own output
 

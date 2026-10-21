@@ -142,7 +142,7 @@ post_key_load(ok, StoreId, Mode, DataDir, Config, StartTime) ->
     %% refuses every read on those streams until someone notices. It never
     %% fails the start: a store that cannot be migrated stays fail-closed on
     %% the affected streams and retries on its next boot.
-    ok = reckon_db_chain_watermark:migrate(StoreId),
+    _ = reckon_db_chain_watermark:migrate(StoreId, #{data_dir => DataDir}),
     do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime);
 post_key_load({error, KeyReason} = KeyError, StoreId, _Mode, _DataDir, _Config, _StartTime) ->
     logger:error("Failed to load integrity key for store ~p: ~p", [StoreId, KeyReason]),

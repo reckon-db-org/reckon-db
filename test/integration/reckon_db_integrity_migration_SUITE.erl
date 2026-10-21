@@ -28,7 +28,12 @@
     a_watermark_above_the_stream_is_not_sealed/1,
     a_watermark_over_a_chain_is_not_sealed/1,
     a_deleted_marker_does_not_reseal/1,
-    a_deleted_watermark_is_not_minted_after_the_marker/1
+    a_deleted_watermark_is_not_minted_after_the_marker/1,
+    a_deleted_watermark_is_evidence_and_refuses_chainless_streams/1,
+    the_operator_act_seals_only_the_streams_it_names/1,
+    a_node_local_anchor_stops_a_second_migration/1,
+    the_migration_writes_no_in_progress_record/1,
+    deleting_a_stream_deletes_its_watermark/1
 ]).
 
 -define(KEY_ENV, "RECKON_DB_MIGRATION_TEST_KEY").
@@ -41,7 +46,12 @@ all() ->
         a_watermark_above_the_stream_is_not_sealed,
         a_watermark_over_a_chain_is_not_sealed,
         a_deleted_marker_does_not_reseal,
-        a_deleted_watermark_is_not_minted_after_the_marker
+        a_deleted_watermark_is_not_minted_after_the_marker,
+        a_deleted_watermark_is_evidence_and_refuses_chainless_streams,
+        the_operator_act_seals_only_the_streams_it_names,
+        a_node_local_anchor_stops_a_second_migration,
+        the_migration_writes_no_in_progress_record,
+        deleting_a_stream_deletes_its_watermark
     ].
 
 suite() ->
@@ -291,9 +301,159 @@ a_deleted_watermark_is_not_minted_after_the_marker(Config) ->
     ?assertMatch({error, {integrity_violation, #{kind := missing_integrity}}},
                  read_raw(StoreId, StreamId)).
 
+%% @doc GIVEN a store whose marker, node-local anchor and every watermark
+%%          have been deleted: one chain-bearing stream lost its watermark,
+%%          one chain-less stream lost its watermark too
+%%      WHEN it is started by this version
+%%      THEN the chain-bearing stream's watermark is rebuilt from its own
+%%           genesis event, and the chain-less stream is NOT sealed: the
+%%           deletion is evidence, and a stream the store cannot account for
+%%           is refused rather than vouched for
+%%
+%% Sealing the chain-less stream at its newest + 1 would be exactly the
+%% attack: strip a stream, delete the watermarks, and let the migration vouch
+%% for the result. The intact stream's missing watermark is the evidence that
+%% makes every other missing watermark evidence too.
+a_deleted_watermark_is_evidence_and_refuses_chainless_streams(Config) ->
+    {StoreId, _DataDir, Chainless, Chain} = evidence_store(Config),
+
+    ?assertMatch({ok, {sealed, 0}},
+                 reckon_db_chain_watermark:lookup(StoreId, Chain)),
+    ?assertEqual(3, length(events(StoreId, Chain))),
+
+    ?assertMatch({ok, undefined},
+                 reckon_db_chain_watermark:lookup(StoreId, Chainless)),
+    ?assertMatch({error, {integrity_violation, #{kind := missing_integrity}}},
+                 read_raw(StoreId, Chainless)).
+
+%% @doc GIVEN a store where the migration refused a chain-less stream
+%%      WHEN the operator names that stream in accept_missing
+%%      THEN it is sealed, the marker stops naming it, and naming a stream
+%%           the migration never refused is an error
+%%
+%% The act is per stream on purpose: a store-wide "yes" would vouch for data
+%% nobody looked at, and a store showing tampering evidence is an incident,
+%% not a reason to trust the rest of it.
+the_operator_act_seals_only_the_streams_it_names(Config) ->
+    {StoreId, _DataDir, Chainless, _Chain} = evidence_store(Config),
+    Unnamed = stream(<<"operator-unnamed">>),
+
+    ?assertMatch({ok, undefined},
+                 reckon_db_chain_watermark:lookup(StoreId, Chainless)),
+    ?assertMatch({error, {not_refused, [Unnamed]}},
+                 reckon_db_chain_watermark:migrate(
+                   StoreId, #{accept_missing => [Unnamed]})),
+
+    ok = reckon_db_chain_watermark:migrate(
+           StoreId, #{accept_missing => [Chainless],
+                      operator => <<"migration test">>}),
+    ?assertMatch({ok, {sealed, 3}},
+                 reckon_db_chain_watermark:lookup(StoreId, Chainless)),
+    ?assertEqual(3, length(events(StoreId, Chainless))),
+
+    %% Nothing left to accept: the marker does not name it any more.
+    ?assertMatch({error, {not_refused, [Chainless]}},
+                 reckon_db_chain_watermark:migrate(
+                   StoreId, #{accept_missing => [Chainless]})).
+
+%% @doc GIVEN a migrated store with its node-local anchor on disk
+%%      WHEN the marker and the watermarks are deleted and a bare watermark
+%%           is planted
+%%      THEN the store reports the violation and seals nothing, because the
+%%           anchor proves this node migrated the store already
+%%
+%% Tree access alone cannot remove a file beside the data directory. What it
+%% still buys an attacker is named in the threat model: a wiped data
+%% directory, or a node that never held the store, has no anchor.
+a_node_local_anchor_stops_a_second_migration(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"anchor">>),
+
+    ok = start_store(StoreId, DataDir, disabled),
+    ok = write_legacy(StoreId, StreamId, 3),
+    ok = stop_store(StoreId),
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {sealed, 3}},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+    ?assert(filelib:is_regular(anchor_file(DataDir))),
+
+    ok = forget_migration(StoreId),
+    ok = delete_watermark(StoreId, StreamId),
+    ok = put_bare_watermark(StoreId, StreamId, 3),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {unsealed, 3}},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+    ?assertMatch({error, {integrity_violation, #{kind := missing_integrity}}},
+                 read_raw(StoreId, StreamId)).
+
+%% @doc GIVEN a store the migration had to refuse a stream on
+%%      WHEN the migration has finished
+%%      THEN the seals and the done marker went in one transaction, so there
+%%           is no in-progress record for a writer to replay, and the marker
+%%           names what was left behind
+the_migration_writes_no_in_progress_record(Config) ->
+    {StoreId, _DataDir, Chainless, _Chain} = evidence_store(Config),
+
+    ?assertEqual(absent, presence(StoreId,
+                                  ?INTEGRITY_MIGRATION_PATH ++ [in_progress])),
+    ?assertMatch({ok, #{refused := [_]}},
+                 khepri:get(StoreId, ?INTEGRITY_MIGRATION_PATH)),
+    ?assertMatch({ok, undefined},
+                 reckon_db_chain_watermark:lookup(StoreId, Chainless)).
+
+%% @doc GIVEN a stream with a sealed watermark
+%%      WHEN the stream is deleted and a new stream is created under the same
+%%           id
+%%      THEN the watermark went with it, in the same transaction
+%%
+%% A watermark left behind gives the new stream a chain start it never had:
+%% its earliest events would read as pre-integrity legacy, unverified.
+deleting_a_stream_deletes_its_watermark(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"deleted-stream">>),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 2} = append_events(StoreId, StreamId, 3),
+    ?assertMatch({ok, {sealed, 0}},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    ?assertMatch({ok, undefined},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)).
+
 %%====================================================================
 %% Helpers
 %%====================================================================
+
+%% @private A store left in the shape an attacker who deleted every
+%% watermark leaves: one chain-bearing stream (intact) with no watermark, and
+%% one chain-less stream with no watermark and no marker. The anchor goes too,
+%% so the migration runs rather than reporting the violation the anchor would
+%% raise.
+evidence_store(Config) ->
+    {StoreId, DataDir} = store(Config),
+    Chainless = stream(<<"evidence-chainless">>),
+    Chain = stream(<<"evidence-chain">>),
+    ok = start_store(StoreId, DataDir, disabled),
+    ok = write_legacy(StoreId, Chainless, 3),
+    ok = stop_store(StoreId),
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 2} = append_events(StoreId, Chain, 3),
+    ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
+    ok = delete_watermark(StoreId, Chainless),
+    ok = delete_watermark(StoreId, Chain),
+    ok = stop_store(StoreId),
+    ok = start_store(StoreId, DataDir, enabled),
+    {StoreId, DataDir, Chainless, Chain}.
+
+%% @private
+append_events(StoreId, StreamId, N) ->
+    reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM,
+                             [#{event_type => <<"e">>, data => #{n => I}}
+                              || I <- lists:seq(1, N)]).
 
 store(Config) ->
     {proplists:get_value(store_id, Config), proplists:get_value(data_dir, Config)}.
@@ -338,6 +498,27 @@ forget_migration(StoreId) ->
 
 watermark_path(StreamId) ->
     ?INTEGRITY_CHAIN_START_PATH ++ [StreamId].
+
+delete_watermark(StoreId, StreamId) ->
+    _ = khepri:delete(StoreId, watermark_path(StreamId)),
+    ok.
+
+anchor_file(DataDir) ->
+    filename:join(DataDir, "integrity_migration.done").
+
+forget_anchor(DataDir) ->
+    _ = file:delete(anchor_file(DataDir)),
+    ok.
+
+presence(StoreId, Path) ->
+    case khepri:get(StoreId, Path) of
+        {ok, _} -> present;
+        _ -> absent
+    end.
+
+events(StoreId, StreamId) ->
+    {ok, Events} = read_raw(StoreId, StreamId),
+    Events.
 
 %% Reads with the store's own verification, which is what a consumer sees.
 read_raw(StoreId, StreamId) ->
