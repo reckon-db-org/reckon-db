@@ -48,6 +48,7 @@ init(#store_config{store_id = StoreId} = Config) ->
     Children = [
         persistence_sup_spec(Config),
         notification_sup_spec(Config),
+        links_sup_spec(Config),
         store_mgr_spec(Config)
     ],
 
@@ -58,6 +59,21 @@ init(#store_config{store_id = StoreId} = Config) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+%% @private The links supervisor owns one worker per running link. It is a
+%% supervisor of its own so that a link that crashes is restarted without
+%% taking the store's persistence or notification systems with it: a link is
+%% derived data, and its failure is not a reason to stop appends.
+-spec links_sup_spec(store_config()) -> supervisor:child_spec().
+links_sup_spec(#store_config{store_id = StoreId}) ->
+    #{
+        id => reckon_db_naming:links_sup_name(StoreId),
+        start => {reckon_db_links_sup, start_link, [StoreId]},
+        restart => permanent,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [reckon_db_links_sup]
+    }.
 
 %% @private
 -spec persistence_sup_spec(store_config()) -> supervisor:child_spec().

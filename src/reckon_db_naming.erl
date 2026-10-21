@@ -17,6 +17,7 @@
     cluster_sup_name/1,
     gateway_sup_name/1,
     streams_sup_name/1,
+    links_sup_name/1,
     emitter_sup_name/1,
     leader_sup_name/1,
 
@@ -40,6 +41,7 @@
     writer_pool_name/1,
     reader_pool_name/1,
     emitter_pool_name/2,
+    link_worker_name/2,
 
     %% Group names
     pg_group_name/2,
@@ -85,6 +87,17 @@ gateway_sup_name(StoreId) ->
 -spec streams_sup_name(atom()) -> atom().
 streams_sup_name(StoreId) ->
     make_name("reckon_db_streams_", StoreId).
+
+%% @doc Links supervisor name for a store
+-spec links_sup_name(atom()) -> atom().
+links_sup_name(StoreId) ->
+    make_name("reckon_db_links_", StoreId).
+
+%% @doc The process running one link of a store
+-spec link_worker_name(atom(), binary()) -> atom().
+link_worker_name(StoreId, LinkName) ->
+    list_to_atom("reckon_db_link_" ++ atom_to_list(StoreId) ++ "_" ++
+                 binary_to_list(LinkName)).
 
 %% @doc Emitter supervisor name for a store
 -spec emitter_sup_name(atom()) -> atom().

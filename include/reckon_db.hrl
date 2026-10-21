@@ -259,3 +259,17 @@
 -define(TELEMETRY_PREFIX, [reckon_db]).
 
 -endif. %% RECKON_DB_HRL
+
+%% A link, as it is stored under [links, StoreId, Name]. Shared with
+%% reckon_db_link_worker, which runs one.
+-record(link, {
+    name :: binary(),
+    source :: map(),
+    filter :: fun((term()) -> boolean()) | undefined,
+    transform :: fun((term()) -> term()) | undefined,
+    backfill :: boolean(),
+    created_at :: integer(),
+    status = stopped :: running | stopped | error,
+    processed = 0 :: non_neg_integer(),
+    last_event :: binary() | undefined
+}).

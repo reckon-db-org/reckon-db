@@ -162,7 +162,14 @@
     list/1,
     start/2,
     stop/2,
-    info/2
+    info/2,
+
+    %% For reckon_db_link_worker, which runs one link.
+    get_link/2,
+    source_streams/2,
+    process_events/2,
+    append_to_link/3,
+    link_stream_id/1
 ]).
 
 %%====================================================================
@@ -202,25 +209,10 @@
 
 -define(LINKS_PATH, [links]).
 -define(LINK_STREAM_PREFIX, <<"$link:">>).
-%% Events read from one source stream per batch during a backfill. It bounds
-%% what is held in memory, not what is linked: the fold pages to the end.
--define(BACKFILL_BATCH, 10000).
 
 %%====================================================================
 %% Link Record
 %%====================================================================
-
--record(link, {
-    name :: binary(),
-    source :: source_spec(),
-    filter :: filter_fun() | undefined,
-    transform :: transform_fun() | undefined,
-    backfill :: boolean(),
-    created_at :: integer(),
-    status = stopped :: running | stopped | error,
-    processed = 0 :: non_neg_integer(),
-    last_event :: binary() | undefined
-}).
 
 %%====================================================================
 %% API
@@ -304,34 +296,65 @@ list(StoreId) ->
 
 %% @doc Start processing a link.
 %%
-%% This will:
-%% 1. Subscribe to source stream(s)
-%% 2. Optionally backfill existing events
-%% 3. Apply filter and transform to each event
-%% 4. Write matching events to the link stream
+%% One process per running link does the whole job, in the order that makes
+%% the backfill and the live delivery meet exactly once: subscribe, fence each
+%% source stream at its newest version, backfill to that fence, then link what
+%% arrives above it. `reckon_db_link_worker' is why this is a process and not
+%% a handler fun - the fence has to survive between events.
+%%
+%% The order is also why the subscription is created before the fence is
+%% taken: an event appended in between is at or below the fence, so the
+%% backfill links it; one appended after is above it, so the live path links
+%% it. Nothing is in neither, and nothing is in both.
 -spec start(atom(), binary()) -> ok | {error, term()}.
 start(StoreId, Name) ->
     case get_link(StoreId, Name) of
-        {ok, Link} ->
-            update_status(StoreId, Name, running),
-            maybe_backfill_link(StoreId, Link),
-            start_link_subscription(StoreId, Link),
-            emit_telemetry(StoreId, Name, started),
-            ok;
+        {ok, _Link} ->
+            start_worker(StoreId, Name);
         {error, _} = Error ->
             Error
     end.
 
-maybe_backfill_link(StoreId, #link{backfill = true} = Link) ->
-    backfill_link(StoreId, Link);
-maybe_backfill_link(_StoreId, _Link) ->
-    ok.
+%% @private
+start_worker(StoreId, Name) ->
+    Worker = reckon_db_naming:link_worker_name(StoreId, Name),
+    case whereis(Worker) of
+        undefined -> do_start_worker(StoreId, Name);
+        _Pid -> ok
+    end.
+
+%% @private Supervised when the store's supervision tree is running, which is
+%% every deployment; a bare Khepri store - the suites and the operator tools -
+%% has none, and the worker is then simply started on its own.
+do_start_worker(StoreId, Name) ->
+    Sup = reckon_db_naming:links_sup_name(StoreId),
+    case whereis(Sup) of
+        undefined ->
+            started(reckon_db_link_worker:start(StoreId, Name), StoreId, Name);
+        _ ->
+            Spec = #{id => Name,
+                     start => {reckon_db_link_worker, start_link, [StoreId, Name]},
+                     restart => transient,
+                     shutdown => 30000,
+                     type => worker,
+                     modules => [reckon_db_link_worker]},
+            started(supervisor:start_child(Sup, Spec), StoreId, Name)
+    end.
+
+%% @private
+started({ok, _Pid}, StoreId, Name) ->
+    update_status(StoreId, Name, running),
+    emit_telemetry(StoreId, Name, started),
+    ok;
+started({error, {already_started, _Pid}}, StoreId, Name) ->
+    started({ok, already}, StoreId, Name);
+started({error, _} = Error, _StoreId, _Name) ->
+    Error.
 
 %% @doc Stop processing a link.
 -spec stop(atom(), binary()) -> ok | {error, term()}.
 stop(StoreId, Name) ->
-    %% Stop subscription
-    stop_link_subscription(StoreId, Name),
+    ok = reckon_db_link_worker:stop(StoreId, Name),
 
     %% Update status
     update_status(StoreId, Name, stopped),
@@ -366,7 +389,7 @@ info(StoreId, Name) ->
 %% Internal functions
 %%====================================================================
 
-%% @private Get raw link record
+%% @doc Get the link record itself, for the worker that runs it.
 -spec get_link(atom(), binary()) -> {ok, #link{}} | {error, not_found}.
 get_link(StoreId, Name) ->
     Path = ?LINKS_PATH ++ [StoreId, Name],
@@ -410,38 +433,10 @@ update_status(StoreId, Name, Status) ->
 link_stream_id(Name) ->
     <<?LINK_STREAM_PREFIX/binary, Name/binary>>.
 
-%% @private Backfill link with existing events
--spec backfill_link(atom(), #link{}) -> ok.
-backfill_link(StoreId, Link) ->
-    SourceStreams = get_source_streams(StoreId, Link#link.source),
-
-    lists:foreach(fun(StreamId) -> process_link_stream(StoreId, Link, StreamId) end,
-                  SourceStreams),
-    ok.
-
-%% @private Read one source stream and feed its events into the link.
-%%
-%% Every event, a batch at a time. `read(StoreId, StreamId, 0, 10000,
-%% forward)' was a positional window from 0: it answered nothing at all once a
-%% scavenge had removed the stream's first versions, and it silently stopped
-%% at ten thousand events. A backfill that misses events is worse than one
-%% that does not run, because the link stream then looks complete.
-process_link_stream(StoreId, Link, StreamId) ->
-    Feed = fun(Events, ok) -> process_events_for_link(StoreId, Link, Events) end,
-    case reckon_db_streams:fold_event_batches(
-            StoreId, StreamId, ?BACKFILL_BATCH, forward, Feed, ok) of
-        {ok, ok} ->
-            ok;
-        {error, Reason} ->
-            %% Answered, because one unreadable source stream must not stop a
-            %% backfill over the others - but not silently: the events after
-            %% this point are not in the link stream, and a link stream that
-            %% is merely short looks exactly like a complete one.
-            logger:warning("link ~p: backfill of stream ~p stopped at ~p; "
-                           "the events after that point are not linked",
-                           [Link#link.name, StreamId, Reason]),
-            ok
-    end.
+%% @doc The streams a link's source spec covers, now.
+-spec source_streams(atom(), #link{}) -> [binary()].
+source_streams(StoreId, #link{source = Source}) ->
+    get_source_streams(StoreId, Source).
 
 %% @private Get source stream IDs based on source spec
 -spec get_source_streams(atom(), source_spec()) -> [binary()].
@@ -486,18 +481,11 @@ wildcard_to_regex(Pattern) ->
     Converted = binary:replace(Escaped, <<"*">>, <<".*">>, [global]),
     <<"^", Converted/binary, "$">>.
 
-%% @private Process events through link filter/transform
--spec process_events_for_link(atom(), #link{}, [event()]) -> ok.
-process_events_for_link(StoreId, Link, Events) ->
-    Filter = Link#link.filter,
-    Transform = Link#link.transform,
-    LinkStreamId = link_stream_id(Link#link.name),
-
-    ProcessedEvents = lists:filtermap(
-                        fun(Event) -> filter_and_transform(Filter, Transform, Event) end,
-                        Events),
-
-    append_processed_events(StoreId, Link#link.name, LinkStreamId, ProcessedEvents).
+%% @doc Apply the link's filter and transform to a batch of source events.
+-spec process_events(#link{}, [event()]) -> [event()].
+process_events(#link{filter = Filter, transform = Transform}, Events) ->
+    lists:filtermap(fun(Event) -> filter_and_transform(Filter, Transform, Event) end,
+                    Events).
 
 %% @private Keep + transform events that pass the link filter.
 filter_and_transform(Filter, Transform, Event) ->
@@ -506,16 +494,19 @@ filter_and_transform(Filter, Transform, Event) ->
         false -> false
     end.
 
-append_processed_events(_StoreId, _LinkName, _LinkStreamId, []) ->
+%% @doc Append already filtered and transformed events to a link's stream.
+-spec append_to_link(atom(), binary(), [event()]) -> ok | {error, term()}.
+append_to_link(_StoreId, _LinkName, []) ->
     ok;
-append_processed_events(StoreId, LinkName, LinkStreamId, ProcessedEvents) ->
+append_to_link(StoreId, LinkName, ProcessedEvents) ->
+    LinkStreamId = link_stream_id(LinkName),
     EventMaps = [event_to_map(E) || E <- ProcessedEvents],
     case reckon_db_streams:append(StoreId, LinkStreamId, -2, EventMaps) of
         {ok, _} ->
             update_processed_count(StoreId, LinkName, length(ProcessedEvents)),
             ok;
-        {error, _} ->
-            ok
+        {error, _} = Error ->
+            Error
     end.
 
 %% @private Apply filter function
@@ -566,44 +557,6 @@ update_processed_count(StoreId, Name, Count) ->
         _ ->
             ok
     end.
-
-%% @private Start subscription for link
--spec start_link_subscription(atom(), #link{}) -> ok.
-start_link_subscription(StoreId, Link) ->
-    %% Create subscription based on source type
-    SubscriptionName = <<"$link-sub:", (Link#link.name)/binary>>,
-
-    case Link#link.source of
-        #{type := stream, stream_id := StreamId} ->
-            reckon_db_subscriptions:subscribe(
-                StoreId, stream, StreamId, SubscriptionName,
-                #{handler => fun(Events) ->
-                    process_events_for_link(StoreId, Link, Events)
-                end}
-            );
-        #{type := stream_pattern, pattern := Pattern} ->
-            reckon_db_subscriptions:subscribe(
-                StoreId, event_pattern, Pattern, SubscriptionName,
-                #{handler => fun(Events) ->
-                    process_events_for_link(StoreId, Link, Events)
-                end}
-            );
-        #{type := all} ->
-            reckon_db_subscriptions:subscribe(
-                StoreId, all, <<"*">>, SubscriptionName,
-                #{handler => fun(Events) ->
-                    process_events_for_link(StoreId, Link, Events)
-                end}
-            )
-    end,
-    ok.
-
-%% @private Stop subscription for link
--spec stop_link_subscription(atom(), binary()) -> ok.
-stop_link_subscription(StoreId, Name) ->
-    SubscriptionName = <<"$link-sub:", Name/binary>>,
-    reckon_db_subscriptions:unsubscribe(StoreId, SubscriptionName),
-    ok.
 
 %% @private Emit telemetry
 -spec emit_telemetry(atom(), binary(), atom()) -> ok.

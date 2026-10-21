@@ -1,5 +1,7 @@
 # Known dialyzer findings, recorded as a ratchet. See scripts/dialyzer_ratchet.sh.
 # dialyzer reported 198 warnings when this was written.
+||||||| parent of 4bb162b (reckon-db 5.12.0: a link links the events appended during its own start, exactly once)
+# dialyzer reported 198 when this was written (files for lint, warnings for dialyzer).
 # A new finding fails CI. A fixed finding should have its line deleted here.
 src/reckon_db_app.erl	229929d0a14f	Expression produces a value of type 'ok' | {'error','already_exists'}, but this value is unmatched
 src/reckon_db_app.erl	f0ceac231f4c	The specification for reckon_db_app:start/0 states that the function might also return {'ok',pid()} but the in
@@ -76,6 +78,10 @@ src/reckon_db_gateway_worker.erl	b86629883b64	Expression produces a value of typ
 src/reckon_db_gateway_worker.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
 src/reckon_db_gateway_worker.erl	cd79d22c4983	Type specification reckon_db_gateway_worker:subscription_to_map(subscription() | map()) -> map() is a supertyp
 src/reckon_db_gateway_worker.erl	ea7f71f18efd	Expression produces a value of type {'error','not_found'}, but this value is unmatched
+||||||| parent of 4bb162b (reckon-db 5.12.0: a link links the events appended during its own start, exactly once)
+src/reckon_db_gateway_worker.erl	bbfd02436f2e	Type specification reckon_db_gateway_worker:subscription_to_map(subscription() | map()) -> map() is a supertyp
+src/reckon_db_gateway_worker.erl	e746ee89656f	The variable Map can never match since previous clauses completely covered the type #subscription{id::binary()
+src/reckon_db_gateway_worker.erl	ea7f71f18efd	Expression produces a value of type {'error','not_found'}, but this value is unmatched
 src/reckon_db_health_prober.erl	00ba855a221f	Type specification reckon_db_health_prober:handle_probe_result(#node_state{},'ok' | {'error',term()},non_neg_i
 src/reckon_db_health_prober.erl	139310920486	Expression produces a value of type 'ok' | reference(), but this value is unmatched
 src/reckon_db_health_prober.erl	3c2b2fdac4dc	Type specification reckon_db_health_prober:notify_failed_callbacks(#{reference()=>fun()},node()) -> 'ok' is a 
@@ -97,17 +103,24 @@ src/reckon_db_links.erl	01e26c482807	Invalid type specification for function rec
 src/reckon_db_links.erl	164fb90a9356	The specification for reckon_db_links:start/2 states that the function might also return 'ok' but the inferred
 src/reckon_db_links.erl	50576db13d39	The call reckon_db_subscriptions:subscribe(StoreId::atom(), 'all', <<42>>, SubscriptionName::<<_:8,_:_*1>>, #{
 src/reckon_db_links.erl	53cac1e1d0e4	Type specification reckon_db_links:wildcard_to_regex(binary()) -> binary() is a supertype of the success typin
+||||||| parent of 4bb162b (reckon-db 5.12.0: a link links the events appended during its own start, exactly once)
+src/reckon_db_leader_tracker.erl	9cb16afac67d	Type specification reckon_db_leader_tracker:format_subscription_data(map() | subscription()) -> subscription()
+src/reckon_db_links.erl	01e26c482807	Invalid type specification for function reckon_db_links:start_link_subscription/2. The success typing is (_,_)
+src/reckon_db_links.erl	164fb90a9356	The specification for reckon_db_links:start/2 states that the function might also return 'ok' but the inferred
+src/reckon_db_links.erl	53cac1e1d0e4	Type specification reckon_db_links:wildcard_to_regex(binary()) -> binary() is a supertype of the success typin
 src/reckon_db_links.erl	5ac8d578b964	The specification for reckon_db_links:stop/2 states that the function might also return {'error',_} but the in
-src/reckon_db_links.erl	604935c0c8ae	The call reckon_db_subscriptions:subscribe(StoreId::atom(), 'stream', StreamId::binary(), SubscriptionName::<<
-src/reckon_db_links.erl	736d89253640	Type specification reckon_db_links:info(atom(),binary()) -> {'ok',map()} | {'error','not_found'} is a supertyp
 src/reckon_db_links.erl	7cb5ac895c8d	Type specification reckon_db_links:update_status(atom(),binary(),'running' | 'stopped' | 'error') -> 'ok' is a
-src/reckon_db_links.erl	9cc57d0386aa	Function start_link_subscription/2 has no local return
 src/reckon_db_links.erl	affa23d32e30	Type specification reckon_db_links:event_to_map(event()) -> map() is a supertype of the success typing: reckon
 src/reckon_db_links.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
 src/reckon_db_links.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
 src/reckon_db_links.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
 src/reckon_db_links.erl	d9391146ebf2	Type specification reckon_db_links:emit_telemetry(atom(),binary(),atom()) -> 'ok' is a supertype of the succes
 src/reckon_db_links.erl	e4616dd292fd	The call reckon_db_subscriptions:subscribe(StoreId::atom(), 'event_pattern', Pattern::binary(), SubscriptionNa
+||||||| parent of 4bb162b (reckon-db 5.12.0: a link links the events appended during its own start, exactly once)
+src/reckon_db_links.erl	b86629883b64	Expression produces a value of type 'ok' | {'error',_}, but this value is unmatched
+src/reckon_db_links.erl	d9391146ebf2	Type specification reckon_db_links:emit_telemetry(atom(),binary(),atom()) -> 'ok' is a supertype of the succes
+src/reckon_db_links.erl	e4616dd292fd	The call reckon_db_subscriptions:subscribe(StoreId::atom(), 'event_pattern', Pattern::binary(), SubscriptionNa
+src/reckon_db_links.erl	ff2fb20384df	The call reckon_db_subscriptions:subscribe(StoreId::atom(), 'all', <<42>>, SubscriptionName::<<_:8,_:_*1>>, #{
 src/reckon_db_memory.erl	3678e6a165c5	Expression produces a value of type 'false' | non_neg_integer(), but this value is unmatched
 src/reckon_db_naming.erl	c57aa27f2b59	Type specification reckon_db_naming:make_name(string(),atom()) -> atom() is a supertype of the success typing:
 src/reckon_db_node_monitor.erl	139310920486	Expression produces a value of type 'ok' | reference(), but this value is unmatched
