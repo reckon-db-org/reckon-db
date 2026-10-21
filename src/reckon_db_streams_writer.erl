@@ -160,14 +160,16 @@ start_new_writer(StoreId, StreamId) ->
                 type => worker,
                 modules => [?MODULE]
             },
-            case supervisor:start_child(SupName, ChildSpec) of
-                {ok, Pid} -> Pid;
-                {error, {already_started, Pid}} -> Pid;
-                {error, Reason} ->
-                    logger:error("Failed to start streams writer: ~p", [Reason]),
-                    error({failed_to_start_writer, Reason})
-            end
+            started_pid(supervisor:start_child(SupName, ChildSpec))
     end.
+
+% @private The pid of a started (or already running) writer.
+-spec started_pid({ok, pid()} | {error, term()}) -> pid().
+started_pid({ok, Pid}) -> Pid;
+started_pid({error, {already_started, Pid}}) -> Pid;
+started_pid({error, Reason}) ->
+    logger:error("Failed to start streams writer: ~p", [Reason]),
+    error({failed_to_start_writer, Reason}).
 
 %% @private
 -spec partition_for(atom(), binary()) -> non_neg_integer().

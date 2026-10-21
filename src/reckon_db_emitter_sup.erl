@@ -48,13 +48,14 @@ stop_emitter_pool(StoreId, SubscriptionId) ->
         undefined ->
             {error, {emitter_sup_not_running, SupName}};
         _Pid ->
-            case supervisor:terminate_child(SupName, ChildId) of
-                ok ->
-                    supervisor:delete_child(SupName, ChildId);
-                Error ->
-                    Error
-            end
+            remove_child(supervisor:terminate_child(SupName, ChildId), SupName, ChildId)
     end.
+
+%% @private Delete a child once it has terminated.
+remove_child(ok, SupName, ChildId) ->
+    supervisor:delete_child(SupName, ChildId);
+remove_child(Error, _SupName, _ChildId) ->
+    Error.
 
 %%====================================================================
 %% Supervisor callbacks

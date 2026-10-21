@@ -153,21 +153,25 @@ do_sample(#state{data_dir = DD0} = State) ->
 %% --- CPU ---
 
 sample_cpu() ->
-    Busy = case (try cpu_sup:util() catch _:_ -> undefined end) of
-               U when is_number(U) -> round_2(U);
-               _ -> undefined
-           end,
-    #{busy_percent => Busy,
+    #{busy_percent => cpu_busy(),
       load1  => load_avg(fun cpu_sup:avg1/0),
       load5  => load_avg(fun cpu_sup:avg5/0),
       load15 => load_avg(fun cpu_sup:avg15/0),
       cores  => cores()}.
 
+cpu_busy() ->
+    try cpu_sup:util() of
+        U when is_number(U) -> round_2(U);
+        _ -> undefined
+    catch _:_ -> undefined
+    end.
+
 %% cpu_sup:avgN/0 returns the load average * 256 (integer); normalise to a float.
 load_avg(F) ->
-    case (try F() catch _:_ -> undefined end) of
+    try F() of
         N when is_integer(N) -> round_2(N / 256);
         _ -> undefined
+    catch _:_ -> undefined
     end.
 
 cores() ->
@@ -200,12 +204,12 @@ sample_disk(DataDir) ->
 
 %% Bare-metal fallback: disksup gives {MountId, TotalKb, UsedPct}.
 disksup_rows() ->
-    case (try disksup:get_disk_data() catch _:_ -> [] end) of
-        Data when is_list(Data), Data =/= [] ->
+    try disksup:get_disk_data() of
+        Data ->
             [#{mount => to_bin(Id), total_kb => T, used_percent => U,
                available_kb => round(T * (100 - U) / 100)}
-             || {Id, T, U} <- Data, is_integer(T), T > 0];
-        _ -> []
+             || {Id, T, U} <- Data, is_integer(T), T > 0]
+    catch _:_ -> []
     end.
 
 %% Parse `df -kP' (POSIX format = 6 columns, one line per mount, no wrapping):
@@ -220,14 +224,15 @@ parse_df_line(Line) ->
     case string:lexemes(Line, " ") of
         [Fs, Blocks, _Used, Avail, Cap | MountParts] when MountParts =/= [] ->
             Mount = lists:flatten(lists:join(" ", MountParts)),
-            case real_fs(Fs) andalso parse_cols(Blocks, Avail, Cap) of
-                {T, A, P} ->
-                    {true, #{mount => list_to_binary(Mount), total_kb => T,
-                             available_kb => A, used_percent => P}};
-                _ -> false
-            end;
+            df_row(real_fs(Fs) andalso parse_cols(Blocks, Avail, Cap), Mount);
         _ -> false
     end.
+
+df_row({T, A, P}, Mount) ->
+    {true, #{mount => list_to_binary(Mount), total_kb => T,
+             available_kb => A, used_percent => P}};
+df_row(_, _Mount) ->
+    false.
 
 parse_cols(Blocks, Avail, Cap) ->
     case {to_int(Blocks), to_int(Avail), to_int(string:trim(Cap, trailing, "%"))} of
@@ -255,13 +260,12 @@ with_data_dir(DataDir, Rows) ->
         undefined ->
             [R#{data_dir_mount => false} || R <- Rows];
         DEntry ->
-            DT = maps:get(total_kb, DEntry),
-            DA = maps:get(available_kb, DEntry),
-            Same = fun(R) -> maps:get(total_kb, R) =:= DT
-                             andalso maps:get(available_kb, R) =:= DA end,
-            Others = [R#{data_dir_mount => false} || R <- Rows, not Same(R)],
+            Others = [R#{data_dir_mount => false} || R <- Rows, not same_fs(R, DEntry)],
             [DEntry#{data_dir_mount => true} | Others]
     end.
+
+same_fs(#{total_kb := T, available_kb := A}, #{total_kb := T, available_kb := A}) -> true;
+same_fs(_Row, _DEntry) -> false.
 
 %% `df' one path -> the filesystem containing it. The usage IS the data disk's;
 %% label it with the data dir path (df's mount-point column is unreliable for

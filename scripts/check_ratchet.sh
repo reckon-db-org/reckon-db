@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Dialyzer, or elvis lint, as a RATCHET rather than a pass/fail gate.
+# Dialyzer as a RATCHET rather than a pass/fail gate. (Lint has no ratchet:
+# the structural floor is a plain `rebar3 lint' gate, macula-codebase-checks#9.)
 #
 # This repository has known dialyzer findings that predate its CI. Failing the
 # job on all of them would make main red on every push, which gives no green
@@ -15,9 +16,8 @@
 #
 # Usage:
 #   scripts/check_ratchet.sh                     run dialyzer, check .dialyzer_baseline
-#   scripts/check_ratchet.sh --tool lint         run elvis, check .lint_baseline
-#   scripts/check_ratchet.sh [--tool T] --update rewrite that baseline from this run
-#   scripts/check_ratchet.sh [--tool T] --log F  check an existing log
+#   scripts/check_ratchet.sh --update            rewrite the baseline from this run
+#   scripts/check_ratchet.sh --log F             check an existing log
 #
 # A baseline entry is `<file>\t<sha1 of the warning text>\t<the first 110
 # A finding is recorded once per occurrence, so an identical finding twice in
@@ -36,44 +36,29 @@ cd "$REPO_DIR" || exit 1
 MODE=check
 LOG=""
 TOOL=dialyzer
+BASELINE=".dialyzer_baseline"
+RUN=(rebar3 dialyzer)
 while [ $# -gt 0 ]; do
   case "$1" in
     --update) MODE=update; shift ;;
     --log) LOG="$2"; shift 2 ;;
-    --tool) TOOL="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-case "$TOOL" in
-  dialyzer) BASELINE=".dialyzer_baseline"; RUN=(rebar3 dialyzer) ;;
-  lint)     BASELINE=".lint_baseline";     RUN=(rebar3 lint) ;;
-  *) echo "unknown tool: $TOOL (dialyzer|lint)" >&2; exit 2 ;;
-esac
-
 if [ -z "$LOG" ]; then
   LOG="$(mktemp)"; trap 'rm -f "$LOG"' EXIT
   "${RUN[@]}" > "$LOG" 2>&1
 fi
 
 # dialyzer: a bare file line, then "Line N Column M: text".
-# elvis:    "# path [FAIL]", then "  - rule (url)", then "    - At line N, ...".
-# Neither key includes the position: a line moves whenever anything above it is
-# edited, and a baseline that churns on unrelated edits is one people delete.
+# The key does not include the position: a line moves whenever anything above
+# it is edited, and a baseline that churns on unrelated edits is one people delete.
 normalise() {
-  sed -e 's/\x1b\[[0-9;]*m//g' "$LOG" | awk -v tool="$TOOL" '
-    tool == "dialyzer" && /^[A-Za-z0-9_\/.-]+\.(erl|hrl)$/ { file = $0; next }
-    tool == "dialyzer" && /^Line [0-9]+ Column [0-9]+: / {
+  sed -e 's/\x1b\[[0-9;]*m//g' "$LOG" | awk '
+    /^[A-Za-z0-9_\/.-]+\.(erl|hrl)$/ { file = $0; next }
+    /^Line [0-9]+ Column [0-9]+: / {
       text = $0; sub(/^Line [0-9]+ Column [0-9]+: /, "", text)
       if (file != "") print file "\t" text
-      next
-    }
-    tool == "lint" && /^# .*\[FAIL\]$/ { file = $2; next }
-    tool == "lint" && /^  - [a-z_]+/ {
-      rule = $2; next
-    }
-    tool == "lint" && /^    - At line/ {
-      text = $0; sub(/^ +- At line [0-9]+, column [0-9]+, /, "", text)
-      if (file != "") print file "\t" rule ": " text
       next
     }' | while IFS=$'\t' read -r f t; do
       printf '%s\t%s\t%s\n' "$f" "$(printf '%s' "$t" | sha1sum | cut -c1-12)" "$(printf '%.110s' "$t")"
@@ -82,16 +67,12 @@ normalise() {
 
 FOUND="$(normalise)"
 FOUND_N="$(printf '%s\n' "$FOUND" | grep -c . || true)"
-if [ "$TOOL" = dialyzer ]; then
-  REPORTED_N="$(sed -e 's/\x1b\[[0-9;]*m//g' "$LOG" | sed -n 's/.*Warnings occurred running dialyzer: \([0-9]*\).*/\1/p' | tail -1)"
-else
-  REPORTED_N="$(sed -e 's/\x1b\[[0-9;]*m//g' "$LOG" | grep -c '^# .*\[FAIL\]$' || true)"
-fi
+REPORTED_N="$(sed -e 's/\x1b\[[0-9;]*m//g' "$LOG" | sed -n 's/.*Warnings occurred running dialyzer: \([0-9]*\).*/\1/p' | tail -1)"
 REPORTED_N="${REPORTED_N:-0}"
 
 if [ "$MODE" = update ]; then
   { echo "# Known dialyzer findings, recorded as a ratchet. See scripts/dialyzer_ratchet.sh."
-    echo "# $TOOL reported $REPORTED_N when this was written (files for lint, warnings for dialyzer)."
+    echo "# $TOOL reported $REPORTED_N warnings when this was written."
     echo "# A new finding fails CI. A fixed finding should have its line deleted here."
     printf '%s\n' "$FOUND"
   } > "$BASELINE"
@@ -99,7 +80,7 @@ if [ "$MODE" = update ]; then
   exit 0
 fi
 
-[ -f "$BASELINE" ] || { echo "no $BASELINE; create it with: scripts/check_ratchet.sh --tool $TOOL --update"; exit 1; }
+[ -f "$BASELINE" ] || { echo "no $BASELINE; create it with: scripts/check_ratchet.sh --update"; exit 1; }
 KNOWN="$(grep -v '^#' "$BASELINE" | grep . | sort)"
 
 NEW="$(comm -23 <(printf '%s\n' "$FOUND") <(printf '%s\n' "$KNOWN"))"

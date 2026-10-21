@@ -851,17 +851,19 @@ notify_integrity_violation(StoreId, SubscriberPid, Offset, Violation) ->
 cleanup_emitter_pool(StoreId, SubscriptionKey) ->
     %% Leave the emitter group for all members
     Members = reckon_db_emitter_group:members(StoreId, SubscriptionKey),
-    lists:foreach(
-        fun(Pid) ->
-            _ = (try reckon_db_emitter_group:leave(StoreId, SubscriptionKey, Pid)
-                 catch _:_ -> ok end)
-        end,
-        Members
-    ),
+    lists:foreach(fun(Pid) -> leave_emitter_group(StoreId, SubscriptionKey, Pid) end,
+                  Members),
 
     %% Remove persisted emitter names
     Key = reckon_db_emitter_group:group_key(StoreId, SubscriptionKey),
     _ = (try persistent_term:erase(Key) catch _:_ -> ok end),
+    ok.
+
+%% @private Leave one member's emitter group; a member already gone is fine.
+-spec leave_emitter_group(atom(), binary(), pid()) -> ok.
+leave_emitter_group(StoreId, SubscriptionKey, Pid) ->
+    _ = (try reckon_db_emitter_group:leave(StoreId, SubscriptionKey, Pid)
+         catch _:_ -> ok end),
     ok.
 
 %% @private Check if a local PID is alive. Remote PIDs are assumed alive.

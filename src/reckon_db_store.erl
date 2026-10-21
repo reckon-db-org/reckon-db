@@ -223,18 +223,19 @@ restart_local_khepri(StoreId, DataDir, Mode) ->
     case erlang:whereis(StoreId) of
         undefined ->
             logger:warning("Restarting torn-down local Khepri store ~p", [StoreId]),
-            case start_khepri_store(StoreId, DataDir, Mode) of
-                ok ->
-                    _ = (try init_store_paths(StoreId) catch _:_ -> ok end),
-                    ok;
-                {error, _} = Error ->
-                    logger:error("Failed to restart local Khepri store ~p: ~p",
-                                 [StoreId, Error]),
-                    Error
-            end;
+            restarted_khepri(start_khepri_store(StoreId, DataDir, Mode), StoreId);
         _Pid ->
             ok
     end.
+
+%% @private Re-init the base paths of a restarted store.
+-spec restarted_khepri(ok | {error, term()}, atom()) -> ok | {error, term()}.
+restarted_khepri(ok, StoreId) ->
+    _ = (try init_store_paths(StoreId) catch _:_ -> ok end),
+    ok;
+restarted_khepri({error, _} = Error, StoreId) ->
+    logger:error("Failed to restart local Khepri store ~p: ~p", [StoreId, Error]),
+    Error.
 
 %% @private
 -spec start_khepri_store(atom(), string(), single | cluster) -> ok | {error, term()}.

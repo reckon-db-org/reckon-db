@@ -95,14 +95,30 @@ span(EventPrefix, Metadata, Fun) ->
     term()
 ) -> ok.
 
+%% One clause per event family; each family logs its own events.
+handle_event([reckon_db, stream | _] = Event, Measurements, Meta, Config) ->
+    stream_event(Event, Measurements, Meta, Config);
+handle_event([reckon_db, subscription | _] = Event, Measurements, Meta, Config) ->
+    subscription_event(Event, Measurements, Meta, Config);
+handle_event([reckon_db, snapshot | _] = Event, Measurements, Meta, Config) ->
+    snapshot_event(Event, Measurements, Meta, Config);
+handle_event([reckon_db, cluster | _] = Event, Measurements, Meta, Config) ->
+    cluster_event(Event, Measurements, Meta, Config);
+handle_event([reckon_db, store | _] = Event, Measurements, Meta, Config) ->
+    store_event(Event, Measurements, Meta, Config);
+handle_event([reckon_db, emitter | _] = Event, Measurements, Meta, Config) ->
+    emitter_event(Event, Measurements, Meta, Config);
+handle_event(Event, Measurements, Meta, Config) ->
+    unhandled_event(Event, Measurements, Meta, Config).
+
 %% Stream events
-handle_event(?STREAM_WRITE_START, #{system_time := _Time}, Meta, _Config) ->
+stream_event(?STREAM_WRITE_START, #{system_time := _Time}, Meta, _Config) ->
     #{store_id := StoreId, stream_id := StreamId, event_count := Count} = Meta,
     logger:debug("Stream write starting: store=~p stream=~s events=~p",
                 [StoreId, StreamId, Count]),
     ok;
 
-handle_event(?STREAM_WRITE_STOP, Measurements, Meta, _Config) ->
+stream_event(?STREAM_WRITE_STOP, Measurements, Meta, _Config) ->
     Duration = duration_us(Measurements),
     Count = maps:get(event_count, Measurements, 0),
     #{store_id := StoreId, stream_id := StreamId} = Meta,
@@ -110,28 +126,30 @@ handle_event(?STREAM_WRITE_STOP, Measurements, Meta, _Config) ->
                 [StoreId, StreamId, Count, Duration]),
     ok;
 
-handle_event(?STREAM_WRITE_ERROR, Measurements, Meta, _Config) ->
+stream_event(?STREAM_WRITE_ERROR, Measurements, Meta, _Config) ->
     Duration = duration_us(Measurements),
     #{store_id := StoreId, stream_id := StreamId, reason := Reason} = Meta,
     logger:warning("Stream write failed: store=~p stream=~s reason=~p duration=~pus",
                   [StoreId, StreamId, Reason, Duration]),
     ok;
 
-handle_event(?STREAM_READ_START, #{system_time := _Time}, Meta, _Config) ->
+stream_event(?STREAM_READ_START, #{system_time := _Time}, Meta, _Config) ->
     #{store_id := StoreId, stream_id := StreamId} = Meta,
     logger:debug("Stream read starting: store=~p stream=~s", [StoreId, StreamId]),
     ok;
 
-handle_event(?STREAM_READ_STOP, Measurements, Meta, _Config) ->
+stream_event(?STREAM_READ_STOP, Measurements, Meta, _Config) ->
     Duration = duration_us(Measurements),
     Count = maps:get(event_count, Measurements, 0),
     #{store_id := StoreId, stream_id := StreamId} = Meta,
     logger:debug("Stream read completed: store=~p stream=~s events=~p duration=~pus",
                 [StoreId, StreamId, Count, Duration]),
     ok;
+stream_event(Event, Measurements, Meta, Config) ->
+    unhandled_event(Event, Measurements, Meta, Config).
 
 %% Subscription events
-handle_event(?SUBSCRIPTION_CREATED, _Measurements, Meta, _Config) ->
+subscription_event(?SUBSCRIPTION_CREATED, _Measurements, Meta, _Config) ->
     StoreId = maps:get(store_id, Meta, unknown),
     SubId = maps:get(subscription_id, Meta, maps:get(subscription_name, Meta, <<>>)),
     Type = maps:get(type, Meta, unknown),
@@ -139,21 +157,23 @@ handle_event(?SUBSCRIPTION_CREATED, _Measurements, Meta, _Config) ->
                [StoreId, SubId, Type]),
     ok;
 
-handle_event(?SUBSCRIPTION_DELETED, _Measurements, Meta, _Config) ->
+subscription_event(?SUBSCRIPTION_DELETED, _Measurements, Meta, _Config) ->
     #{store_id := StoreId, subscription_id := SubId} = Meta,
     logger:info("Subscription deleted: store=~p id=~s", [StoreId, SubId]),
     ok;
 
-handle_event(?SUBSCRIPTION_EVENT_DELIVERED, Measurements, Meta, _Config) ->
+subscription_event(?SUBSCRIPTION_EVENT_DELIVERED, Measurements, Meta, _Config) ->
     Duration = duration_us(Measurements),
     #{store_id := StoreId, subscription_id := SubId} = Meta,
     EventId = maps:get(event_id, Meta, undefined),
     logger:debug("Event delivered: store=~p subscription=~s event=~p duration=~pus",
                 [StoreId, SubId, EventId, Duration]),
     ok;
+subscription_event(Event, Measurements, Meta, Config) ->
+    unhandled_event(Event, Measurements, Meta, Config).
 
 %% Snapshot events
-handle_event(?SNAPSHOT_CREATED, Measurements, Meta, _Config) ->
+snapshot_event(?SNAPSHOT_CREATED, Measurements, Meta, _Config) ->
     SizeBytes = maps:get(size_bytes, Measurements, 0),
     Duration = duration_us(Measurements),
     #{store_id := StoreId, stream_id := StreamId, version := Version} = Meta,
@@ -161,22 +181,24 @@ handle_event(?SNAPSHOT_CREATED, Measurements, Meta, _Config) ->
                [StoreId, StreamId, Version, SizeBytes, Duration]),
     ok;
 
-handle_event(?SNAPSHOT_READ, Measurements, Meta, _Config) ->
+snapshot_event(?SNAPSHOT_READ, Measurements, Meta, _Config) ->
     Duration = duration_us(Measurements),
     SizeBytes = maps:get(size_bytes, Measurements, 0),
     #{store_id := StoreId, stream_id := StreamId, version := Version} = Meta,
     logger:debug("Snapshot read: store=~p stream=~s version=~p size=~p bytes duration=~pus",
                 [StoreId, StreamId, Version, SizeBytes, Duration]),
     ok;
+snapshot_event(Event, Measurements, Meta, Config) ->
+    unhandled_event(Event, Measurements, Meta, Config).
 
 %% Cluster events
-handle_event(?CLUSTER_NODE_UP, _Measurements, Meta, _Config) ->
+cluster_event(?CLUSTER_NODE_UP, _Measurements, Meta, _Config) ->
     #{store_id := StoreId, node := Node, member_count := Count} = Meta,
     logger:info("Cluster node up: store=~p node=~p members=~p",
                [StoreId, Node, Count]),
     ok;
 
-handle_event(?CLUSTER_NODE_DOWN, _Measurements, Meta, _Config) ->
+cluster_event(?CLUSTER_NODE_DOWN, _Measurements, Meta, _Config) ->
     #{store_id := StoreId, node := Node} = Meta,
     Reason = maps:get(reason, Meta, unknown),
     MemberCount = maps:get(member_count, Meta, unknown),
@@ -184,7 +206,7 @@ handle_event(?CLUSTER_NODE_DOWN, _Measurements, Meta, _Config) ->
                   [StoreId, Node, Reason, MemberCount]),
     ok;
 
-handle_event(?CLUSTER_LEADER_ELECTED, _Measurements, Meta, _Config) ->
+cluster_event(?CLUSTER_LEADER_ELECTED, _Measurements, Meta, _Config) ->
     #{store_id := StoreId} = Meta,
     %% Handle both 'leader' and 'leader_node' keys for compatibility
     Leader = maps:get(leader, Meta, maps:get(leader_node, Meta, unknown)),
@@ -197,9 +219,11 @@ handle_event(?CLUSTER_LEADER_ELECTED, _Measurements, Meta, _Config) ->
                        [StoreId, Leader, PreviousLeader])
     end,
     ok;
+cluster_event(Event, Measurements, Meta, Config) ->
+    unhandled_event(Event, Measurements, Meta, Config).
 
 %% Store events
-handle_event(?STORE_STARTED, _Measurements, Meta, _Config) ->
+store_event(?STORE_STARTED, _Measurements, Meta, _Config) ->
     #{store_id := StoreId} = Meta,
     Mode = maps:get(mode, Meta, unknown),
     DataDir = maps:get(data_dir, Meta, unknown),
@@ -207,16 +231,18 @@ handle_event(?STORE_STARTED, _Measurements, Meta, _Config) ->
                [StoreId, Mode, DataDir]),
     ok;
 
-handle_event(?STORE_STOPPED, Measurements, Meta, _Config) ->
+store_event(?STORE_STOPPED, Measurements, Meta, _Config) ->
     #{store_id := StoreId} = Meta,
     Reason = maps:get(reason, Meta, normal),
     UptimeMs = maps:get(uptime_ms, Measurements, 0),
     logger:info("Store stopped: store=~p reason=~p uptime=~pms",
                [StoreId, Reason, UptimeMs]),
     ok;
+store_event(Event, Measurements, Meta, Config) ->
+    unhandled_event(Event, Measurements, Meta, Config).
 
 %% Emitter events
-handle_event(?EMITTER_BROADCAST, Measurements, Meta, _Config) ->
+emitter_event(?EMITTER_BROADCAST, Measurements, Meta, _Config) ->
     Duration = duration_us(Measurements),
     #{store_id := StoreId, subscription_id := SubId} = Meta,
     RecipientCount = maps:get(recipient_count, Meta, 0),
@@ -224,14 +250,16 @@ handle_event(?EMITTER_BROADCAST, Measurements, Meta, _Config) ->
                 [StoreId, SubId, RecipientCount, Duration]),
     ok;
 
-handle_event(?EMITTER_POOL_CREATED, _Measurements, Meta, _Config) ->
+emitter_event(?EMITTER_POOL_CREATED, _Measurements, Meta, _Config) ->
     #{store_id := StoreId, subscription_id := SubId, pool_size := PoolSize} = Meta,
     logger:info("Emitter pool created: store=~p subscription=~s pool_size=~p",
                [StoreId, SubId, PoolSize]),
     ok;
+emitter_event(Event, Measurements, Meta, Config) ->
+    unhandled_event(Event, Measurements, Meta, Config).
 
 %% Catch-all handler
-handle_event(Event, Measurements, Meta, _Config) ->
+unhandled_event(Event, Measurements, Meta, _Config) ->
     logger:debug("Telemetry event: ~p measurements=~p meta=~p",
                 [Event, Measurements, Meta]),
     ok.

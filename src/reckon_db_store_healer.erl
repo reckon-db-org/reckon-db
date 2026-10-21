@@ -176,13 +176,12 @@ run_audit(#state{store_id = StoreId} = State) ->
 classify(SelfStatus, Facts) ->
     case is_orphan(Facts) of
         true  -> orphaned;
-        false ->
-            case {maps:get(local_responsive, Facts, true), SelfStatus} of
-                {false, _}     -> wedged_local;
-                {true, healthy} -> healthy;
-                {true, _}       -> drift
-            end
+        false -> classify_non_orphan(maps:get(local_responsive, Facts, true), SelfStatus)
     end.
+
+classify_non_orphan(false, _SelfStatus) -> wedged_local;
+classify_non_orphan(true, healthy)      -> healthy;
+classify_non_orphan(true, _SelfStatus)  -> drift.
 
 %% @private The single orphan predicate, shared by classify/2 and
 %% safe_to_reset/1. We are an orphan the majority can safely re-absorb when a
@@ -360,12 +359,7 @@ force_delete_local(StoreId) ->
 reset_local(StoreId) ->
     Parent = self(),
     Ref = make_ref(),
-    Pid = spawn(fun() ->
-        Result = try khepri_cluster:reset(StoreId)
-                 catch Class:Reason -> {error, {Class, Reason}}
-                 end,
-        Parent ! {reset_result, Ref, Result}
-    end),
+    Pid = spawn(fun() -> Parent ! {reset_result, Ref, guarded_reset(StoreId)} end),
     MRef = erlang:monitor(process, Pid),
     receive
         {reset_result, Ref, ok} ->
@@ -380,6 +374,11 @@ reset_local(StoreId) ->
         exit(Pid, kill),
         receive {'DOWN', MRef, _, _, _} -> ok after 100 -> ok end,
         {error, reset_timeout}
+    end.
+
+guarded_reset(StoreId) ->
+    try khepri_cluster:reset(StoreId)
+    catch Class:Reason -> {error, {Class, Reason}}
     end.
 
 %% @private Confirm the rejoin took, WITHOUT the wedging health facade
@@ -399,16 +398,21 @@ verify_rejoined(StoreId, LeaderNode) ->
 recycle_local(StoreId) ->
     System = reckon_db_store:ra_system_name(StoreId),
     Server = {StoreId, node()},
-    _ = bounded(fun() -> try ra:stop_server(System, Server) catch _:_ -> ok end end),
-    case bounded(fun() ->
-           try ra:restart_server(System, Server)
-           catch Class:Reason -> {error, {Class, Reason}}
-           end
-       end) of
+    _ = bounded(fun() -> stop_server(System, Server) end),
+    Restarted = bounded(fun() -> restart_server(System, Server) end),
+    case Restarted of
         {ok, ok}         -> verify_responsive(StoreId);
         {ok, {error, R}} -> {error, R};
         {ok, Other}      -> {error, {restart_failed, Other}};
         {error, _} = E   -> E
+    end.
+
+stop_server(System, Server) ->
+    try ra:stop_server(System, Server) catch _:_ -> ok end.
+
+restart_server(System, Server) ->
+    try ra:restart_server(System, Server)
+    catch Class:Reason -> {error, {Class, Reason}}
     end.
 
 -spec verify_responsive(atom()) -> ok | {error, still_unresponsive}.
@@ -489,11 +493,10 @@ leaderboard_member_nodes(StoreId) ->
 %% yields `false' fast instead of blocking the whole audit forever.
 -spec local_responsive(atom()) -> boolean().
 local_responsive(StoreId) ->
-    case try ra:members({StoreId, node()}, ?LOCAL_PROBE_TIMEOUT)
-         catch _:_ -> probe_failed
-         end of
+    try ra:members({StoreId, node()}, ?LOCAL_PROBE_TIMEOUT) of
         {ok, _Members, _Leader} -> true;
         _                       -> false
+    catch _:_ -> false
     end.
 
 %% @private This replica's own health, derived purely from the lock-free
@@ -510,18 +513,17 @@ self_status(#{store_id := StoreId}) ->
 %% side too), bounded by the rpc timeout: `{Node, LeaderNode, [MemberNode]}'.
 -spec peer_memberships(atom()) -> [{node(), node() | undefined, [node()]}].
 peer_memberships(StoreId) ->
-    lists:filtermap(
-        fun(N) ->
-            Leader = rpc:call(N, ra_leaderboard, lookup_leader, [StoreId], ?RPC_TIMEOUT),
-            Members = rpc:call(N, ra_leaderboard, lookup_members, [StoreId], ?RPC_TIMEOUT),
-            case Members of
-                Ms when is_list(Ms) ->
-                    {true, {N, leader_node(Leader), [node_of(M) || M <- Ms]}};
-                _ ->
-                    false
-            end
-        end,
-        nodes()).
+    lists:filtermap(fun(N) -> peer_membership(StoreId, N) end, nodes()).
+
+-spec peer_membership(atom(), node()) -> {true, {node(), node() | undefined, [node()]}} | false.
+peer_membership(StoreId, N) ->
+    Leader = rpc:call(N, ra_leaderboard, lookup_leader, [StoreId], ?RPC_TIMEOUT),
+    case rpc:call(N, ra_leaderboard, lookup_members, [StoreId], ?RPC_TIMEOUT) of
+        Ms when is_list(Ms) ->
+            {true, {N, leader_node(Leader), [node_of(M) || M <- Ms]}};
+        _ ->
+            false
+    end.
 
 %% @private Pick the authoritative majority view among peer responses: the
 %% largest member set that has an elected leader.
@@ -534,10 +536,11 @@ majority_view(Peers) ->
         [] ->
             #{leader => undefined, members => []};
         _ ->
-            {Leader, Members} = hd(lists:sort(
-                fun({_, A}, {_, B}) -> length(A) >= length(B) end, WithLeader)),
+            {Leader, Members} = hd(lists:sort(fun larger_membership/2, WithLeader)),
             #{leader => Leader, members => Members}
     end.
+
+larger_membership({_, A}, {_, B}) -> length(A) >= length(B).
 
 %%====================================================================
 %% The data-safety gate (pure — unit-tested)

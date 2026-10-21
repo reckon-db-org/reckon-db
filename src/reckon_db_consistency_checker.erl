@@ -560,23 +560,19 @@ analyze_raft_consistency(Stats, Leader) ->
 count_available_nodes(StoreId, Members) ->
     case extract_nodes_from_members(Members) of
         [_SingleNode] ->
-            case local_ra_responsive(StoreId) of
-                true -> 1;
-                false -> 0
-            end;
+            length([StoreId || local_ra_responsive(StoreId)]);
         Nodes ->
-            length(lists:filter(fun(Node) -> is_node_available(Node) end, Nodes))
+            length(lists:filter(fun is_node_available/1, Nodes))
     end.
 
 %% @private Bounded local Ra liveness probe — yields `false' fast
 %% rather than blocking on a wedged local server.
 -spec local_ra_responsive(atom()) -> boolean().
 local_ra_responsive(StoreId) ->
-    case try ra:members({StoreId, node()}, 2000)
-         catch _:_ -> probe_failed
-         end of
+    try ra:members({StoreId, node()}, 2000) of
         {ok, _Members, _Leader} -> true;
         _ -> false
+    catch _:_ -> false
     end.
 
 is_node_available(Node) when Node =:= node() ->

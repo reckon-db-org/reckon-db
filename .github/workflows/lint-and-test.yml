@@ -27,14 +27,16 @@
 #     default set includes `exports_not_used', which for a LIBRARY reported 290
 #     "unused export" warnings and not one undefined function. Noise, removed at
 #     the source rather than baselined.
-#   - lint: 26 elvis findings across 10 files, all `no_deep_nesting', recorded
-#     in `.lint_baseline'.
+#   - lint: the structural floor (macula-codebase-checks#9: nesting 2, no
+#     nested try/catch, no if, functions at most 60 code lines) is a plain
+#     gate with NO baseline. The 26 findings once baselined were fixed at the
+#     source; a new one fails the job.
 #   - dialyzer: 215 findings across 45 files, recorded in `.dialyzer_baseline'.
-# Both baselines are RATCHETS (scripts/check_ratchet.sh): a finding outside the
-# baseline fails the job, a finding that disappears is reported so its line can
-# be struck. Do NOT add continue-on-error, and do not regenerate a baseline to
-# make a new finding go away: --update is for recording something somebody
-# decided to accept, in a commit that says why.
+# The dialyzer baseline is a RATCHET (scripts/check_ratchet.sh): a finding
+# outside it fails the job, a finding that disappears is reported so its line
+# can be struck. Do NOT add continue-on-error, and do not regenerate the
+# baseline to make a new finding go away: --update is for recording something
+# somebody decided to accept, in a commit that says why.
 name: lint-and-test
 
 on:
@@ -129,9 +131,9 @@ jobs:
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
         run: rebar3 xref
 
-      - name: Lint (ratchet against .lint_baseline)
+      - name: Lint (structural floor, no baseline)
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
-        run: bash scripts/check_ratchet.sh --tool lint
+        run: rebar3 lint
 
       - name: EUnit
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}

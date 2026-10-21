@@ -403,15 +403,17 @@ ensure_local_ra_server(StoreId) ->
 heal_local_store(StoreId) ->
     case reckon_db_store:ensure_khepri_started(StoreId) of
         ok ->
-            case erlang:whereis(StoreId) of
-                undefined -> failed;   %% still down — retry on the next tick
-                _Pid      -> ok
-            end;
+            local_store_up(erlang:whereis(StoreId));
         {error, Reason} ->
             logger:error("Could not restart local store ~p for join: ~p",
                          [StoreId, Reason]),
             failed
     end.
+
+%% @private A store that is still down is retried on the next tick.
+-spec local_store_up(pid() | undefined) -> ok | failed.
+local_store_up(undefined) -> failed;
+local_store_up(_Pid) -> ok.
 
 do_join_with_timeout(StoreId, TargetNode) ->
     %% khepri_cluster:join/3 exists in the source but is NOT exported
