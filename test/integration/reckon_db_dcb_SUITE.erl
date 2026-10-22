@@ -108,12 +108,17 @@ init_per_testcase(Case, Config) ->
     end,
     {ok, _} = application:ensure_all_started(khepri),
     {ok, _} = khepri:start(RaSystemName, StoreId, 5000),
+    %% The node-local life anchor is not optional: an integrity-enabled
+    %% read path refuses when it is absent, so every suite that enables
+    %% integrity runs one, as the store does.
+    {ok, _} = reckon_db_life_anchor:start_link(StoreId, StoreDataDir),
     [{store_id, StoreId},
      {ra_data_dir, RaDataDir},
      {store_data_dir, StoreDataDir} | Config].
 
 end_per_testcase(_Case, Config) ->
     StoreId = proplists:get_value(store_id, Config),
+    reckon_db_life_anchor:stop(StoreId),
     catch khepri:stop(StoreId),
     os:cmd("rm -rf " ++ proplists:get_value(ra_data_dir, Config)),
     os:cmd("rm -rf " ++ proplists:get_value(store_data_dir, Config)),

@@ -92,9 +92,23 @@ entry(StoreId, StreamId) ->
 %% `TreeGen' and `TreeLife' are what the store's own seal says the stream
 %% carries now; `undefined' means the tree has no life at all - no seal, or a
 %% stream stripped to chain-less.
+%%
+%% An anchor that is NOT RUNNING refuses, before it reads the tree at all.
+%% Answering `ok' there served an integrity-enabled store unguarded, which is
+%% the whole failure this module exists to stop. A store does not start without
+%% it, so this is a fault and not a mode: it is loud.
 -spec check(atom(), binary(), non_neg_integer(), binary() | undefined) ->
         ok | {refuse, map()}.
 check(StoreId, StreamId, TreeGen, TreeLife) ->
+    case running(StoreId) of
+        false ->
+            {refuse, refusal(StreamId, TreeGen, life_anchor_unavailable, 0)};
+        true ->
+            check_recorded(StoreId, StreamId, TreeGen, TreeLife)
+    end.
+
+%% @private
+check_recorded(StoreId, StreamId, TreeGen, TreeLife) ->
     case lookup(StoreId, StreamId) of
         undefined ->
             adopt(StoreId, StreamId, TreeGen, TreeLife);
@@ -267,6 +281,12 @@ insert(StoreId, StreamId, Gen, Value) ->
             end
     end.
 
+%% @private Whether this node's anchor is up. The table is created by the
+%% writer in init/1 and dies with it, so its existence answers the question
+%% without a call.
+running(StoreId) ->
+    ets:info(table(StoreId), size) =/= undefined.
+
 %% @private
 lookup(StoreId, StreamId) ->
     Tab = table(StoreId),
@@ -407,7 +427,7 @@ open_at_end(Path, Good) ->
     case file:open(Path, [read, write, raw, binary]) of
         {ok, Fd} ->
             {ok, _} = file:position(Fd, Good),
-            {ok, _} = file:truncate(Fd),
+            ok = file:truncate(Fd),
             Fd;
         {error, _} ->
             undefined

@@ -57,9 +57,9 @@
     a_replayed_boundary_does_not_anchor_a_new_life/1,
     a_restored_life_token_does_not_anchor_a_new_life/1,
     a_verified_cut_with_events_below_it_is_refused/1,
-    residual_a_restored_batch_and_the_top_two_versions_are_served/1,
-    residual_planted_top_two_versions_above_a_hole_are_served/1,
-    residual_a_truncated_new_life_serves_a_restored_run_backward/1,
+    a_restored_old_life_with_the_top_two_versions_does_not_survive/1,
+    a_planted_old_life_above_a_hole_does_not_survive/1,
+    a_truncated_new_life_does_not_serve_a_restored_run_backward/1,
     a_restored_event_at_the_seal_does_not_anchor_a_new_life/1,
     a_boundary_copied_from_another_store_does_not_anchor/1,
     a_rolled_back_run_above_a_stripped_prefix_refuses_a_targeted_read/1,
@@ -137,9 +137,9 @@ groups() ->
             a_replayed_boundary_does_not_anchor_a_new_life,
             a_restored_life_token_does_not_anchor_a_new_life,
             a_verified_cut_with_events_below_it_is_refused,
-            residual_a_restored_batch_and_the_top_two_versions_are_served,
-            residual_planted_top_two_versions_above_a_hole_are_served,
-            residual_a_truncated_new_life_serves_a_restored_run_backward,
+            a_restored_old_life_with_the_top_two_versions_does_not_survive,
+            a_planted_old_life_above_a_hole_does_not_survive,
+            a_truncated_new_life_does_not_serve_a_restored_run_backward,
             a_restored_event_at_the_seal_does_not_anchor_a_new_life,
             a_rolled_back_run_above_a_stripped_prefix_refuses_a_targeted_read,
             a_restored_early_life_does_not_survive_a_read_below_the_newest_event,
@@ -201,6 +201,10 @@ init_per_testcase(TestCase, Config) ->
         "integrity_reads_test_" ++ atom_to_list(TestCase) ++ "_" ++ Rand),
 
     {ok, _} = khepri:start(DataDir, StoreId),
+    %% The node-local life anchor is not optional: an integrity-enabled
+    %% read path refuses when it is absent, so every suite that enables
+    %% integrity runs one, as the store does.
+    {ok, _} = reckon_db_life_anchor:start_link(StoreId, DataDir),
     khepri:put(StoreId, [streams], #{}),
     khepri:put(StoreId, [metadata], #{}),
 
@@ -209,6 +213,7 @@ init_per_testcase(TestCase, Config) ->
 end_per_testcase(_TestCase, Config) ->
     StoreId = proplists:get_value(store_id, Config),
     DataDir = proplists:get_value(data_dir, Config),
+    reckon_db_life_anchor:stop(StoreId),
     catch khepri:stop(StoreId),
     reckon_db_integrity_key:clear(StoreId),
     os:cmd("rm -rf " ++ DataDir),
@@ -819,6 +824,27 @@ sealed_watermark(Key, StoreId, StreamId, Life, Version) ->
                                     [deterministic])),
     #{version => Version, v2_from => Version, life => Life, mac => Mac}.
 
+%% @private The record the CURRENT line writes: scheme 3, the stream's
+%% generation bound into the MAC.
+%%
+%% The hand-built scheme-2 record above always reads as generation 0, which is
+%% the generation of a life the pre-5.12 line minted. Every stream this line
+%% creates is minted at generation 1 or above, so a scheme-2 record standing in
+%% for such a stream's own seal is not that seal - it is a rollback, and the
+%% node-local anchor refuses it before any region rule is asked. A test that
+%% means "the store's own seal, hand-written" writes this instead.
+sealed_watermark_at_gen(Key, StoreId, StreamId, Life, Gen, Version) ->
+    sealed_watermark_at_gen(Key, StoreId, StreamId, Life, Gen, Version, Version).
+
+%% @private
+sealed_watermark_at_gen(Key, StoreId, StreamId, Life, Gen, Version, V2From) ->
+    Mac = crypto:mac(hmac, sha256, Key,
+                     term_to_binary({reckon_db_chain_watermark, seal, 3, StoreId,
+                                     StreamId, Life, Gen, Version, V2From},
+                                    [deterministic])),
+    #{scheme => 3, version => Version, v2_from => V2From, life => Life,
+      gen => Gen, mac => Mac}.
+
 %% @private The authenticated watermark shape with an explicit v2_from, for
 %% the old-line streams whose events sit below it.
 sealed_watermark(Key, StoreId, StreamId, Life, Version, V2From) ->
@@ -929,6 +955,13 @@ integrity_disabled_store_bypasses_verification(Config) ->
 %% Jupiter r15 JP3 tail variant. The full read refused at the surviving
 %% MAC'd event that no longer verifies; the targeted read passed, because
 %% verification only ever looked at the events it returned.
+%%
+%% r21: the restored old life is caught EARLIER now, by the node-local
+%% anchor's generation check, before any region walk. The refusal below is
+%% the anchor's (gen 0 restored over the recorded gen 1), not the chain
+%% break the walk used to report; the walk still refuses the shape on its
+%% own, which a_replayed_watermark_on_a_mid_chain_event_refuses_its_legacy_region
+%% covers under a life that checks out.
 a_replayed_life_with_a_stripped_tail_refuses_a_targeted_read(Config) ->
     {StoreId, Key} = setup_integrity_store(Config),
     StreamId = reckon_db_test_helpers:sid(<<"replayed-life-tail">>),
@@ -944,7 +977,7 @@ a_replayed_life_with_a_stripped_tail_refuses_a_targeted_read(Config) ->
     ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_streams:read_all(StoreId, StreamId, 100, forward)),
     ?assertMatch({error, {integrity_violation,
-                          #{context := #{detail := chain_break}}}},
+                          #{context := #{detail := life_gen_rolled_back}}}},
                  reckon_db_streams:read(StoreId, StreamId, 2, 1, forward)).
 
 %% @doc GIVEN an earlier life's sealed record replayed at a version a new-life
@@ -964,11 +997,13 @@ a_replayed_watermark_on_a_mid_chain_event_refuses_its_legacy_region(Config) ->
     {ok, RealLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
 
     %% The region rule on its own: a limit at the newest version, minted under
-    %% the life the stream really carries, and one stripped event below it. The
-    %% newest-event check is satisfied, so the only question left is what
-    %% explains the region below the limit - and a mid-chain event explains
-    %% nothing, whatever the seal says.
-    SameLifeRecord = sealed_watermark(Key, StoreId, StreamId, RealLife, 6),
+    %% the life AND generation the stream really carries (so the node-local
+    %% anchor lets it through), and one stripped event below it. The only
+    %% question left is what explains the region below the limit - and a
+    %% mid-chain event explains nothing, whatever the seal says.
+    Gen = reckon_db_chain_watermark:life_gen(StoreId, StreamId),
+    SameLifeRecord = sealed_watermark_at_gen(
+                       Key, StoreId, StreamId, RealLife, Gen, 6),
     ok = khepri:put(StoreId, watermark_path(StreamId), SameLifeRecord),
     ok = clear_integrity_fields(StoreId, StreamId, 4),
     ?assertMatch({error, {integrity_violation,
@@ -1003,9 +1038,12 @@ a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region(Config) ->
     {ok, RealLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
 
     %% The region rule on its own: a limit above every event, under the life
-    %% the stream really carries. No event sits at the limit, and the newest
-    %% one carries a chain, which is the same replay over a shorter life.
-    SameLifeRecord = sealed_watermark(Key, StoreId, StreamId, RealLife, 9),
+    %% and generation the stream really carries. No event sits at the limit,
+    %% and the newest one carries a chain, which is the same replay over a
+    %% shorter life.
+    Gen = reckon_db_chain_watermark:life_gen(StoreId, StreamId),
+    SameLifeRecord = sealed_watermark_at_gen(
+                       Key, StoreId, StreamId, RealLife, Gen, 9),
     ok = khepri:put(StoreId, watermark_path(StreamId), SameLifeRecord),
     ok = clear_integrity_fields(StoreId, StreamId, 1),
     ok = clear_integrity_fields(StoreId, StreamId, 2),
@@ -1040,8 +1078,10 @@ a_forced_genesis_field_does_not_excuse_a_stripped_prefix(Config) ->
     write_n_events(StoreId, StreamId, 10),
     {ok, RealLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
 
+    Gen = reckon_db_chain_watermark:life_gen(StoreId, StreamId),
     ok = khepri:put(StoreId, watermark_path(StreamId),
-                    sealed_watermark(Key, StoreId, StreamId, RealLife, 3)),
+                    sealed_watermark_at_gen(
+                      Key, StoreId, StreamId, RealLife, Gen, 3)),
     ok = clear_integrity_fields(StoreId, StreamId, 0),
     ok = clear_integrity_fields(StoreId, StreamId, 1),
     ok = clear_integrity_fields(StoreId, StreamId, 2),
@@ -1103,8 +1143,10 @@ a_replayed_boundary_does_not_anchor_a_new_life(Config) ->
     %% event checks out and the only question is the boundary. Its MAC names
     %% the life it was written under, so it does not verify here and the
     %% region below the limit is unexplained.
+    Gen = reckon_db_chain_watermark:life_gen(StoreId, StreamId),
     ok = khepri:put(StoreId, watermark_path(StreamId),
-                    sealed_watermark(Key, StoreId, StreamId, NewLife, 3)),
+                    sealed_watermark_at_gen(
+                      Key, StoreId, StreamId, NewLife, Gen, 3)),
     ?assertMatch({error, {integrity_violation,
                           #{context := #{detail := legacy_region_unexplained}}}},
                  reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)),
@@ -1141,8 +1183,10 @@ a_boundary_copied_from_another_store_does_not_anchor(Config) ->
         {ok, Foreign} = reckon_db_scavenge_boundary:lookup(StoreB, StreamId),
         {ok, LifeA} = reckon_db_chain_watermark:life(StoreA, StreamId),
 
+        GenA = reckon_db_chain_watermark:life_gen(StoreA, StreamId),
         ok = khepri:put(StoreA, watermark_path(StreamId),
-                        sealed_watermark(Key, StoreA, StreamId, LifeA, 3)),
+                        sealed_watermark_at_gen(
+                          Key, StoreA, StreamId, LifeA, GenA, 3)),
         ok = khepri:put(StoreA, boundary_path(StreamId), Foreign),
         ok = clear_integrity_fields(StoreA, StreamId, 0),
         ok = clear_integrity_fields(StoreA, StreamId, 1),
@@ -1345,17 +1389,19 @@ a_counter_above_a_hole_does_not_hide_the_events_above_it(Config) ->
     ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
 
-%% @doc RESIDUAL, PINNED: R-6 (i). GIVEN a rollback that restores the old
-%%           seal and life token AND old copies of the batch AND of the TOP
-%%           TWO versions, over a recreated life
+%% @doc CLOSED IN r21 (was R-6 (i), Jupiter r20 J20-6). GIVEN a rollback that
+%%           restores the old seal and life token AND old copies of the batch
+%%           AND of the TOP TWO versions, over a recreated life
 %%      WHEN a targeted read asks for the restored batch
-%%      THEN it is served, and this test exists to say so
+%%      THEN it is REFUSED: the restored life carries a generation below the
+%%           one this node recorded, and no tree write can raise it
 %%
-%% Jupiter r20 J20-6. The check runs through the predecessor link, so it needs
-%% the newest event and the one under it; restoring those two as well is what
-%% R-6 (i) names. Pinning the shape here is deliberate: a test that flips to a
-%% refusal when someone closes it is the signal that the residual shrank.
-residual_a_restored_batch_and_the_top_two_versions_are_served(Config) ->
+%% This is the flip. Under the newest-event check the shape was SERVED, because
+%% the check ran through the predecessor link and needed only the newest event
+%% and the one under it; restoring those two as well closed the gap. The
+%% node-local anchor refuses the old life itself, in one lookup, before any
+%% event is read - so R-6 (i) no longer names this shape.
+a_restored_old_life_with_the_top_two_versions_does_not_survive(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
     StreamId = reckon_db_test_helpers:sid(<<"residual-top-two">>),
     write_n_events(StoreId, StreamId, 10),
@@ -1365,18 +1411,20 @@ residual_a_restored_batch_and_the_top_two_versions_are_served(Config) ->
     write_n_events(StoreId, StreamId, 10),
     ok = restore_life_and_events(StoreId, StreamId, Saved),
 
-    {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
-    ?assertEqual([0, 1, 2], [V || #event{version = V} <- Events]).
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := life_gen_rolled_back}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
 
-%% @doc RESIDUAL, PINNED: R-6 (i), the planted variant. GIVEN old copies of
-%%           0..2 and of versions 8 and 9 planted above a FIVE-event new life,
-%%           so 5..7 are a hole
+%% @doc CLOSED IN r21 (was R-6 (i), Jupiter r20 J20-7), the planted variant.
+%%           GIVEN old copies of 0..2 and of versions 8 and 9 planted above a
+%%           FIVE-event new life, so 5..7 are a hole
 %%      WHEN a targeted read asks for the restored batch
-%%      THEN it is served: the newest event and its predecessor are both old
-%%           life copies and agree with each other
+%%      THEN it is REFUSED: the hole is irrelevant to the answer, because the
+%%           restored life is the older one and the anchor sees it first
 %%
-%% Jupiter r20 J20-7.
-residual_planted_top_two_versions_above_a_hole_are_served(Config) ->
+%% Under the newest-event check this was served: the newest event and its
+%% predecessor were both old-life copies and agreed with each other.
+a_planted_old_life_above_a_hole_does_not_survive(Config) ->
     {StoreId, _Key} = setup_integrity_store(Config),
     StreamId = reckon_db_test_helpers:sid(<<"residual-planted-top">>),
     write_n_events(StoreId, StreamId, 10),
@@ -1386,19 +1434,21 @@ residual_planted_top_two_versions_above_a_hole_are_served(Config) ->
     write_n_events(StoreId, StreamId, 5),
     ok = restore_life_and_events(StoreId, StreamId, Saved),
 
-    {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
-    ?assertEqual([0, 1, 2], [V || #event{version = V} <- Events]).
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := life_gen_rolled_back}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
 
-%% @doc RESIDUAL, PINNED: R-6 (i), the truncation variant. GIVEN a legacy
-%%           prefix and an old life 3..9, with the old seal, life and 3..5
-%%           restored over a new ten-event life and the new 6..9 deleted
+%% @doc CLOSED IN r21 (was R-6 (i), Terra r20), the truncation variant. GIVEN
+%%           a legacy prefix and an old life 3..9, with the old seal, life and
+%%           3..5 restored over a new ten-event life and the new 6..9 deleted
 %%      WHEN a targeted read, BACKWARD, asks for old version 4
-%%      THEN it is served while new-life 0..2 remain untouched
+%%      THEN it is REFUSED: the restored life is the pre-upgrade generation 0
+%%           and the re-created one is 2, whatever survived below the batch
 %%
-%% Terra r20. The restored top two versions are 4 and 5, which is what the
-%% check needs; the surviving new events sit BELOW the batch, where the check
-%% does not look.
-residual_a_truncated_new_life_serves_a_restored_run_backward(Config) ->
+%% Under the newest-event check this was served: the restored top two versions
+%% were 4 and 5, which is what the check needed, and the surviving new events
+%% sat BELOW the batch where it did not look.
+a_truncated_new_life_does_not_serve_a_restored_run_backward(Config) ->
     {StoreId, _Key} = setup_integrity_store_with_legacy_prefix(Config, 3),
     StreamId = reckon_db_test_helpers:sid(<<"residual-truncation">>),
     write_legacy_events(StoreId, StreamId, 3),
@@ -1413,8 +1463,9 @@ residual_a_truncated_new_life_serves_a_restored_run_backward(Config) ->
     lists:foreach(fun(V) -> ok = khepri:delete(StoreId, event_path(StreamId, V))
                   end, lists:seq(6, 9)),
 
-    {ok, [Event]} = reckon_db_streams:read(StoreId, StreamId, 4, 1, backward),
-    ?assertEqual(4, Event#event.version).
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := life_gen_rolled_back}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 4, 1, backward)).
 
 %% @doc GIVEN a stream deleted while it holds a scavenge boundary
 %%      WHEN the delete completes

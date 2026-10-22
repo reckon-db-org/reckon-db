@@ -111,6 +111,10 @@ init_per_testcase(TestCase, Config) ->
         "integrity_snap_test_" ++ atom_to_list(TestCase) ++ "_" ++ Rand),
 
     {ok, _} = khepri:start(DataDir, StoreId),
+    %% The node-local life anchor is not optional: an integrity-enabled
+    %% read path refuses when it is absent, so every suite that enables
+    %% integrity runs one, as the store does.
+    {ok, _} = reckon_db_life_anchor:start_link(StoreId, DataDir),
     khepri:put(StoreId, [streams], #{}),
     khepri:put(StoreId, [snapshots], #{}),
     khepri:put(StoreId, [metadata], #{}),
@@ -120,6 +124,7 @@ init_per_testcase(TestCase, Config) ->
 end_per_testcase(_TestCase, Config) ->
     StoreId = proplists:get_value(store_id, Config),
     DataDir = proplists:get_value(data_dir, Config),
+    reckon_db_life_anchor:stop(StoreId),
     catch khepri:stop(StoreId),
     reckon_db_integrity_key:clear(StoreId),
     os:cmd("rm -rf " ++ DataDir),
