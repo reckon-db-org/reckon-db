@@ -713,13 +713,70 @@ macula, macula-station, barrel (four apps) and, worth doing first,
 `mcl-om/priv/templates/mcl_service/rebar.config`, which is what a new service
 is scaffolded from.
 
+### Fixed: the round-15 review, five ways a stream could be forged or lost
+
+Jupiter and Terra, on `a329134..c382e8b`. No API changes.
+
+- **A cut was anchored at the lowest CHAIN-BEARING event.** A stream whose
+  first events were stripped but still present, with a snapshot taken over
+  them, was sealed at the first surviving chain-bearing event, and the
+  stripped events below it were then served unverified (Jupiter JR1). A cut
+  claims that everything below it is gone, so it is only taken where the
+  lowest SURVIVING event sits: the scan records both starts now, and a
+  surviving event below the chain start leaves neither a genesis nor a cut.
+- **A bare watermark above the cut was sealed over** (Terra). T3's final
+  condition is enforced: on the cut path the bare value must be at or below
+  the point the cut was taken at, and the seal goes at that value.
+- **A life replay was caught per batch, not per stream** (Jupiter JP3 tail).
+  Restoring an earlier life's token and record, then stripping and rewriting
+  only the newest event, was refused by a full read and served by a read that
+  started at that event. A chain-less event is now refused when the event
+  before it carries a chain, whichever page it arrives in.
+- **An honest upgrade refused every legacy stream** (Jupiter, Terra). Before
+  this release nothing was ever sealed, so counting an unsealed watermark as
+  deletion evidence refused every chain-less stream in a store that had only
+  ever done the ordinary thing. Evidence is now: no watermark, a watermark
+  that is not the proven chain start, or a chain start that does not verify.
+- **Two writers opening the same new stream could make it unreadable for
+  good** (Terra). The life token and the seal were minted as two plain puts
+  outside the append transaction, so the loser's events were stamped under a
+  life the winner overwrote: 8 concurrent creators over 40 streams left 9
+  streams failing at version 0 forever, and a gateway pool of two is that
+  shape. The mint is one transaction, and the write transaction refuses a
+  batch whose life has moved, retrying it like a version conflict.
+- **A legacy region was served without asking the store to explain it**
+  (Terra, Jupiter; item 2(a) and 2(b)). A hash-less event below the seal is
+  served only when the event AT the seal carries the genesis predecessor or a
+  verified scavenge boundary sits there, and, when no event sits at the seal,
+  only when the stream's newest event carries no chain. A restored earlier
+  seal lands on a mid-chain event of the new life, or past its newest one, and
+  is refused either way.
+- **A malformed MAC could take the store's own start down.** A two-byte `mac`
+  in a watermark made `crypto:hash_equals/2` raise `badarg` inside
+  `seal_verifies/3`, which killed the store rather than refusing a stream. A
+  junk watermark is refused by name (`watermark_mac_invalid`) now, on a
+  chain-bearing stream as well as a chain-less one, and every MAC compared
+  against a value read out of the tree is length-checked first.
+
+### Known residual in this release, named
+
+An attacker who saves an earlier life's sealed watermark and life token
+before a stream is deleted, then restores both afterwards and strips new-life
+events to chain-less, is refused wherever a read includes a chain-bearing
+event followed by a chain-less one, or a region below a seal that the store
+cannot explain (R-6 in the #18 model). **What is left:** a strip that reaches
+from the read up to the stream's newest event, when the new life is shorter
+than the restored seal, is served by a read that STARTS at the top of that
+run. Closing it needs an O(prefix) walk on every read; no fixed number of
+reads avoids it.
+
 ### Fixed: the ex_doc warning list is empty, and the specs name the types that exist
 
 `rebar3 ex_doc` reported 25 warnings in three classes, and a release here is
 not published with a warning in it. Each is fixed at its source rather than
 muted. No behaviour changes.
 
-- Twelve `-spec`s named `reckon_gater_types:` — a module that does not
+- Twelve `-spec`s named `reckon_gater_types:`, a module that does not
   exist. Those types are canonical in reckon-gater's **header**
   (`include/reckon_gater_types.hrl`, already pulled in by `reckon_db.hrl`),
   so the prefix is dropped. Dialyzer can now check those specs against the

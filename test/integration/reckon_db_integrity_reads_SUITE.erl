@@ -49,7 +49,10 @@
 -export([
     deleted_middle_event_breaks_chain/1,
     inserted_forged_event_breaks_chain/1,
-    swapped_two_adjacent_events_caught/1
+    swapped_two_adjacent_events_caught/1,
+    a_replayed_life_with_a_stripped_tail_refuses_a_targeted_read/1,
+    a_replayed_watermark_on_a_mid_chain_event_refuses_its_legacy_region/1,
+    a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region/1
 ]).
 
 %% Verify mode matrix
@@ -113,7 +116,10 @@ groups() ->
         {structural_tampering, [sequence], [
             deleted_middle_event_breaks_chain,
             inserted_forged_event_breaks_chain,
-            swapped_two_adjacent_events_caught
+            swapped_two_adjacent_events_caught,
+            a_replayed_life_with_a_stripped_tail_refuses_a_targeted_read,
+            a_replayed_watermark_on_a_mid_chain_event_refuses_its_legacy_region,
+            a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region
         ]},
         {verify_modes, [sequence], [
             skip_legacy_passes_legacy_events_through,
@@ -832,6 +838,86 @@ integrity_disabled_store_bypasses_verification(Config) ->
     ?assertEqual(3, length(Events)),
     [?assertEqual(undefined, E#event.mac) || E <- Events],
     ok.
+
+%% @doc GIVEN a stream whose earlier life's sealed record and life token were
+%%           restored, and whose newest event was then stripped and rewritten
+%%      WHEN a read STARTS at that stripped event
+%%      THEN it is refused: a chain-bearing event is never followed by a
+%%           chain-less one, and the page start never saw its neighbour
+%%
+%% Jupiter r15 JP3 tail variant. The full read refused at the surviving
+%% MAC'd event that no longer verifies; the targeted read passed, because
+%% verification only ever looked at the events it returned.
+a_replayed_life_with_a_stripped_tail_refuses_a_targeted_read(Config) ->
+    {StoreId, Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"replayed-life-tail">>),
+    write_n_events(StoreId, StreamId, 3),
+
+    OldLife = crypto:strong_rand_bytes(16),
+    OldRecord = sealed_watermark(Key, StoreId, StreamId, OldLife, 5),
+    ok = khepri:put(StoreId, life_path(StreamId), OldLife),
+    ok = khepri:put(StoreId, watermark_path(StreamId), OldRecord),
+    ok = clear_integrity_fields(StoreId, StreamId, 2),
+    ok = rewrite_event(StoreId, StreamId, 2, #{tampered => 1}),
+
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read_all(StoreId, StreamId, 100, forward)),
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := chain_break}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 2, 1, forward)).
+
+%% @doc GIVEN an earlier life's sealed record replayed at a version a new-life
+%%           event still sits at, with a run of new-life events stripped
+%%      WHEN a read starts at the top of that run
+%%      THEN it refuses: the event AT the replayed limit does not carry the
+%%           genesis predecessor, so nothing the store wrote explains the
+%%           region below it
+%%
+%% Terra/Jupiter r15, item 2(a). A replayed limit always lands on a mid-chain
+%% event of the new life (its predecessor is a chain hash, not genesis) or on
+%% nothing at all; only the honest chain start carries genesis.
+a_replayed_watermark_on_a_mid_chain_event_refuses_its_legacy_region(Config) ->
+    {StoreId, Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"replayed-mid-chain">>),
+    write_n_events(StoreId, StreamId, 7),
+
+    OldLife = crypto:strong_rand_bytes(16),
+    OldRecord = sealed_watermark(Key, StoreId, StreamId, OldLife, 6),
+    ok = khepri:put(StoreId, life_path(StreamId), OldLife),
+    ok = khepri:put(StoreId, watermark_path(StreamId), OldRecord),
+    ok = clear_integrity_fields(StoreId, StreamId, 4),
+    ok = clear_integrity_fields(StoreId, StreamId, 5),
+    ok = rewrite_event(StoreId, StreamId, 4, #{tampered => 1}),
+
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := legacy_region_unexplained}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 4, 1, forward)).
+
+%% @doc GIVEN an earlier life's sealed record replayed ABOVE every new-life
+%%           event, with a run of them stripped
+%%      WHEN a read starts at the top of that run
+%%      THEN it refuses: a chain-bearing newest event under a limit that has
+%%           no event at it is the same replay, over a shorter life
+%%
+%% Terra/Jupiter r15, item 2(b). An honest chain-less stream is sealed at
+%% newest + 1, which also has no event at the limit - and it stays legal,
+%% because its newest event carries no chain.
+a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region(Config) ->
+    {StoreId, Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"replayed-past-newest">>),
+    write_n_events(StoreId, StreamId, 5),
+
+    OldLife = crypto:strong_rand_bytes(16),
+    OldRecord = sealed_watermark(Key, StoreId, StreamId, OldLife, 9),
+    ok = khepri:put(StoreId, life_path(StreamId), OldLife),
+    ok = khepri:put(StoreId, watermark_path(StreamId), OldRecord),
+    ok = clear_integrity_fields(StoreId, StreamId, 1),
+    ok = clear_integrity_fields(StoreId, StreamId, 2),
+    ok = rewrite_event(StoreId, StreamId, 1, #{tampered => 1}),
+
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := legacy_region_unexplained}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 1, 1, forward)).
 
 %%====================================================================
 %% Helpers

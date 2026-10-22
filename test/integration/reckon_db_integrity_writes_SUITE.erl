@@ -28,7 +28,8 @@
     watermark_is_recorded_on_first_append/1,
     different_keys_produce_different_macs/1,
     a_sealed_watermark_without_a_life_token_refuses_the_append/1,
-    a_store_with_integrity_on_and_no_key_refuses_to_read/1
+    a_store_with_integrity_on_and_no_key_refuses_to_read/1,
+    concurrent_first_appends_leave_every_stream_readable/1
 ]).
 
 %%====================================================================
@@ -45,7 +46,8 @@ all() ->
         watermark_is_recorded_on_first_append,
         different_keys_produce_different_macs,
         a_sealed_watermark_without_a_life_token_refuses_the_append,
-        a_store_with_integrity_on_and_no_key_refuses_to_read
+        a_store_with_integrity_on_and_no_key_refuses_to_read,
+        concurrent_first_appends_leave_every_stream_readable
     ].
 
 init_per_suite(Config) ->
@@ -245,6 +247,50 @@ different_keys_produce_different_macs(Config) ->
 
     ?assertNotEqual(Mac1, Mac2),
     ok.
+
+%% @doc GIVEN several writers opening the SAME brand-new stream at once, each
+%%           with ANY_VERSION
+%%      WHEN they all append
+%%      THEN every stream is still readable afterwards
+%%
+%% Terra r15 probe_concurrent_first_append_life: minting the life token and the
+%% seal as two plain puts outside the append transaction let two writers each
+%% mint, and the loser's events were stamped under a life the winner then
+%% overwrote - unreadable from version 0, permanently. A gateway pool of two is
+%% exactly this shape (realms_store). The mint is one transaction now, and the
+%% write transaction refuses a batch whose life has moved.
+concurrent_first_appends_leave_every_stream_readable(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    Streams = [reckon_db_test_helpers:sid(<<"concurrent-life-",
+                                          (integer_to_binary(I))/binary>>)
+               || I <- lists:seq(1, 8)],
+    Writers = 8,
+    Self = self(),
+    Pids = [spawn_monitor(fun() -> first_append_racer(Self, StoreId, Streams) end)
+            || _ <- lists:seq(1, Writers)],
+    Results = [receive {Pid, Result} -> Result after 30000 -> timeout end
+               || {Pid, _Ref} <- Pids],
+    ?assertEqual([], [R || R <- Results, R =/= ok]),
+    lists:foreach(fun(StreamId) -> assert_stream_readable(StoreId, StreamId) end,
+                  Streams).
+
+%% @private
+first_append_racer(Parent, StoreId, Streams) ->
+    Results = [reckon_db_streams:append(
+                 StoreId, StreamId, ?ANY_VERSION,
+                 [#{event_type => <<"e">>, data => #{n => 1}}])
+               || StreamId <- Streams],
+    Parent ! {self(), case [E || {error, _} = E <- Results] of
+                          [] -> ok;
+                          Errors -> {errors, Errors}
+                      end}.
+
+%% @private
+assert_stream_readable(StoreId, StreamId) ->
+    {ok, Events} = reckon_db_streams:read_all(StoreId, StreamId, 100, forward),
+    ?assert(length(Events) >= 1),
+    ?assertMatch({ok, _}, reckon_db_streams:read(StoreId, StreamId, 0, 100,
+                                                 forward)).
 
 %%====================================================================
 %% Helpers

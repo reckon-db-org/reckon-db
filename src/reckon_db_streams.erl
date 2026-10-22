@@ -1516,12 +1516,27 @@ try_append(StoreId, StreamId, CurrentVersion, CounterExisted, ExpectedVersion,
             %% own check, which is the answer it asked for. The version this
             %% attempt read travels with the retry, so a re-read that answers
             %% it again is the stale-counter shape do_append/7 reconciles.
-            backoff_before_retry(?APPEND_ATTEMPTS - Attempts + 1),
-            do_append(StoreId, StreamId, ExpectedVersion, Events, Attempts - 1,
-                      consistent, CurrentVersion);
+            retry_append(StoreId, StreamId, ExpectedVersion, Events, Attempts,
+                         CurrentVersion);
+        {error, {integrity_life_moved, _}} when Attempts =< 1 ->
+            {error, {integrity_life_moved, StreamId}};
+        {error, {integrity_life_moved, _}} ->
+            %% The stream's life token changed under the batch (a first-append
+            %% mint, or a migration), so the MACs it carries are stamped under
+            %% a token the tree no longer holds. Nothing was written; re-read
+            %% the context and stamp again.
+            retry_append(StoreId, StreamId, ExpectedVersion, Events, Attempts,
+                         CurrentVersion);
         Other ->
             Other
     end.
+
+%% @private Re-read and append again, after a jittered pause.
+retry_append(StoreId, StreamId, ExpectedVersion, Events, Attempts,
+             CurrentVersion) ->
+    backoff_before_retry(?APPEND_ATTEMPTS - Attempts + 1),
+    do_append(StoreId, StreamId, ExpectedVersion, Events, Attempts - 1,
+              consistent, CurrentVersion).
 
 %% @private A capped, jittered pause on the lost-race path.
 %%
@@ -1791,12 +1806,24 @@ append_batch(StoreId, StreamId, CurrentVersion, CounterExisted,
     %% crash-loop lesson the old per-put loop encoded). khepri:transaction
     %% returns {error, _} for a not-ready store; reckon-gater retries.
     case write_batch(StreamId, StoreId, Writes, IndexEntries, FinalVersion,
-                     CurrentVersion, CounterExisted, ExpectedVersion) of
+                     CurrentVersion, CounterExisted, ExpectedVersion,
+                     expected_life(IntegrityCtx)) of
         ok ->
             {ok, FinalVersion};
         {error, _} = Error ->
             Error
     end.
+
+%% @private The life token this batch's MACs are stamped under, so the write
+%% transaction can refuse a batch whose life is no longer the tree's. Crypto
+%% runs outside the transaction, so the life is resolved outside it too; what
+%% the guard buys is that it is checked at commit time as well, where a
+%% migration or a second first-appender could have replaced it in between.
+-spec expected_life(integrity_ctx()) -> binary() | undefined.
+expected_life({enabled, _Key, _ChainStart, #{life := Life}}) when is_binary(Life) ->
+    Life;
+expected_life(_IntegrityCtx) ->
+    undefined.
 
 %% @private Build the {Path, Record} event writes and the flat list of
 %% {Path, EventRef} index entries for a batch, applying integrity stamping
@@ -1835,16 +1862,18 @@ build_event_writes(StreamId, CurrentVersion, Events, Now, EpochUs,
     non_neg_integer(),
     integer(),
     boolean(),
-    integer()
+    integer(),
+    binary() | undefined
 ) -> ok | {error, term()}.
 write_batch(StreamId, StoreId, Writes, IndexEntries, FinalVersion,
-            CurrentVersion, CounterExisted, ExpectedVersion) ->
+            CurrentVersion, CounterExisted, ExpectedVersion, ExpectedLife) ->
     CounterPath = reckon_db_stream_path:version_counter_path(StreamId),
     PredecessorPath = predecessor_path(StreamId, CurrentVersion),
     Fun = fun() ->
                   write_batch_tx(Writes, IndexEntries, CounterPath,
                                  PredecessorPath, FinalVersion, CurrentVersion,
-                                 CounterExisted, ExpectedVersion)
+                                 CounterExisted, ExpectedVersion,
+                                 {StreamId, ExpectedLife})
           end,
     %% There is no bare `ok' clause: khepri:transaction/2 answers {ok, _} or
     %% {error, _}, and the dead clause that matched `ok' was what made
@@ -1859,9 +1888,11 @@ write_batch(StreamId, StoreId, Writes, IndexEntries, FinalVersion,
 
 %% @private The body of the write-batch transaction.
 write_batch_tx(Writes, IndexEntries, CounterPath, PredecessorPath, FinalVersion,
-               CurrentVersion, CounterExisted, ExpectedVersion) ->
+               CurrentVersion, CounterExisted, ExpectedVersion,
+               {StreamId, ExpectedLife}) ->
     ok = append_guard(CounterPath, PredecessorPath, CurrentVersion,
                       CounterExisted, hd(Writes), ExpectedVersion),
+    ok = guard_life(StreamId, ExpectedLife),
     lists:foreach(fun put_tx_entry/1, Writes),
     lists:foreach(fun put_tx_entry/1, IndexEntries),
     %% The version the batch ended on, in the same Ra command as the
@@ -1870,6 +1901,23 @@ write_batch_tx(Writes, IndexEntries, CounterPath, PredecessorPath, FinalVersion,
     ok = khepri_tx:put(CounterPath, FinalVersion),
     bump_global_event_count(length(Writes)),
     ok.
+
+%% @private The life the batch stamped under is still the stream's life.
+%%
+%% Resolved outside the transaction (the MACs need it before the write), so it
+%% has to be checked inside: a first-append mint or a migration that lands in
+%% between replaces the token, and the events already stamped under the old one
+%% would never verify again. Aborting is honest - nothing is written, and the
+%% caller re-reads the context and retries.
+guard_life(_StreamId, undefined) ->
+    ok;
+guard_life(StreamId, ExpectedLife) ->
+    case khepri_tx:get(reckon_db_chain_watermark:life_path(StreamId)) of
+        {ok, ExpectedLife} ->
+            ok;
+        _ ->
+            khepri_tx:abort({integrity_life_moved, StreamId})
+    end.
 
 put_tx_entry({P, Record}) ->
     ok = khepri_tx:put(P, Record).
@@ -2314,9 +2362,114 @@ verify_with_mac_context(StoreId, StreamId, StartVersion, Events, Mode,
         {error, Violation} ->
             {integrity_violation, Violation};
         {ok, Limit} ->
-            verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode,
-                               Key, Ctx, Limit)
+            verify_legacy_region(StoreId, StreamId, StartVersion, Events, Mode,
+                                 Key, Ctx, Limit)
     end.
+
+%% @private The legacy region has to be explainable before anything in it is
+%% handed back unverified.
+verify_legacy_region(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
+                     Limit) ->
+    case honouring_legacy(Events, Limit) of
+        false ->
+            verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode,
+                               Key, Ctx, Limit);
+        true ->
+            verify_explained_region(StoreId, StreamId, StartVersion, Events,
+                                    Mode, Key, Ctx, Limit)
+    end.
+
+%% @private
+verify_explained_region(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
+                        Limit) ->
+    case legacy_region_ok(StoreId, StreamId, Limit) of
+        ok ->
+            verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode,
+                               Key, Ctx, Limit);
+        {violation, Violation} ->
+            {integrity_violation, Violation}
+    end.
+
+%% @private Is this batch about to hand back an event it treats as legacy?
+-spec honouring_legacy([event()], non_neg_integer() | undefined) -> boolean().
+honouring_legacy(Events, Limit) ->
+    lists:any(fun(Event) -> is_legacy(Event, Limit) end, Events).
+
+%% @private Is there something the store wrote that explains the region below
+%% `Limit'?
+%%
+%% Two shapes are honest, and the point is that a REPLAYED watermark produces
+%% neither. The event AT the limit carries the genesis predecessor when the
+%% limit is a chain start this stream really began at; a verified scavenge
+%% boundary there says the same thing for a prefix that was removed. Jupiter
+%% r15 JP3: an earlier life's sealed record replayed over a new life lands on
+%% a MID-CHAIN event of that life, whose predecessor is a chain hash, and with
+%% no boundary there either - so no legacy region may be honoured below it.
+%%
+%% When there is no event at the limit (an honest chain-less stream is sealed
+%% at newest + 1, so this is legal), the stream must not carry a chain at all:
+%% a chain-bearing newest event under a limit nothing sits at is the same
+%% replay over a shorter life.
+legacy_region_ok(_StoreId, _StreamId, undefined) ->
+    ok;
+legacy_region_ok(StoreId, StreamId, Limit) ->
+    case event_at_version(StoreId, StreamId, Limit) of
+        {ok, Event} -> at_limit_verdict(StoreId, StreamId, Event, Limit);
+        missing -> newest_verdict(StoreId, StreamId, Limit)
+    end.
+
+%% @private
+at_limit_verdict(StoreId, StreamId, Event, Limit) ->
+    case is_genesis_event(Event) orelse boundary_at(StoreId, StreamId, Limit) of
+        true -> ok;
+        false -> {violation, legacy_region_unexplained(StreamId, Limit)}
+    end.
+
+%% @private
+newest_verdict(StoreId, StreamId, Limit) ->
+    case newest_event(StoreId, StreamId) of
+        {ok, #event{prev_event_hash = PrevHash}} when is_binary(PrevHash) ->
+            {violation, legacy_region_unexplained(StreamId, Limit)};
+        _ ->
+            ok
+    end.
+
+%% @private
+-spec is_genesis_event(event()) -> boolean().
+is_genesis_event(#event{prev_event_hash = PrevHash}) ->
+    PrevHash =:= reckon_gater_integrity:genesis_prev_hash().
+
+%% @private
+-spec event_at_version(atom(), binary(), non_neg_integer()) -> {ok, event()} | missing.
+event_at_version(StoreId, StreamId, Version) ->
+    predecessor_event(StoreId, StreamId, Version).
+
+%% @private
+-spec boundary_at(atom(), binary(), non_neg_integer()) -> boolean().
+boundary_at(StoreId, StreamId, Version) ->
+    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
+        {ok, #{version := Version} = Boundary} ->
+            reckon_db_scavenge_boundary:verify(StoreId, StreamId, Boundary);
+        _ ->
+            false
+    end.
+
+%% @private
+-spec newest_event(atom(), binary()) -> {ok, event()} | missing.
+newest_event(StoreId, StreamId) ->
+    case newest_event_version(StoreId, StreamId) of
+        {ok, ?NO_STREAM} -> missing;
+        {ok, Version} -> predecessor_event(StoreId, StreamId, Version);
+        {error, _} -> missing
+    end.
+
+%% @private
+legacy_region_unexplained(StreamId, Limit) ->
+    #{layer => storage,
+      stream_id => StreamId,
+      version => Limit,
+      kind => missing_integrity,
+      context => #{detail => legacy_region_unexplained, limit => Limit}}.
 
 %% @private Integrity is enabled but the store has no key, so nothing this
 %% read returns can be verified. Refusing is the only answer that does not
@@ -2366,12 +2519,50 @@ mac_context_fields(StoreId, StreamId) ->
 %% @private
 verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
                    Limit) ->
+    case guard_page_start(StoreId, StreamId, Events) of
+        {violation, Violation} ->
+            {integrity_violation, Violation};
+        ok ->
+            verify_anchored_batch(StoreId, StreamId, StartVersion, Events, Mode,
+                                  Key, Ctx, Limit)
+    end.
+
+%% @private
+verify_anchored_batch(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
+                      Limit) ->
     case batch_anchor(StoreId, StreamId, Events, StartVersion) of
         {error, Violation} ->
             {integrity_violation, Violation};
         {ok, Anchor} ->
             verify_events_loop(Events, Anchor, Limit, Key, Ctx, Mode, StreamId,
                                [])
+    end.
+
+%% @private A chain-less first event whose PREDECESSOR carries a chain.
+%%
+%% That order cannot happen honestly: the writer stamps every event above a
+%% stream's chain start, so a chain-bearing event is never followed by a
+%% chain-less one. It is what a replayed seal looks like - restore an earlier
+%% life's token and record, then strip and rewrite only the newest event. A
+%% full read still refused, at the surviving MAC'd event that no longer
+%% verifies, but a read that STARTED at the stripped event never looked at
+%% that neighbour, and served the forgery as ok (Jupiter r15, JP3 tail
+%% variant). One predecessor read closes it; the rest of the page is covered
+%% by the running tip in handle_legacy/8.
+-spec guard_page_start(atom(), binary(), [event()]) -> ok | {violation, map()}.
+guard_page_start(_StoreId, _StreamId, []) ->
+    ok;
+guard_page_start(_StoreId, _StreamId, [#event{prev_event_hash = Hash} | _])
+        when is_binary(Hash) ->
+    ok;
+guard_page_start(_StoreId, _StreamId, [#event{version = 0} | _]) ->
+    ok;
+guard_page_start(StoreId, StreamId, [#event{version = Version} | _]) ->
+    case predecessor_event(StoreId, StreamId, Version - 1) of
+        {ok, #event{prev_event_hash = PrevHash}} when is_binary(PrevHash) ->
+            {violation, chain_break(StreamId, Version)};
+        _ ->
+            ok
     end.
 
 %% @private The version below which a hash-less event is legitimately
@@ -2413,6 +2604,21 @@ legacy_limit(_StoreId, _StreamId, undefined, Events) ->
 -spec any_chain_bearing([event()]) -> boolean().
 any_chain_bearing(Events) ->
     lists:any(fun is_chain_bearing/1, Events).
+
+%% @private A chain-less event that follows a chain: the one order an honest
+%% writer cannot produce, whatever the watermark says.
+-spec chain_break(binary(), non_neg_integer()) ->
+        #{layer := storage,
+          stream_id := binary(),
+          version := non_neg_integer(),
+          kind := missing_integrity,
+          context := #{detail := chain_break}}.
+chain_break(StreamId, Version) ->
+    #{layer => storage,
+      stream_id => StreamId,
+      version => Version,
+      kind => missing_integrity,
+      context => #{detail => chain_break}}.
 
 %% @private
 unauthenticated_watermark(Events, Version) ->
@@ -2505,6 +2711,12 @@ is_legacy(_Event, undefined) ->
 -spec is_chain_bearing(event()) -> boolean().
 is_chain_bearing(#event{prev_event_hash = PrevHash}) -> is_binary(PrevHash).
 
+handle_legacy(Event, _Rest, Tip, _Limit, _Key, _Ctx, _Mode, StreamId, _Acc)
+        when is_binary(Tip) ->
+    %% A chain-less event AFTER a chain-bearing one in the same page: the same
+    %% contradiction guard_page_start/3 catches at the page boundary, and the
+    %% shape a stripped tail takes inside a page that starts above it.
+    {integrity_violation, chain_break(StreamId, Event#event.version)};
 handle_legacy(Event, _Rest, _Tip, _Limit, _Key, _Ctx, strict, StreamId,
               _Acc) ->
     %% Strict mode refuses to return legacy events at all.

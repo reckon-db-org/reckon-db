@@ -98,7 +98,11 @@ verify(StoreId, StreamId, #{version := Version, prev_hash := PrevHash,
         when is_integer(Version), is_binary(PrevHash), is_binary(Mac) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) ->
-            crypto:hash_equals(Mac, mac(Key, StreamId, Version, PrevHash));
+            Expected = mac(Key, StreamId, Version, PrevHash),
+            %% A malformed MAC in the tree is not a verified boundary, and
+            %% must not raise: crypto:hash_equals refuses differing lengths.
+            byte_size(Mac) =:= byte_size(Expected) andalso
+                crypto:hash_equals(Mac, Expected);
         _ ->
             false
     end;

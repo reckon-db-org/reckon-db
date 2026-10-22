@@ -39,7 +39,11 @@
     a_sealed_watermark_does_not_survive_delete_and_recreate/1,
     a_junk_watermark_refuses_only_its_own_stream/1,
     a_junk_marker_does_not_count_as_migrated/1,
-    a_snapshot_authenticated_cut_is_sealed/1
+    a_snapshot_authenticated_cut_is_sealed/1,
+    a_cut_does_not_cover_events_that_still_survive/1,
+    a_cut_with_a_watermark_above_the_survivors_is_refused/1,
+    an_honest_old_line_upgrade_seals_its_legacy_streams/1,
+    a_junk_watermark_is_refused_by_name/1
 ]).
 
 -define(KEY_ENV, "RECKON_DB_MIGRATION_TEST_KEY").
@@ -63,7 +67,11 @@ all() ->
         a_sealed_watermark_does_not_survive_delete_and_recreate,
         a_junk_watermark_refuses_only_its_own_stream,
         a_junk_marker_does_not_count_as_migrated,
-        a_snapshot_authenticated_cut_is_sealed
+        a_snapshot_authenticated_cut_is_sealed,
+        a_cut_does_not_cover_events_that_still_survive,
+        a_cut_with_a_watermark_above_the_survivors_is_refused,
+        an_honest_old_line_upgrade_seals_its_legacy_streams,
+        a_junk_watermark_is_refused_by_name
     ].
 
 suite() ->
@@ -723,6 +731,176 @@ a_snapshot_authenticated_cut_is_sealed(Config) ->
     ?assertMatch({ok, {sealed, 5}},
                  reckon_db_chain_watermark:lookup(StoreId, StreamId)),
     ?assertEqual(5, length(events(StoreId, StreamId))).
+
+%% @doc GIVEN a chain whose first five events were STRIPPED but still sit in
+%%           the tree, a snapshot taken at 4, and the watermark deleted
+%%      WHEN the store starts
+%%      THEN nothing is sealed: a cut may only be anchored at the lowest
+%%           SURVIVING event, and five events survive below this one
+%%
+%% Jupiter r15 JR1 and JR1b. Anchoring the cut at the lowest CHAIN-BEARING
+%% event instead let a snapshot at 4 vouch for events 0..4 that were still
+%% there and no longer carried a chain: the stream was sealed at 5 and a
+%% rewritten event 2 read back as ok.
+a_cut_does_not_cover_events_that_still_survive(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"cut-over-survivors">>),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 9} = append_events(StoreId, StreamId, 10),
+    ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{state => s}),
+    lists:foreach(fun(V) -> ok = clear_integrity_fields(StoreId, StreamId, V) end,
+                  lists:seq(0, 4)),
+    ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
+    ok = delete_watermark(StoreId, StreamId),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, undefined},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+    ?assertMatch({error, {integrity_violation, _}}, read_raw(StoreId, StreamId)).
+
+%% @doc GIVEN a genuine scavenged gap whose snapshot cut is sound, and a bare
+%%           watermark that claims a version ABOVE the first survivor
+%%      WHEN the store starts
+%%      THEN the stream is refused rather than sealed at the cut, because an
+%%           honest old-line watermark is the original chain start and can
+%%           never sit above it
+%%
+%% Terra r15, probe_cut_with_w_above_survivor. T3's cut path carries this
+%% final condition for the watermark that is still there.
+a_cut_with_a_watermark_above_the_survivors_is_refused(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"cut-watermark-above">>),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 9} = append_events(StoreId, StreamId, 10),
+    ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{state => s}),
+    ok = delete_events(StoreId, StreamId, 0, 4),
+    ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
+    ok = put_bare_watermark(StoreId, StreamId, 7),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {unsealed, 7}},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+    ?assertMatch({error, {integrity_violation, _}}, read_raw(StoreId, StreamId)).
+
+%% @doc GIVEN an honest store as the 5.11 line left it: a chain stream whose
+%%           bare watermark sits at its genesis-proven chain start, beside a
+%%           stream that predates integrity and has no watermark at all
+%%      WHEN the store starts with integrity enabled
+%%      THEN both are sealed and both serve
+%%
+%% Jupiter r15 JR2 and Terra's probe_honest_old_line. Before this release
+%% nothing was ever sealed, so counting an unsealed watermark as deletion
+%% evidence refused every legacy stream in an honestly upgraded store: the
+%% upgrade is supposed to be an ordinary restart.
+an_honest_old_line_upgrade_seals_its_legacy_streams(Config) ->
+    {StoreId, DataDir} = store(Config),
+    ChainId = stream(<<"old-line-chain">>),
+    LegacyId = stream(<<"old-line-legacy">>),
+    WateredId = stream(<<"old-line-watered">>),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 4} = append_events(StoreId, ChainId, 5),
+    ok = write_legacy(StoreId, LegacyId, 3),
+    ok = write_legacy(StoreId, WateredId, 3),
+    %% Put the store back into the shape the 5.11 line left: a chain with
+    %% store-blind MACs and its original bare watermark, and streams that
+    %% predate integrity entirely, one of them with a bare watermark too.
+    ok = make_old_line_chain(StoreId, ChainId, 5),
+    ok = make_pre_integrity(StoreId, LegacyId, 3, undefined),
+    ok = make_pre_integrity(StoreId, WateredId, 3, 3),
+    ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {sealed, 0}},
+                 reckon_db_chain_watermark:lookup(StoreId, ChainId)),
+    ?assertMatch({ok, {sealed, 3}},
+                 reckon_db_chain_watermark:lookup(StoreId, LegacyId)),
+    ?assertMatch({ok, {sealed, 3}},
+                 reckon_db_chain_watermark:lookup(StoreId, WateredId)),
+    ?assertEqual(5, length(events(StoreId, ChainId))),
+    ?assertEqual(3, length(events(StoreId, LegacyId))),
+    ?assertEqual(3, length(events(StoreId, WateredId))).
+
+%% @doc GIVEN a junk MAC map at the watermark path
+%%      WHEN the store starts
+%%      THEN that stream alone is refused, by a reason that names the junk
+%%           watermark for what it is, whichever shape the stream has
+%%
+%% J2 and Terra r15 probe_junk_map_chain_bearing: a chain-bearing stream was
+%% silently sealed over it, and a chain-less one was refused as
+%% {above_newest, Map}, which names the wrong thing.
+a_junk_watermark_is_refused_by_name(Config) ->
+    {StoreId, DataDir} = store(Config),
+    ChainId = stream(<<"junk-map-chain">>),
+    LegacyId = stream(<<"junk-map-legacy">>),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 4} = append_events(StoreId, ChainId, 5),
+    ok = write_legacy(StoreId, LegacyId, 3),
+    Junk = #{version => 0, v2_from => 0, life => <<"nope">>, mac => <<"junk">>},
+    ok = khepri:put(StoreId, watermark_path(ChainId), Junk),
+    ok = khepri:put(StoreId, watermark_path(LegacyId), Junk),
+    ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {unsealed, #{mac := <<"junk">>}}},
+                 reckon_db_chain_watermark:lookup(StoreId, ChainId)),
+    ?assertMatch({ok, {unsealed, #{mac := <<"junk">>}}},
+                 reckon_db_chain_watermark:lookup(StoreId, LegacyId)),
+    Refused = refused_streams(StoreId),
+    ?assert(lists:member(ChainId, Refused)),
+    ?assert(lists:member(LegacyId, Refused)).
+
+%% @private Turn a stream into the shape the 5.11 line left for a chain: every
+%% event stamped with the store-blind (scheme 1) MAC over the same payload, the
+%% predecessor chain re-stamped from the genesis value, the sealed watermark
+%% replaced by the original bare integer, and no life token. This release
+%% cannot produce a scheme-1 event any more, so the test rewrites one by hand.
+make_old_line_chain(StoreId, StreamId, N) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    ?assert(is_binary(Key)),
+    _Tip = lists:foldl(
+             fun(Version, PrevTip) ->
+                     {ok, Event0} = khepri:get(StoreId,
+                                               event_path(StreamId, Version)),
+                     Bare = Event0#event{prev_event_hash = PrevTip,
+                                         mac = undefined, signature = undefined},
+                     Mac = reckon_gater_integrity:compute_event_mac(Bare, Key),
+                     Event = Bare#event{mac = Mac},
+                     ok = khepri:put(StoreId, event_path(StreamId, Version), Event),
+                     reckon_gater_integrity:compute_chain_hash(Event, PrevTip)
+             end, reckon_gater_integrity:genesis_prev_hash(),
+             lists:seq(0, N - 1)),
+    ok = khepri:delete(StoreId, life_path(StreamId)),
+    ok = khepri:put(StoreId, watermark_path(StreamId), 0),
+    ok.
+
+%% @private A stream as it looked before integrity existed: no chain fields on
+%% any event, no life token, and either no watermark at all or the old bare
+%% integer.
+make_pre_integrity(StoreId, StreamId, N, Watermark) ->
+    lists:foreach(fun(V) -> ok = clear_integrity_fields(StoreId, StreamId, V) end,
+                  lists:seq(0, N - 1)),
+    ok = khepri:delete(StoreId, life_path(StreamId)),
+    case Watermark of
+        undefined -> ok = khepri:delete(StoreId, watermark_path(StreamId));
+        Version -> ok = khepri:put(StoreId, watermark_path(StreamId), Version)
+    end.
+
+%% @private
+refused_streams(StoreId) ->
+    {ok, #{refused := Refused}} = khepri:get(StoreId, ?INTEGRITY_MIGRATION_PATH),
+    Refused.
 
 %% @private
 current_watermark(StoreId, StreamId) ->

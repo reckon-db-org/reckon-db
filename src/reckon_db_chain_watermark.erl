@@ -83,6 +83,7 @@
                   raw := term(),
                   life := binary() | undefined,
                   newest := integer(),
+                  lowest := {ok, non_neg_integer()} | none,
                   chain_start := {ok, non_neg_integer()} | none,
                   genesis := {ok, non_neg_integer()} | none,
                   cut := {ok, non_neg_integer()} | none,
@@ -195,20 +196,51 @@ set_if_absent(StoreId, StreamId, Version)
     end.
 
 %% @private The first append of a new stream: mint its life token and its
-%% watermark at version 0, under scheme 2 from the first event.
+%% watermark at version 0, and answer the value that actually committed.
+%%
+%% Both nodes are written in ONE transaction, and only when the watermark path
+%% is empty. Two plain puts each, racing two writers opening the same stream,
+%% left the tree holding one writer's seal while the other writer's events were
+%% stamped under a life that had been overwritten: those events could never
+%% verify again and the stream was unreadable from version 0 for good.
+%% Terra's probe_concurrent_first_append_life: 8 ANY_VERSION creators on 40
+%% fresh streams left 9 unreadable; a gateway pool of 2 is exactly that shape.
+%% The loser now reads the winner's seal and uses the winner's life, because
+%% `set_if_absent/3` answers the committed version and the caller reads the
+%% life back from the same record.
+%%
+%% The seal's MAC is computed OUTSIDE the transaction: crypto cannot run in a
+%% Khepri transaction (`{horus, extraction_denied, {unknown_instruction,
+%% nif_start}}'), so the record is built here and only stored inside.
 mint_watermark(StoreId, StreamId) ->
     Life = new_life(),
-    ok = khepri:put(StoreId, life_path(StreamId), Life),
-    ok = khepri:put(StoreId, path(StreamId),
-                    sealed_record(StoreId, StreamId, Life, 0, 0)),
-    {ok, Recorded} = lookup(StoreId, StreamId),
-    recorded_or_version(Recorded, 0).
+    Seal = sealed_record(StoreId, StreamId, Life, 0, 0),
+    Fun = fun() -> mint_tx(StreamId, Life, Seal) end,
+    case khepri:transaction(StoreId, Fun) of
+        {ok, Version} when is_integer(Version) -> {ok, Version};
+        {ok, {error, _} = Error} -> Error;
+        {error, _} = Error -> Error
+    end.
 
-%% @private
-recorded_or_version(undefined, Version) -> {ok, Version};
-recorded_or_version({sealed, Recorded}, _Version) -> {ok, Recorded};
-recorded_or_version({unsealed, Recorded}, _Version) ->
-    {error, {chain_start_unauthenticated, Recorded}}.
+%% @private The transaction body: keep whatever is already there, mint only
+%% into an empty path. A map or a bare integer somebody else put there is a
+%% watermark this append may not use, and it is answered with the same refusal
+%% a later append would get.
+mint_tx(StreamId, Life, Seal) ->
+    case khepri_tx:get(path(StreamId)) of
+        {error, ?khepri_error(node_not_found, _)} ->
+            ok = khepri_tx:put(life_path(StreamId), Life),
+            ok = khepri_tx:put(path(StreamId), Seal),
+            0;
+        {ok, #{version := Version}} when is_integer(Version) ->
+            Version;
+        {ok, Version} when is_integer(Version) ->
+            Version;
+        {ok, Other} ->
+            {error, {chain_start_unauthenticated, Other}};
+        {error, Reason} ->
+            {error, {chain_start_unreadable, Reason}}
+    end.
 
 %% @doc The upgrade, run at store start.
 -spec migrate(atom()) -> ok.
@@ -302,7 +334,7 @@ marker_matches(StoreId, Version, Refused, Mac) ->
 marker_mac_verifies(StoreId, Version, Refused, Mac) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) ->
-            crypto:hash_equals(Mac, migration_mac(StoreId, Key, Version, Refused));
+            mac_matches(Mac, migration_mac(StoreId, Key, Version, Refused));
         _ ->
             false
     end.
@@ -351,8 +383,6 @@ commit_migration(StoreId, StreamIds, AnchorPath) ->
             {ok, committed_seals(Plans)};
         {ok, already_migrated} ->
             cluster_loser(StoreId, AnchorPath);
-        {error, {marker_present, _}} ->
-            cluster_loser(StoreId, AnchorPath);
         {error, Reason} ->
             migration_failed(StoreId, Reason),
             {error, Reason}
@@ -367,7 +397,13 @@ cluster_loser(StoreId, AnchorPath) ->
             {ok, 0};
         none ->
             logger:error("integrity migration on store ~p found a marker that "
-                         "does not verify; sealing nothing", [StoreId]),
+                         "does not verify; sealing nothing. The marker is "
+                         "unauthenticated, so nothing is lost by removing it: "
+                         "delete [metadata, integrity, migration] and restart to "
+                         "run the migration again. Streams it refused stay "
+                         "refused until migrate(StoreId, #{accept_missing => "
+                         "[StreamId]}) names them one at a time.",
+                         [StoreId]),
             telemetry:execute([reckon, db, integrity, migration_marker_unverified],
                               #{system_time => erlang:system_time(millisecond)},
                               #{store_id => StoreId}),
@@ -378,24 +414,49 @@ cluster_loser(StoreId, AnchorPath) ->
 committed_seals(Plans) ->
     length([P || #{kind := seal} = P <- Plans]).
 
-%% @private A stream that shows a watermark was deleted: it carries a chain,
-%% and it has no authenticated watermark at the version its chain begins -
-%% unless an authenticated cut explains the missing chain start.
+%% @private A stream that shows a watermark was deleted.
+%%
+%% Evidence is one of three shapes, and only these: no watermark at all on a
+%% stream that carries a chain; a watermark whose value is NOT the chain
+%% start the store can prove; or a chain start that does not verify (T4).
+%%
+%% A bare watermark AT the proven chain start is the honest 5.11 shape and is
+%% NOT evidence. Before this release nothing was ever sealed, so counting an
+%% unsealed watermark as evidence refused every legacy stream in an honestly
+%% upgraded store, which is the availability half of Jupiter r15 and Terra's
+%% probe_honest_old_line: the upgrade is supposed to be an ordinary restart.
 -spec deletion_evidence(atom(), [scan()]) -> boolean().
 deletion_evidence(_StoreId, Scans) ->
     lists:any(fun shows_deletion/1, Scans).
 
 %% @private
-shows_deletion(#{chain_start := {ok, ChainStart}, watermark := Watermark,
-                 cut := Cut} = Scan) ->
-    _ = Scan,
-    not sealed_at(Watermark, ChainStart) andalso Cut =:= none;
+shows_deletion(#{chain_start := {ok, ChainStart}} = Scan) ->
+    not (start_authenticated(Scan, ChainStart) andalso
+         watermark_honours(Scan, ChainStart));
 shows_deletion(_Scan) ->
     false.
 
+%% @private The chain start is proven: the genesis event verifies at it, or an
+%% authenticated cut explains why it is gone.
+start_authenticated(#{genesis := {ok, ChainStart}}, ChainStart) -> true;
+start_authenticated(#{cut := {ok, ChainStart}}, ChainStart) -> true;
+start_authenticated(_Scan, _ChainStart) -> false.
+
+%% @private The watermark names the start rather than trailing it. An
+%% authenticated start with no watermark behind it, or one claiming a version
+%% above the start, is still evidence: a seal at or below the start is what the
+%% migration itself writes, and an old-line bare value is the original chain
+%% start, which is at or below it.
+watermark_honours(#{watermark := Watermark}, ChainStart) ->
+    case watermark_version(Watermark) of
+        {ok, Version} -> Version =< ChainStart;
+        error -> false
+    end.
+
 %% @private
-sealed_at({sealed, Version}, Version) -> true;
-sealed_at(_Watermark, _ChainStart) -> false.
+watermark_version({sealed, Version}) when is_integer(Version) -> {ok, Version};
+watermark_version({unsealed, Version}) when is_integer(Version) -> {ok, Version};
+watermark_version(_Watermark) -> error.
 
 %% @private
 -spec plan_stream(atom(), scan(), boolean()) -> plan().
@@ -403,6 +464,12 @@ plan_stream(_StoreId, #{error := Reason} = Scan, _Evidence) ->
     refuse(Scan, {unreadable, Reason});
 plan_stream(_StoreId, #{watermark := {sealed, _}}, _Evidence) ->
     #{kind => skip};
+plan_stream(_StoreId, #{watermark := {unsealed, Watermark}} = Scan, _Evidence)
+        when not is_integer(Watermark) ->
+    %% A map (or any other term) at the watermark path whose MAC does not
+    %% verify: J2's junk watermark. Refused and named like any other stream,
+    %% never an abort, and never sealed over.
+    refuse(Scan, {watermark_mac_invalid, Watermark});
 plan_stream(StoreId, #{chain_start := none} = Scan, Evidence) ->
     plan_chainless(StoreId, Scan, Evidence);
 plan_stream(_StoreId, #{chain_start := {ok, ChainStart}} = Scan, _Evidence) ->
@@ -436,7 +503,21 @@ plan_chain_bearing(Scan, ChainStart) ->
         none -> plan_unproven_chain_start(Scan, ChainStart)
     end.
 
-%% @private
+%% @private The chain start is gone, so ONLY a cut can explain it. T3 carries
+%% a final condition on that path, for the watermark that is still there: a
+%% bare value at or below the cut is the original chain start and the seal
+%% goes at that value; a bare value ABOVE it is the shape a moved or planted
+%% watermark leaves, so it is refused - and counted as evidence - rather than
+%% sealed over. A stream whose watermark is gone entirely is sealed at the cut
+%% itself: the cut is store-written proof, and it is what stands in for one.
+plan_unproven_chain_start(#{cut := {ok, ChainStart},
+                            watermark := {unsealed, Watermark}} = Scan, ChainStart)
+        when is_integer(Watermark), Watermark =< ChainStart ->
+    seal_at(Scan, Watermark);
+plan_unproven_chain_start(#{cut := {ok, ChainStart},
+                            watermark := {unsealed, Watermark}} = Scan, ChainStart)
+        when is_integer(Watermark) ->
+    refuse(Scan, {watermark_above_chain_start, Watermark, ChainStart});
 plan_unproven_chain_start(#{cut := {ok, ChainStart}} = Scan, ChainStart) ->
     seal_at(Scan, ChainStart);
 plan_unproven_chain_start(Scan, ChainStart) ->
@@ -714,6 +795,7 @@ scan_stream(StoreId, StreamId) ->
              raw => raw_watermark(StoreId, StreamId),
              life => current_life(StoreId, StreamId),
              newest => -1,
+             lowest => none,
              chain_start => none,
              genesis => none,
              cut => none},
@@ -736,19 +818,62 @@ raw_watermark(StoreId, StreamId) ->
     end.
 
 %% @private
+%%
+%% Both starts are found here, and the difference between them is the whole
+%% point: `lowest' is the lowest version an event still exists at, while
+%% `chain_start' is the lowest version carrying a chain. A cut may only be
+%% anchored at the lowest SURVIVING event - a surviving event below the chain
+%% start is data the migration cannot vouch for and must not seal over - so
+%% the two must coincide before anything is proven, and an event below the
+%% chain start is left with neither a genesis nor a cut and is refused.
 scan_versions(StoreId, #{stream_id := StreamId, newest := Newest} = Scan) ->
+    case lowest_event(StoreId, StreamId, 0, Newest) of
+        none ->
+            Scan;
+        {ok, Lowest} ->
+            scan_chain_start(StoreId, Scan#{lowest => {ok, Lowest}}, Newest);
+        {error, Reason} ->
+            Scan#{error => Reason}
+    end.
+
+%% @private
+scan_chain_start(StoreId, #{stream_id := StreamId, lowest := {ok, Lowest}} = Scan,
+                 Newest) ->
     case lowest_chain_event(StoreId, StreamId, 0, Newest) of
         {ok, none} ->
             Scan;
         {ok, Event} ->
             ChainStart = Event#event.version,
-            Scan#{chain_start => {ok, ChainStart},
-                  genesis => genesis_version(StoreId, Scan, Event),
-                  cut => authenticated_cut(StoreId, StreamId, ChainStart,
-                                            maps:get(life, Scan))};
+            anchored_chain_start(StoreId, Scan, Event, ChainStart, Lowest);
         {error, Reason} ->
             Scan#{error => Reason}
     end.
+
+%% @private The chain start, and what may vouch for it.
+%%
+%% A GENESIS at the chain start is proven whatever survives below it: a
+%% stream that started integrity life with a legacy prefix carries the genesis
+%% sentinel at its chain start precisely so that the prefix below is known to
+%% be pre-integrity data.
+%%
+%% A CUT is different, and must be anchored at the lowest SURVIVING event. A
+%% cut claims "everything below this point was removed", so it is only true
+%% when nothing survives below it: a snapshot at version 4 proves nothing
+%% about events 0..4 still sitting in the tree, which is exactly how a full
+%% life replay was sealed over (Jupiter r15 JR1).
+anchored_chain_start(StoreId, #{stream_id := StreamId} = Scan, Event, ChainStart,
+                     Lowest) ->
+    Scan#{chain_start => {ok, ChainStart},
+          genesis => genesis_version(StoreId, Scan, Event),
+          cut => cut_at_lowest(StoreId, StreamId, ChainStart, Lowest,
+                               maps:get(life, Scan))}.
+
+%% @private
+cut_at_lowest(_StoreId, _StreamId, ChainStart, Lowest, _Life)
+        when ChainStart =/= Lowest ->
+    none;
+cut_at_lowest(StoreId, StreamId, ChainStart, _Lowest, Life) ->
+    authenticated_cut(StoreId, StreamId, ChainStart, Life).
 
 %% @private
 genesis_version(StoreId, Scan, Event) ->
@@ -851,7 +976,21 @@ snapshot_anchor_matches(#snapshot{version = Version, anchor_hash = Anchor},
 snapshot_anchor_matches(_Snapshot, _ChainStart, _Carried) ->
     false.
 
+%% @private The lowest version an event still exists at, holes included: a
+%% scavenged prefix answers the first version that survived it.
+lowest_event(_StoreId, _StreamId, From, To) when From > To ->
+    none;
+lowest_event(StoreId, StreamId, From, To) ->
+    Count = min(?SCAN_PAGE, To - From + 1),
+    case read_page(StoreId, StreamId, From, Count) of
+        {ok, [#event{version = Version} | _]} -> {ok, Version};
+        {ok, []} -> lowest_event(StoreId, StreamId, From + Count, To);
+        {error, _} = Error -> Error
+    end.
+
 %% @private
+-spec lowest_chain_event(atom(), binary(), integer(), integer()) ->
+        {ok, none | event()} | {error, term()}.
 lowest_chain_event(_StoreId, _StreamId, From, To) when From > To ->
     {ok, none};
 lowest_chain_event(StoreId, StreamId, From, To) ->
@@ -927,7 +1066,7 @@ safe_term(Bin) ->
 anchor_mac_matches(StoreId, Mac) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) ->
-            crypto:hash_equals(Mac, anchor_mac(Key, StoreId));
+            mac_matches(Mac, anchor_mac(Key, StoreId));
         _ ->
             false
     end.
@@ -1023,13 +1162,26 @@ seal_verifies(StoreId, StreamId,
              is_binary(Mac) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) ->
-            crypto:hash_equals(
-              Mac, seal_mac(StoreId, Key, StreamId, Life, Version, V2From));
+            mac_matches(Mac,
+                        seal_mac(StoreId, Key, StreamId, Life, Version, V2From));
         _ ->
             false
     end;
 seal_verifies(_StoreId, _StreamId, _Record) ->
     false.
+
+%% @private Compare two MACs without letting a malformed one take the store
+%% down.
+%%
+%% `crypto:hash_equals/2' raises badarg when the lengths differ, and every MAC
+%% compared here comes from the tree (or a file beside it), where anybody who
+%% can write can leave a two-byte value: a junk watermark crashed the store's
+%% own start with badarg before this guard, which is worse than the silently
+%% sealed stream J2 is about.
+-spec mac_matches(binary(), binary()) -> boolean().
+mac_matches(Mac, Expected) ->
+    byte_size(Mac) =:= byte_size(Expected) andalso
+        crypto:hash_equals(Mac, Expected).
 
 %% @private
 -spec seal_mac(atom(), binary(), binary(), binary(), non_neg_integer(),
