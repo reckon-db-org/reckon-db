@@ -37,6 +37,18 @@
 
 -type snapshot_data() :: map() | binary().
 -type snapshot_metadata() :: map().
+%% What a snapshot read can refuse with: the snapshot is absent, it failed a
+%% check, or the event it anchors on cannot be established.
+-type violation() :: #{layer := snapshot | storage,
+                       stream_id := binary(),
+                       kind := chain_mismatch | mac_mismatch | missing_integrity
+                             | snapshot_anchor_mismatch
+                             | snapshot_mac_mismatch,
+                       context := map(),
+                       version => non_neg_integer()}.
+-type load_error() :: not_found
+                    | {integrity_violation, violation()}
+                    | {snapshot_anchor_unavailable, map()}.
 
 -export_type([snapshot_data/0, snapshot_metadata/0]).
 
@@ -98,8 +110,7 @@ save(StoreId, StreamId, Version, Data, Metadata) ->
 %% Callers (typically aggregate rebuild) should treat an integrity
 %% violation as a directive to fall back to full event replay from
 %% the stream's chain_start_version watermark.
--spec load(atom(), binary()) ->
-    {ok, snapshot()} | {error, not_found} | {error, term()}.
+-spec load(atom(), binary()) -> {ok, snapshot()} | {error, load_error()}.
 load(StoreId, StreamId) ->
     StartTime = erlang:monotonic_time(),
 
@@ -132,7 +143,7 @@ load(StoreId, StreamId) ->
 %%
 %% Same verification semantics as load/2.
 -spec load_at(atom(), binary(), non_neg_integer()) ->
-    {ok, snapshot()} | {error, not_found} | {error, term()}.
+        {ok, snapshot()} | {error, load_error()}.
 load_at(StoreId, StreamId, Version) ->
     case reckon_db_snapshots_store:get(StoreId, StreamId, Version) of
         undefined ->
@@ -152,10 +163,31 @@ load_at(StoreId, StreamId, Version) ->
 list(StoreId, StreamId) ->
     case reckon_db_snapshots_store:list(StoreId, StreamId) of
         {ok, Snapshots} ->
-            {ok, [S || S <- Snapshots,
-                       verified_on_list(StoreId, StreamId, S)]};
+            listed(StoreId, StreamId, Snapshots);
         {error, _} = Error ->
             Error
+    end.
+
+%% @private The anchor's answer is about the STREAM, so it decides the whole
+%% list: a store that cannot check the stream has no snapshots to offer, and
+%% answering `{ok, []}' there read as "this stream has none" (Jupiter J23-3).
+%% What is about one snapshot - its MAC, its anchor hash - drops that snapshot.
+listed(StoreId, StreamId, Snapshots) ->
+    case reckon_db_integrity_key:is_enabled(StoreId) of
+        false ->
+            {ok, Snapshots};
+        true ->
+            listed_checked(StoreId, StreamId, Snapshots)
+    end.
+
+%% @private
+listed_checked(StoreId, StreamId, Snapshots) ->
+    case life_anchor_verdict(StoreId, StreamId) of
+        ok ->
+            {ok, [S || S <- Snapshots,
+                       verified_on_list(StoreId, StreamId, S)]};
+        {error, Violation} ->
+            refused_load(StoreId, StreamId, 0, Violation)
     end.
 
 %% @private
@@ -259,9 +291,15 @@ seal_with_anchor({ok, AnchorHash}, StoreId,
                  #snapshot{stream_id = StreamId} = Snapshot) ->
     Key = reckon_db_integrity_key:get(StoreId),
     Snapshot1 = Snapshot#snapshot{anchor_hash = AnchorHash},
-    Mac = snapshot_mac(Snapshot1, Key, StoreId, StreamId),
-    {ok, Snapshot1#snapshot{mac = Mac}};
+    seal_with_snapshot_mac(snapshot_mac(Snapshot1, Key, StoreId, StreamId),
+                           Snapshot1);
 seal_with_anchor({error, _} = Err, _StoreId, _Snapshot) ->
+    Err.
+
+%% @private
+seal_with_snapshot_mac({ok, Mac}, Snapshot) ->
+    {ok, Snapshot#snapshot{mac = Mac}};
+seal_with_snapshot_mac({error, _} = Err, _Snapshot) ->
     Err.
 
 %% @private A snapshot MAC binds the store and the stream's life when the
@@ -269,15 +307,22 @@ seal_with_anchor({error, _} = Err, _StoreId, _Snapshot) ->
 %% snapshot written then is scheme 1.
 snapshot_mac(Snapshot, Key, StoreId, StreamId) ->
     case mac_context(StoreId, StreamId) of
-        {ok, Ctx} -> reckon_gater_integrity:compute_snapshot_mac(Snapshot, Key, Ctx);
-        none -> reckon_gater_integrity:compute_snapshot_mac(Snapshot, Key)
+        {ok, Ctx} ->
+            {ok, reckon_gater_integrity:compute_snapshot_mac(Snapshot, Key,
+                                                             Ctx)};
+        none ->
+            {ok, reckon_gater_integrity:compute_snapshot_mac(Snapshot, Key)};
+        {error, _} = Error ->
+            Error
     end.
 
-%% @private
+%% @private A tree that will not say which life the stream carries is not a
+%% reason to seal a snapshot without one: the save is refused.
 mac_context(StoreId, StreamId) ->
     case reckon_db_chain_watermark:binding(StoreId, StreamId) of
         {ok, #{life := Life}} -> {ok, #{store_id => StoreId, life => Life}};
-        {ok, undefined} -> none
+        {ok, undefined} -> none;
+        {error, Reason} -> {error, Reason}
     end.
 
 %%====================================================================
@@ -296,27 +341,61 @@ mac_context(StoreId, StreamId) ->
 %% anchor is what can still tell that life from the one this node recorded.
 maybe_verify_snapshot_on_load(StoreId, StreamId,
                               #snapshot{version = Version} = Snapshot) ->
-    verify_if_needed(should_verify_snapshot(StoreId, Snapshot),
-                     StoreId, StreamId, Version, Snapshot).
-
-verify_if_needed(false, _StoreId, _StreamId, _Version, Snapshot) ->
-    {ok, Snapshot};
-verify_if_needed(true, StoreId, StreamId, Version, Snapshot) ->
-    case life_anchor_verdict(StoreId, StreamId) of
-        ok ->
-            verify_against_anchor(compute_event_chain_hash(StoreId, StreamId,
-                                                           Version),
-                                  StoreId, StreamId, Version, Snapshot);
-        {error, Violation} ->
-            emit_load_violation_telemetry(StoreId, StreamId, Version,
-                                          {integrity_violation, Violation}),
-            {error, {integrity_violation, Violation}}
+    case reckon_db_integrity_key:is_enabled(StoreId) of
+        false ->
+            {ok, Snapshot};
+        true ->
+            verify_if_needed(StoreId, StreamId, Version, Snapshot)
     end.
 
+%% @private The anchor answers for EVERY snapshot on an integrity store, not
+%% only for one that carries a MAC. It used to be consulted only when the
+%% snapshot looked sealed, and "looks sealed" was decided by the stream's
+%% binding - which is `undefined' for a seal that was removed, zeroed or had a
+%% byte flipped. A broken seal therefore turned a forged legacy-shaped record
+%% into "legacy data" and skipped the anchor with it, while the anchor still
+%% held the stream's life (Jupiter J23-1, Terra T23-1). A stream this node has
+%% a life for cannot have "no seal": that is a violation, not a legacy stream.
+verify_if_needed(StoreId, StreamId, Version, Snapshot) ->
+    case life_anchor_verdict(StoreId, StreamId) of
+        ok ->
+            verify_if_needed_locally(StoreId, StreamId, Version, Snapshot);
+        {error, Violation} ->
+            refused_load(StoreId, StreamId, Version, Violation)
+    end.
+
+%% @private
+verify_if_needed_locally(StoreId, StreamId, Version, Snapshot) ->
+    case should_verify_snapshot(StoreId, Snapshot) of
+        false ->
+            {ok, Snapshot};
+        true ->
+            verify_against_anchor(compute_event_chain_hash(StoreId, StreamId,
+                                                           Version),
+                                  StoreId, StreamId, Version, Snapshot)
+    end.
+
+%% @private
+refused_load(StoreId, StreamId, Version, Violation) ->
+    emit_load_violation_telemetry(StoreId, StreamId, Version,
+                                  {integrity_violation, Violation}),
+    {error, {integrity_violation, Violation}}.
+
 %% @private The same rule the stream read applies: the generation this node
-%% recorded, against the one the seal carries now.
+%% recorded, against the one the seal carries now. A tree that will not say
+%% what the stream carries is refused before the anchor is asked: the anchor
+%% compares against a life, and there is none to compare (Jupiter J23-2, Terra
+%% T23-2).
 life_anchor_verdict(StoreId, StreamId) ->
-    {Gen, Life} = seal_generation(StoreId, StreamId),
+    case seal_generation(StoreId, StreamId) of
+        {ok, Gen, Life} ->
+            anchor_verdict(StoreId, StreamId, Gen, Life);
+        {error, Reason} ->
+            {error, life_unreadable_map(StreamId, undefined, Reason)}
+    end.
+
+%% @private
+anchor_verdict(StoreId, StreamId, Gen, Life) ->
     case reckon_db_life_anchor:check(StoreId, StreamId, Gen, Life) of
         ok -> ok;
         {refuse, Violation} -> {error, Violation}
@@ -325,9 +404,27 @@ life_anchor_verdict(StoreId, StreamId) ->
 %% @private
 seal_generation(StoreId, StreamId) ->
     case reckon_db_chain_watermark:binding(StoreId, StreamId) of
-        {ok, #{life := Life, gen := Gen}} -> {Gen, Life};
-        {ok, undefined} -> {0, undefined}
+        {ok, #{life := Life, gen := Gen}} -> {ok, Gen, Life};
+        {ok, undefined} -> {ok, 0, undefined};
+        {error, Reason} -> {error, Reason}
     end.
+
+%% @private A stream whose life the tree will not name cannot be checked
+%% against a snapshot MAC, nor can the anchor compare it: refused, not served.
+%% The bare violation map, because `refused_load/4' is what wraps it.
+life_unreadable_map(StreamId, Version, Reason) ->
+    Base = #{layer => snapshot,
+             stream_id => StreamId,
+             kind => missing_integrity,
+             context => #{detail => life_unreadable, reason => Reason}},
+    case Version of
+        undefined -> Base;
+        _ -> Base#{version => Version}
+    end.
+
+%% @private The wrapped shape, for a caller that compares violations.
+life_unreadable_violation(StreamId, Version, Reason) ->
+    {integrity_violation, life_unreadable_map(StreamId, Version, Reason)}.
 
 verify_against_anchor({ok, ActualAnchor}, StoreId, StreamId, Version, Snapshot) ->
     Key = reckon_db_integrity_key:get(StoreId),
@@ -340,9 +437,15 @@ verify_against_anchor({error, _} = Err, _StoreId, _StreamId, _Version, _Snapshot
 verify_snapshot_mac(Snapshot, ActualAnchor, Key, StoreId, StreamId) ->
     case mac_context(StoreId, StreamId) of
         {ok, Ctx} ->
-            reckon_gater_integrity:verify_snapshot(Snapshot, ActualAnchor, Key, Ctx);
+            reckon_gater_integrity:verify_snapshot(Snapshot, ActualAnchor, Key,
+                                                   Ctx);
         none ->
-            reckon_gater_integrity:verify_snapshot(Snapshot, ActualAnchor, Key)
+            reckon_gater_integrity:verify_snapshot(Snapshot, ActualAnchor, Key);
+        {error, Reason} ->
+            %% The tree could not say which life the snapshot belongs to, so
+            %% the MAC cannot be checked: refused, not served.
+            life_unreadable_violation(StreamId, Snapshot#snapshot.version,
+                                      Reason)
     end.
 
 check_snapshot_mac(ok, _StoreId, _StreamId, _Version, Snapshot) ->
@@ -351,27 +454,24 @@ check_snapshot_mac({integrity_violation, _} = Violation, StoreId, StreamId, Vers
     emit_load_violation_telemetry(StoreId, StreamId, Version, Violation),
     {error, Violation}.
 
-%% @private
-%%
-%% A snapshot with no anchor and no MAC is legacy data - served unchanged on a
-%% store that cannot check it. What it may NOT be is a way around the check on
-%% a stream that HAS a seal: an attacker who replaces the record with the same
-%% shape and no MAC was served `{ok, forged}' by both load paths (Terra T22-2).
-%% Past the point where scheme 2 begins, a stream's snapshot carries a MAC or
-%% it is refused.
+%% @private A snapshot with no anchor and no MAC is legacy data, and is served
+%% unchanged - but only once the anchor has answered for the stream (see
+%% verify_if_needed/4). On a stream this node has a life for, the anchor has
+%% already refused before this is asked.
 should_verify_snapshot(StoreId, Snapshot) ->
-    reckon_db_integrity_key:is_enabled(StoreId)
-        andalso (not reckon_gater_integrity:is_legacy_snapshot(Snapshot)
-                 orelse must_carry_a_mac(StoreId, Snapshot)).
+    not reckon_gater_integrity:is_legacy_snapshot(Snapshot)
+        orelse must_carry_a_mac(StoreId, Snapshot).
 
 %% @private A stream with a verifying seal has carried scheme-2 MACs since
 %% `v2_from'; a snapshot at or above that version is one of them. Below it the
-%% events are scheme-1, and the save path refuses to seal a snapshot there, so
-%% a legacy snapshot is all such a stream can have.
+%% events are scheme-1 and the save path refuses to seal a snapshot there, so a
+%% legacy snapshot is all such a stream can have (Terra T22-2). A tree that
+%% will not answer requires the MAC.
 must_carry_a_mac(StoreId, #snapshot{stream_id = StreamId, version = Version}) ->
     case reckon_db_chain_watermark:binding(StoreId, StreamId) of
         {ok, #{v2_from := V2From}} -> Version >= V2From;
-        {ok, undefined} -> false
+        {ok, undefined} -> false;
+        {error, _Reason} -> true
     end.
 
 emit_load_violation_telemetry(StoreId, StreamId, Version, _Violation) ->

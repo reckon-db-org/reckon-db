@@ -47,6 +47,8 @@
     tampered_stream_event_breaks_snapshot/1,
     a_restored_old_life_cannot_be_read_through_its_snapshot/1,
     a_legacy_shaped_snapshot_on_a_sealed_stream_is_refused/1,
+    a_snapshot_under_a_broken_seal_is_refused/1,
+    a_snapshot_list_with_no_anchor_is_refused/1,
     legacy_snapshot_passes_through_on_load/1,
     integrity_disabled_store_skips_load_verification/1
 ]).
@@ -80,6 +82,8 @@ groups() ->
             tampered_stream_event_breaks_snapshot,
             a_restored_old_life_cannot_be_read_through_its_snapshot,
             a_legacy_shaped_snapshot_on_a_sealed_stream_is_refused,
+            a_snapshot_under_a_broken_seal_is_refused,
+            a_snapshot_list_with_no_anchor_is_refused,
             legacy_snapshot_passes_through_on_load,
             integrity_disabled_store_skips_load_verification
         ]}
@@ -326,8 +330,12 @@ a_restored_old_life_cannot_be_read_through_its_snapshot(Config) ->
                  reckon_db_snapshots:load(StoreId, StreamId)),
     ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_snapshots:load_at(StoreId, StreamId, 4)),
-    %% ... and the list is not a way around either check (reckon-db#22).
-    ?assertEqual({ok, []}, reckon_db_snapshots:list(StoreId, StreamId)),
+    %% ... and the list is not a way around either check (reckon-db#22). The
+    %% anchor's answer is about the STREAM, so it refuses the whole list rather
+    %% than answering "no snapshots" (Jupiter J23-3).
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := life_gen_rolled_back}}}},
+                 reckon_db_snapshots:list(StoreId, StreamId)),
     ok.
 
 %% Terra T22-2. A snapshot with no anchor and no MAC is legacy data - but not
@@ -350,6 +358,76 @@ a_legacy_shaped_snapshot_on_a_sealed_stream_is_refused(Config) ->
     ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_snapshots:load_at(StoreId, StreamId, 4)),
     ?assertEqual({ok, []}, reckon_db_snapshots:list(StoreId, StreamId)),
+    ok.
+
+%% Jupiter J23-1 / Terra T23-1. The anchor answers for EVERY snapshot on an
+%% integrity store, legacy-shaped or not. "Must carry a MAC" used to be decided
+%% by binding/2, which answers undefined for a seal that was removed or whose
+%% MAC was flipped - so a tree writer who broke the seal turned a forged
+%% legacy-shaped snapshot into "legacy data" and the anchor was skipped with it,
+%% while the anchor still held the stream's life. A seal a broken tree cannot
+%% vouch for is a violation, not a legacy stream.
+a_snapshot_under_a_broken_seal_is_refused(Config) ->
+    [{_, _} = broken_seal_case(Config, Label, Break)
+     || {Label, Break} <- [{<<"snap-seal-mac-flipped">>, fun flip_seal_mac/2},
+                           {<<"snap-seal-removed">>, fun remove_seal/2}]],
+    ok.
+
+%% @private The control (intact seal) is the test above; here the seal is
+%% broken before the forged record is read.
+broken_seal_case(Config, Label, Break) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(Label),
+    write_n_events(StoreId, StreamId, 5),
+    ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{balance => 10}),
+    {ok, Honest} = reckon_db_snapshots:load(StoreId, StreamId),
+
+    Forged = Honest#snapshot{data = #{balance => 1000000},
+                             anchor_hash = undefined, mac = undefined},
+    ok = put_snapshot_directly(StoreId, StreamId, 4, Forged),
+    %% Control: with the seal intact the forgery is refused.
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_snapshots:load(StoreId, StreamId)),
+
+    ok = Break(StoreId, StreamId),
+
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_snapshots:load(StoreId, StreamId)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_snapshots:load_at(StoreId, StreamId, 4)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_snapshots:list(StoreId, StreamId)),
+    {StoreId, StreamId}.
+
+%% @private A tree writer's cheapest move: take the seal node away.
+remove_seal(StoreId, StreamId) ->
+    khepri:delete(StoreId, reckon_db_chain_watermark:path(StreamId)).
+
+%% @private
+flip_seal_mac(StoreId, StreamId) ->
+    Path = reckon_db_chain_watermark:path(StreamId),
+    {ok, #{mac := <<First, Rest/binary>>} = Seal} = khepri:get(StoreId, Path),
+    ok = khepri:put(StoreId, Path,
+                    Seal#{mac => <<(First bxor 16#ff), Rest/binary>>}).
+
+%% Jupiter J23-3. The anchor's answer is about the STREAM, so an anchor that
+%% cannot answer refuses the whole list. It used to answer {ok, []} on the same
+%% store where load refused: a caller (the gateway's list_snapshots) was told
+%% the stream has no snapshots when it had one.
+a_snapshot_list_with_no_anchor_is_refused(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"snap-list-no-anchor">>),
+    write_n_events(StoreId, StreamId, 5),
+    ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{state => kept}),
+
+    reckon_db_life_anchor:stop(StoreId),
+
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := life_anchor_unavailable}}}},
+                 reckon_db_snapshots:load(StoreId, StreamId)),
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := life_anchor_unavailable}}}},
+                 reckon_db_snapshots:list(StoreId, StreamId)),
     ok.
 
 %% A legacy snapshot (no integrity fields) on an integrity-enabled

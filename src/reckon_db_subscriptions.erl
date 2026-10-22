@@ -825,7 +825,7 @@ catchup_mac_context(StoreId, StreamId) ->
     case reckon_db_chain_watermark:binding(StoreId, StreamId) of
         {ok, #{life := Life, v2_from := V2From}} ->
             Base#{life => Life, v2_from => V2From};
-        {ok, undefined} ->
+        _ ->
             Base
     end.
 

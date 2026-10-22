@@ -127,8 +127,17 @@ verify(_StoreId, _StreamId, _Boundary) ->
 %% back afterwards.
 -spec life(atom(), binary()) -> binary() | undefined.
 life(StoreId, StreamId) ->
-    {ok, Life} = reckon_db_chain_watermark:life(StoreId, StreamId),
-    Life.
+    case reckon_db_chain_watermark:life(StoreId, StreamId) of
+        {ok, Life} -> Life;
+        {error, Reason} ->
+            %% A boundary MAC that cannot bind the life is not written and does
+            %% not verify, which is the fail-closed answer: the caller's
+            %% comparison against a real MAC cannot succeed on `undefined'
+            %% unless the life really is absent.
+            logger:error("scavenge boundary for ~p: the stream's life could not "
+                         "be read: ~p", [StreamId, Reason]),
+            undefined
+    end.
 
 %%====================================================================
 %% Internal

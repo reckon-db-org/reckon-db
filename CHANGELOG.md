@@ -1013,6 +1013,66 @@ has a test that fails on `84db8c9` and passes now.
   around both. Each snapshot in a list now passes the same checks `load_at/3`
   applies, and one that fails is dropped with telemetry rather than returned.
 
+### Fixed: the round-23 review, seven bugs in the failed-delete cleanup
+
+Jupiter and Terra, on `a329134..1fab932`. Every item was required; each fix
+has a test that fails on `1fab932` and passes now. Four of the seven sat in
+the failed-delete cleanup that the round-22 fix added, and that path changed
+shape rather than being patched four times: nothing in the caller decides what
+an ambiguous delete did any more.
+
+- **A broken seal turned a forgery into "legacy data"** (Jupiter J23-1, Terra
+  T23-1). "Must carry a MAC" was decided by `binding/2`, which answers
+  `undefined` for a seal that was removed, zeroed or had a byte flipped - so a
+  tree writer who broke the seal made a forged legacy-shaped snapshot look
+  like legacy data, and the anchor, which still held the stream's life, was
+  skipped with it. `load/2`, `load_at/3` and `list/2` all served it. The
+  anchor answers for EVERY snapshot on an integrity store now, and a stream
+  this node holds a life for cannot have "no seal": that is a violation, not a
+  legacy stream.
+- **A failed read was read as "no life in the tree"** (Jupiter J23-2, Terra
+  T23-2). `life/2` and `binding/2` folded any failed `khepri:get` into
+  `{ok, undefined}`, and the failed-delete resolution took that as "the delete
+  landed": it recorded a TOMBSTONE and refused an untouched, honest stream
+  with `life_gen_deleted` for good, because a restart resolves intents and
+  never tombstones. Only absence is `{ok, undefined}` now (`node_not_found`);
+  every other error is `{error, Reason}`, and a resolution that cannot read
+  the tree decides nothing.
+- **The resolution raced the ambiguous command** (Terra T23-3). A transaction
+  that answered an error can still land AFTER the resolution read the life, so
+  the life was written back and the delete then landed under it. The
+  resolution runs in the anchor's own process now, after `khepri:fence/1` -
+  the barrier that returns once every command the leader received is applied -
+  and where the outcome is still unknown it retries (five attempts, 40 ms
+  apart) before leaving the intent for the next start, loudly.
+- **The witness forgot the life when the seal did not verify** (Jupiter
+  J23-4). `delete_witness/2` took the life from a verifying binding, so a seal
+  with a broken MAC made the intent carry no life at all, and once the seal
+  was put back any life at that generation passed `check/4` - the J22-1 shape
+  a second time. The fallback is what THIS NODE recorded for the stream, which
+  a tree writer cannot break.
+- **A slow or dying anchor exited the delete's caller** (Terra T23-5). The
+  durable intent and the resolution were `gen_server:call`s with a 30 s
+  timeout: an anchor that timed out, or died between `whereis` and the call,
+  exited a caller whose spec is `ok | {error, _}`. The write answers
+  `{error, life_anchor_unavailable}` now, and the resolution is a cast, so the
+  caller never waits on the anchor after the transaction.
+- **`list/2` answered `{ok, []}` while `load/2` refused** (Jupiter J23-3). An
+  anchor outage reached the gateway's `list_snapshots` caller as "this stream
+  has no snapshots". The anchor's answer is about the stream, so it refuses
+  the whole list; a failure about ONE snapshot (its MAC, its anchor hash)
+  still drops that snapshot, with telemetry.
+- **The life pass raised its security alarm on every start** (Terra T23-4).
+  It announced "an older life restored before this start has been adopted"
+  whenever the store had streams, even with nothing recorded, which is every
+  start of every node. It announces only what it actually recorded now.
+
+One bug in this round's own work, fixed before handoff: `seal_generation/2`
+had no clause for the new `{error, _}` from `binding/2` and would have crashed
+the snapshot load path on an unreadable tree. A stream whose life the tree
+will not name is refused (`life_unreadable`), and `load/2` and `load_at/3` say
+so in their specs (`load_error()`).
+
 ### Known residual in this release, named
 
 An attacker who saves an earlier life's sealed watermark and life token
@@ -1056,6 +1116,12 @@ every targeted read of such a stream, in one ETS lookup.
    longer a window is the two that were bugs: a committed tombstone is never
    resolved as an intent, and a delete whose transaction failed puts the life
    back before it answers.
+6. An intent still standing after the resolution's five fenced attempts. The
+   delete may or may not have landed, and until the next start resolves it
+   against a tree that has had all the time it needs, the intent accepts its
+   own life at its own generation and refuses anything else - the honest
+   in-flight answer, and a loud one (a warning and
+   `[reckon, db, life_anchor, intent_unresolved]`).
 
 Reckon-db's `read_all_global/3`, `read_by_event_types/3`, `read_by_tags/3` and
 `read_by_metadata/3` verify no MAC at all; that predates this range and is

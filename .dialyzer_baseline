@@ -112,11 +112,8 @@ src/reckon_db_scavenge.erl	ec67d48ef23f	The call reckon_db_scavenge:do_scavenge(
 src/reckon_db_scavenge.erl	ffcdebc6d6c5	Type specification reckon_db_scavenge:delete_event_versions(atom(),binary(),non_neg_integer(),non_neg_integer(
 src/reckon_db_schema.erl	c3da5dd193c2	The call reckon_db_schema:emit_telemetry(StoreId::atom() | binary() | [atom() | binary() | char() | {'if_all' 
 src/reckon_db_schema.erl	edfa4118bc81	The specification for reckon_db_schema:unregister/2 states that the function might also return 'ok' but the in
-src/reckon_db_snapshots.erl	1d51fb1b073a	Type specification reckon_db_snapshots:load(atom(),binary()) -> {'ok',snapshot()} | {'error','not_found'} | {'
 src/reckon_db_snapshots.erl	2f2248e5292e	Type specification reckon_db_snapshots:estimate_size(term()) -> non_neg_integer() is a supertype of the succes
-src/reckon_db_snapshots.erl	9fbeeda87221	Type specification reckon_db_snapshots:load_at(atom(),binary(),non_neg_integer()) -> {'ok',snapshot()} | {'err
 src/reckon_db_snapshots.erl	abfe8a4728cb	The variable Data can never match since previous clauses completely covered the type binary() | map()
-src/reckon_db_snapshots.erl	d6126830b777	Type specification reckon_db_snapshots:apply_snapshot_integrity(atom(),binary(),non_neg_integer(),snapshot()) 
 src/reckon_db_snapshots_store.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
 src/reckon_db_store_coordinator.erl	2805a0116d51	Guard test is_list(M::{'error',_}) can never succeed
 src/reckon_db_store_coordinator.erl	3075b7d6ead5	The specification for reckon_db_store_coordinator:handle_cluster_nodes/3 states that the function might also r

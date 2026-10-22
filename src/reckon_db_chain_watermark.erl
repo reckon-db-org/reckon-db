@@ -133,7 +133,12 @@ sealed_or_bare(_StoreId, _StreamId, _Version, Other) ->
 %% @doc The life token, `v2_from' and version of a stream's sealed
 %% watermark, or `undefined' when the stream has none the store can vouch
 %% for. This is what a verifier needs; `lookup/2' is the shape.
--spec binding(atom(), binary()) -> {ok, binding() | undefined}.
+%%
+%% `{error, Reason}' is NOT `{ok, undefined}': a tree that cannot be read
+%% answers nothing, and a caller that treats a failed read as "this stream has
+%% no seal" decides on a guess (Jupiter J23-2, Terra T23-2).
+-spec binding(atom(), binary()) ->
+        {ok, binding() | undefined} | {error, term()}.
 binding(StoreId, StreamId) ->
     case khepri:get(StoreId, path(StreamId)) of
         {ok, #{version := Version, v2_from := V2From, life := Life} = Record}
@@ -143,8 +148,12 @@ binding(StoreId, StreamId) ->
                                  #{version => Version, v2_from => V2From,
                                    life => Life, gen => gen_of(Record)},
                                  Record);
-        _ ->
-            {ok, undefined}
+        {ok, _Other} ->
+            {ok, undefined};
+        {error, {khepri, node_not_found, _}} ->
+            {ok, undefined};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 %% @private
@@ -154,12 +163,16 @@ binding_or_undefined(StoreId, StreamId, Binding, Record) ->
         false -> {ok, undefined}
     end.
 
-%% @doc A stream's life token, or `undefined'.
--spec life(atom(), binary()) -> {ok, binary() | undefined}.
+%% @doc A stream's life token, or `undefined' when the tree says the stream
+%% has none. `{error, Reason}' means the tree could not be asked: only ABSENCE
+%% is `{ok, undefined}' (Jupiter J23-2, Terra T23-2).
+-spec life(atom(), binary()) -> {ok, binary() | undefined} | {error, term()}.
 life(StoreId, StreamId) ->
     case khepri:get(StoreId, life_path(StreamId)) of
         {ok, Life} when is_binary(Life) -> {ok, Life};
-        _ -> {ok, undefined}
+        {ok, _Other} -> {ok, undefined};
+        {error, {khepri, node_not_found, _}} -> {ok, undefined};
+        {error, Reason} -> {error, Reason}
     end.
 
 %% @doc A stream's current life generation, 0 when it has none.

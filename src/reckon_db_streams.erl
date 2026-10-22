@@ -1359,9 +1359,16 @@ delete_without_anchor(StoreId, StreamId, _Refusal) ->
         false -> ok
     end.
 
-%% @private What the tombstone is recorded at, and what a failed transaction
-%% has to put back: the seal's own generation and life (MAC'd, so neither can
-%% be raised or replaced), and the tree's generation counter.
+%% @private What the tombstone is recorded at, and the life the intent stands
+%% for: the seal's own generation and life when it verifies (MAC'd, so neither
+%% can be raised or replaced), and otherwise what THIS NODE recorded for the
+%% stream, and the tree's generation counter.
+%%
+%% The fallback matters because a seal a tree writer broke does not verify: the
+%% intent then carried no life at all, and once the seal was put back the
+%% stream read as a different life at the same generation - the J22-1 shape a
+%% second time (Jupiter J23-4). What this node recorded is not something a tree
+%% writer can break.
 -spec delete_witness(atom(), binary()) -> #{gen := non_neg_integer(),
                                            life := binary() | undefined}.
 delete_witness(StoreId, StreamId) ->
@@ -1370,18 +1377,25 @@ delete_witness(StoreId, StreamId) ->
         {ok, #{life := Life, gen := Gen}} when is_binary(Life) ->
             #{gen => max(Gen, CounterGen), life => Life};
         _ ->
+            recorded_witness(StoreId, StreamId, CounterGen)
+    end.
+
+%% @private
+recorded_witness(StoreId, StreamId, CounterGen) ->
+    case reckon_db_life_anchor:entry(StoreId, StreamId) of
+        {Gen, Life} when is_binary(Life) ->
+            #{gen => max(Gen, CounterGen), life => Life};
+        _ ->
             #{gen => CounterGen, life => undefined}
     end.
 
 %% @private The transaction answered an error, and an error is AMBIGUOUS: a
-%% Ra timeout can still commit. The anchor resolves the intent against the tree
-%% - no life there is a delete that landed, the life still there is one that
-%% did not - so an honest stream is not left refused and a landed delete is not
-%% left looking alive (Jupiter J21-2, Terra T22-4). If the anchor has gone in
-%% the meantime the intent is already on its disk and the next start resolves
-%% it; the read rule does not refuse an honest stream while it stands.
+%% Ra timeout can still commit. Nothing is decided here - the anchor resolves
+%% the intent against the tree once the cluster has nothing in flight, in its
+%% own process, so no cleanup races the command and a slow or dying anchor
+%% cannot take this caller down (Terra T23-3, T23-5).
 delete_failed(StoreId, StreamId, Error) ->
-    _ = reckon_db_life_anchor:record_delete_failed(StoreId, StreamId),
+    ok = reckon_db_life_anchor:resolve_when_decided(StoreId, StreamId),
     Error.
 
 %% @private Every node in one command: they go together or none does.
@@ -2760,7 +2774,9 @@ mac_context_fields(StoreId, StreamId) ->
     case reckon_db_chain_watermark:binding(StoreId, StreamId) of
         {ok, #{life := Life, v2_from := V2From, gen := Gen}} ->
             Base#{life => Life, v2_from => V2From, gen => Gen};
-        {ok, undefined} ->
+        _ ->
+            %% No binding, or a tree that would not answer: with no scheme-2
+            %% context a scheme-2 MAC cannot verify, so the read refuses.
             Base
     end.
 
