@@ -718,10 +718,19 @@ maybe_start_catchup(StoreId,
 
 %% @private Read historical events in batches and deliver to subscriber.
 %%
-%% On integrity-enabled stores, every event is MAC-verified before
-%% delivery. Cross-stream chain verification is intentionally NOT
-%% performed here — catch-up reads interleave all streams in
-%% global order, so there is no single chain to walk. Per-stream chain
+%% The cursor is a `global_seq' (see `reckon_db_global_seq') and is
+%% inclusive, so a checkpoint names the event it was taken on rather than a
+%% count of events before it: a scavenge that removes events below the
+%% cursor no longer shifts it, and the cursor advances to one past the last
+%% seq actually read (not by the batch size) so a hole does not skip a live
+%% event.
+%%
+%% On integrity-enabled stores, every event is MAC-verified before it is
+%% delivered, and the seq is added to the delivered copy afterwards
+%% (`reckon_db_global_seq:positioned/2'): verification runs on the event as
+%% stored, which is what its MAC covers. Cross-stream chain verification is
+%% intentionally NOT performed here — catch-up reads interleave all streams
+%% in global order, so there is no single chain to walk. Per-stream chain
 %% integrity is the consumer's responsibility (Layer 6 — the evoq
 %% aggregate rebuild path does walk a single stream and can do the
 %% chain check there).
@@ -732,44 +741,45 @@ maybe_start_catchup(StoreId,
 %% which is strictly worse than failing loudly.
 -spec do_catchup(atom(), pid(), non_neg_integer(),
                  atom(), binary() | map() | [binary()]) -> ok.
-do_catchup(StoreId, SubscriberPid, Offset, Type, Selector) ->
+do_catchup(StoreId, SubscriberPid, Cursor, Type, Selector) ->
     BatchSize = 500,
-    case reckon_db_streams:read_all_global(StoreId, Offset, BatchSize) of
+    case reckon_db_global_seq:read_from(StoreId, Cursor, BatchSize) of
         {ok, []} ->
-            logger:info("[catchup] Store ~p: replay complete (~b events delivered)",
-                        [StoreId, Offset]),
+            logger:info("[catchup] Store ~p: replay complete at seq ~b",
+                        [StoreId, Cursor]),
             ok;
-        {ok, Events} ->
-            handle_catchup_batch(verify_catchup_batch(StoreId, Events), Events,
-                                 StoreId, SubscriberPid, Offset, BatchSize, Type, Selector);
+        {ok, Pairs} ->
+            handle_catchup_batch(verify_catchup_batch(StoreId, Pairs), Pairs,
+                                 StoreId, SubscriberPid, BatchSize, Type, Selector);
         {error, Reason} ->
-            logger:warning("[catchup] Store ~p: read failed at offset ~b: ~p",
-                           [StoreId, Offset, Reason]),
+            logger:warning("[catchup] Store ~p: read failed at seq ~b: ~p",
+                           [StoreId, Cursor, Reason]),
             ok
     end.
 
 %% @private Filter the verified batch to this subscription's selector and
-%% deliver it. read_all_global returns the WHOLE event log across all
-%% streams, so without the filter every catch-up subscription would
-%% receive the entire store regardless of its declared filter.
-handle_catchup_batch(ok, Events, StoreId, SubscriberPid, Offset, BatchSize, Type, Selector) ->
-    Filtered = [E || E <- Events, reckon_db_filters:matches(Type, Selector, E)],
-    deliver_catchup_batch(StoreId, SubscriberPid, Offset, Filtered, Events,
-                          BatchSize, Type, Selector);
-handle_catchup_batch({error, {integrity_violation, _} = Violation}, _Events,
-                     StoreId, SubscriberPid, Offset, _BatchSize, _Type, _Selector) ->
-    notify_integrity_violation(StoreId, SubscriberPid, Offset, Violation),
+%% deliver it. The read returns the WHOLE event log across all streams, so
+%% without the filter every catch-up subscription would receive the entire
+%% store regardless of its declared filter.
+handle_catchup_batch(ok, Pairs, StoreId, SubscriberPid, BatchSize, Type, Selector) ->
+    Filtered = [{Seq, E} || {Seq, E} <- Pairs, reckon_db_filters:matches(Type, Selector, E)],
+    deliver_catchup_batch(StoreId, SubscriberPid, Filtered, Pairs, BatchSize,
+                          Type, Selector);
+handle_catchup_batch({error, {integrity_violation, _} = Violation}, Pairs,
+                     StoreId, SubscriberPid, _BatchSize, _Type, _Selector) ->
+    [{Seq, Event} | _] = Pairs,
+    notify_integrity_violation(StoreId, SubscriberPid, Seq, Event, Violation),
     ok.
 
 %% @private Verify every event's MAC in the batch if integrity is
 %% enabled on the store. Per-event check only — no cross-stream chain
 %% walk. Short-circuits on first failure.
-verify_catchup_batch(StoreId, Events) ->
+verify_catchup_batch(StoreId, Pairs) ->
     case reckon_db_integrity_key:is_enabled(StoreId) of
         false ->
             ok;
         true ->
-            verify_batch_with_key(StoreId, Events)
+            verify_batch_with_key(StoreId, [E || {_Seq, E} <- Pairs])
     end.
 
 %% @private Integrity is on, so every event is checked. Without a key there
@@ -834,48 +844,55 @@ wrap_catchup_violation(Violation) ->
     {integrity_violation, Violation#{context =>
                                      #{detected_at => catchup_replay}}}.
 
-%% @private Deliver a verified+filtered batch to the subscriber and continue.
-%% Offset advances by the RAW batch size (not the filtered count) so
-%% the read window through the global log moves forward correctly.
-deliver_catchup_batch(StoreId, SubscriberPid, Offset,
-                      Filtered, Raw, BatchSize, Type, Selector) ->
+%% @private Deliver a verified+filtered batch to the subscriber and continue
+%% from one past the last seq the read returned.
+deliver_catchup_batch(StoreId, SubscriberPid, Filtered, Raw, BatchSize, Type, Selector) ->
     deliver_if_subscriber_alive(is_local_process_alive(SubscriberPid),
-                                StoreId, SubscriberPid, Offset,
-                                Filtered, Raw, BatchSize, Type, Selector).
+                                StoreId, SubscriberPid, Filtered, Raw, BatchSize,
+                                Type, Selector).
 
-deliver_if_subscriber_alive(true, StoreId, SubscriberPid, Offset,
-                            Filtered, Raw, BatchSize, Type, Selector) ->
+deliver_if_subscriber_alive(true, StoreId, SubscriberPid, Filtered, Raw,
+                            BatchSize, Type, Selector) ->
     send_filtered_events(Filtered, SubscriberPid),
-    continue_or_finish(length(Raw) < BatchSize, StoreId, SubscriberPid, Offset,
-                       Raw, BatchSize, Type, Selector);
-deliver_if_subscriber_alive(false, StoreId, _SubscriberPid, _Offset,
-                            _Filtered, _Raw, _BatchSize, _Type, _Selector) ->
-    logger:warning("[catchup] Store ~p: subscriber died during replay", [StoreId]),
+    continue_or_finish(length(Raw) < BatchSize, StoreId, SubscriberPid, Raw,
+                       BatchSize, Type, Selector);
+deliver_if_subscriber_alive(false, StoreId, _SubscriberPid, _Filtered, [_ | _] = Raw,
+                            _BatchSize, _Type, _Selector) ->
+    {LastSeq, _} = lists:last(Raw),
+    logger:warning("[catchup] Store ~p: subscriber died during replay at seq ~b",
+                   [StoreId, LastSeq]),
     ok.
 
+%% @private Each delivered event carries the seq it was read at, in the
+%% metadata key a consumer checkpoints on.
 send_filtered_events([], _SubscriberPid) ->
     ok;
 send_filtered_events(Filtered, SubscriberPid) ->
-    SubscriberPid ! {events, Filtered},
+    Positioned = [reckon_db_global_seq:positioned(Seq, Event)
+                  || {Seq, Event} <- Filtered],
+    SubscriberPid ! {events, Positioned},
     ok.
 
-continue_or_finish(true, StoreId, _SubscriberPid, Offset, Raw, _BatchSize, _Type, _Selector) ->
-    Total = Offset + length(Raw),
-    logger:info("[catchup] Store ~p: replay complete (~b events scanned)", [StoreId, Total]),
+continue_or_finish(true, StoreId, _SubscriberPid, Raw, _BatchSize, _Type, _Selector) ->
+    {LastSeq, _Event} = lists:last(Raw),
+    logger:info("[catchup] Store ~p: replay complete at seq ~b", [StoreId, LastSeq]),
     ok;
-continue_or_finish(false, StoreId, SubscriberPid, Offset, _Raw, BatchSize, Type, Selector) ->
-    do_catchup(StoreId, SubscriberPid, Offset + BatchSize, Type, Selector).
+continue_or_finish(false, StoreId, SubscriberPid, Raw, _BatchSize, Type, Selector) ->
+    %% One past the last seq this batch read, so a hole inside the batch is
+    %% never mistaken for the end of the log.
+    {LastSeq, _Event} = lists:last(Raw),
+    do_catchup(StoreId, SubscriberPid, LastSeq + 1, Type, Selector).
 
 %% @private Notify the subscriber that catch-up halted on an
 %% integrity violation. The subscriber receives a structured message
 %% and the catch-up process exits without delivering further events.
-notify_integrity_violation(StoreId, SubscriberPid, Offset, Violation) ->
+notify_integrity_violation(StoreId, SubscriberPid, Seq, Event, Violation) ->
     logger:error(
-        "[catchup] Store ~p: integrity violation at offset ~b: ~p",
-        [StoreId, Offset, Violation]),
+        "[catchup] Store ~p: integrity violation at seq ~b (~ts v~b): ~p",
+        [StoreId, Seq, Event#event.stream_id, Event#event.version, Violation]),
     telemetry:execute(
         [reckon, db, subscription, integrity, violation],
-        #{system_time => erlang:system_time(millisecond), offset => Offset},
+        #{system_time => erlang:system_time(millisecond), seq => Seq},
         #{store_id => StoreId, subscriber_pid => SubscriberPid}
     ),
     case is_local_process_alive(SubscriberPid) of

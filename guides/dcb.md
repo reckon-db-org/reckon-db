@@ -150,9 +150,9 @@ Filter = {and_, [
 ## The DCB pseudo-stream
 
 DCB events live under the pseudo-stream id `<<"_dcb">>`. They are
-real events — they appear in `read_all_global`, `read_by_tags`,
-`read_by_event_types`, `read_by_metadata`, subscription deliveries, the
-gateway gRPC surface, every existing read path — whether or not the store
+real events — they appear in `read_by_tags`, `read_by_event_types`,
+`read_by_metadata`, subscription deliveries, the gateway gRPC surface,
+every existing read path — whether or not the store
 declares the `tags`, `event_type` or `{meta, Key}` index. (Up to 5.11.10
 the DCB append did not write those index entries, so on a store that
 declared them the indexed reads missed every DCB event. 5.11.11 writes
@@ -170,6 +170,13 @@ and should be avoided.
 The seq counter used by DCB is **separate from** the per-stream
 version counter. It is a monotonic per-store integer, incremented
 only by successful DCB commits.
+
+It is separate from the ordinary-stream sequence too
+(`reckon_db_global_seq`): one store has two numberings, a subscription is
+in one or the other, and its checkpoint names which. DCB events are
+therefore **not** in the ordinary-stream log: `read_all_global/3` does not
+return them and does not page over them. A consumer that follows the DCB
+log pages it with `reckon_db_dcb:read_log/3` from a DCB seq.
 
 ---
 

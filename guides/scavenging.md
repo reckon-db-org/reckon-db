@@ -157,6 +157,28 @@ Deletions are replicated through Ra consensus:
 
 **Important**: Deletions are permanent once committed to the Raft log.
 
+### What a scavenge does to a catch-up subscription
+
+Nothing shifts. Every event is numbered when it is appended, from one
+counter per store, inside the same Ra command that writes it
+(`reckon_db_global_seq`), and a scavenge deletes event records and
+renumbers nothing. A subscription checkpoints on that number, so:
+
+- a checkpoint taken before a scavenge still names the same event after it;
+- a checkpoint on an event that was scavenged resumes at the next surviving
+  one, because a seq whose event is gone is skipped rather than counted;
+- the number of events between two checkpoints may now be larger than the
+  difference between them, which is the honest answer to "some of those are
+  gone".
+
+Before the sequence existed a checkpoint was an OFFSET - a count of events
+to skip - and every offset after a deleted range named a different event,
+so a resuming consumer silently skipped or replayed events. A store
+upgraded from that shape is numbered once at start, in the order the old
+reader produced, so an existing checkpoint keeps its meaning; a store that
+had already scavenged before the upgrade cannot be reconstructed, and its
+projections need one rebuild each. See `reckon_db_global_seq`.
+
 ## Archival
 
 ### Archive Before Delete

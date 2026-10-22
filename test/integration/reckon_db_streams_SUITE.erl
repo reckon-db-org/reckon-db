@@ -64,13 +64,12 @@
     invalid_stream_id_is_not_retried/1,
     delete_nonexistent_stream/1,
 
-    %% read_all_global / cache tests
+    %% read_all_global (seq cursor) tests
     read_all_global_returns_events_in_epoch_order/1,
     read_all_global_paginates/1,
     read_all_global_cache_hit_matches_scan/1,
     read_all_global_invalidates_on_append/1,
     read_all_global_cache_isolated_per_store/1,
-    read_all_global_rejects_torn_page_instead_of_mixing_generations/1,
     read_all_global_keeps_one_appends_version_order/1
 ]).
 
@@ -132,7 +131,6 @@ groups() ->
             read_all_global_cache_hit_matches_scan,
             read_all_global_invalidates_on_append,
             read_all_global_cache_isolated_per_store,
-            read_all_global_rejects_torn_page_instead_of_mixing_generations,
             read_all_global_keeps_one_appends_version_order
         ]}
     ].
@@ -564,7 +562,7 @@ delete_nonexistent_stream(Config) ->
     ok.
 
 %%====================================================================
-%% read_all_global / cache tests
+%% read_all_global (seq cursor) tests
 %%====================================================================
 
 %% @doc Events across multiple streams come back in global epoch order,
@@ -590,7 +588,9 @@ read_all_global_returns_events_in_epoch_order(Config) ->
     ?assert(Idx(<<"rag_e1">>) < Idx(<<"rag_e2">>)),
     ?assert(Idx(<<"rag_e2">>) < Idx(<<"rag_e3">>)).
 
-%% @doc Offset/BatchSize correctly page a known, isolated slice of events.
+%% @doc The cursor pages a known, isolated slice of events, and every event
+%% carries the seq it was read at, which is its own cursor for the next
+%% page.
 read_all_global_paginates(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     S = generate_stream_id(),
@@ -604,19 +604,23 @@ read_all_global_paginates(Config) ->
      end || {N, T} <- lists:zip(lists:seq(1, 5), Types)],
 
     {ok, All} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
-    AllTypes = [T || #event{event_type = T} <- All],
-    OurIndexes = [I || {I, T} <- lists:zip(lists:seq(0, length(AllTypes) - 1), AllTypes),
-                        lists:member(T, Types)],
-    ?assertEqual(5, length(OurIndexes)),
-    %% Our 5 events are contiguous in global order (nothing else appended
-    %% between them within this test) and a page starting at the first of
-    %% ours returns exactly them in order.
-    FirstOurs = lists:min(OurIndexes),
-    {ok, Page} = reckon_db_streams:read_all_global(StoreId, FirstOurs, 5),
-    ?assertEqual(Types, [T || #event{event_type = T} <- Page]).
+    ?assertEqual([{E#event.event_type, position(E)} || E <- All,
+                  lists:member(E#event.event_type, Types)],
+                 [{T, position_of(All, T)} || T <- Types]),
+    %% Our 5 events are contiguous in seq order (nothing else was appended
+    %% between them within this test), so the first one's seq is a cursor
+    %% that returns exactly them.
+    Cursor = position_of(All, hd(Types)),
+    {ok, Page} = reckon_db_streams:read_all_global(StoreId, Cursor, 5),
+    ?assertEqual(Types, [T || #event{event_type = T} <- Page]),
+    %% And one past the last of them is the next event, not a repeat.
+    {ok, After} = reckon_db_streams:read_all_global(StoreId, Cursor + 5, 5),
+    ?assertEqual([], [T || #event{event_type = T} <- After,
+                           lists:member(T, Types)]).
 
-%% @doc A second read_all_global call with no intervening append returns
-%% the identical result as the first (cache hit, same data either way).
+%% @doc A second read at the same cursor, with no intervening append,
+%% returns the identical page: the seq a page is read at names the same
+%% events every time.
 read_all_global_cache_hit_matches_scan(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     S = generate_stream_id(),
@@ -625,11 +629,11 @@ read_all_global_cache_hit_matches_scan(Config) ->
 
     {ok, First} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
     {ok, Second} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
-    ?assertEqual([E#event.event_id || E <- First],
-                 [E#event.event_id || E <- Second]).
+    ?assertEqual([{E#event.event_id, position(E)} || E <- First],
+                 [{E#event.event_id, position(E)} || E <- Second]).
 
 %% @doc An append BETWEEN two read_all_global calls is visible on the next
-%% call -- the count-fingerprinted cache must not serve stale data.
+%% call, at a seq above the page the first call returned.
 read_all_global_invalidates_on_append(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     S = generate_stream_id(),
@@ -638,19 +642,19 @@ read_all_global_invalidates_on_append(Config) ->
 
     {ok, Before} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
     BeforeCount = length(Before),
+    LastBefore = lists:max([position(E) || E <- Before]),
 
     {ok, _} = reckon_db_streams:append(StoreId, S, 0,
         [generate_event(<<"after_invalidate">>)]),
 
     {ok, After} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
     ?assertEqual(BeforeCount + 1, length(After)),
-    AfterTypes = [T || #event{event_type = T} <- After],
-    ?assert(lists:member(<<"after_invalidate">>, AfterTypes)).
+    ?assertEqual([<<"after_invalidate">>],
+                 [T || #event{event_type = T} = E <- After,
+                       T =:= <<"after_invalidate">>, position(E) > LastBefore]).
 
-%% @doc A cache entry for one store never leaks into another store's read
-%% -- two distinct stores, same group's Khepri instance can't apply here
-%% (groups already isolate at the store level), so this specifically
-%% exercises the cache TABLE being shared process-wide across StoreIds.
+%% @doc One store's log never reaches another store's read: two distinct
+%% stores, each with its own seq counter.
 read_all_global_cache_isolated_per_store(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     OtherStoreId = list_to_atom(atom_to_list(StoreId) ++ "_other"),
@@ -675,54 +679,14 @@ read_all_global_cache_isolated_per_store(Config) ->
     os:cmd("rm -rf " ++ OtherDataDir),
     ok.
 
-%% @doc If a row this page is about to read carries a Generation tag that
-%% doesn't match what the meta row promised -- what a rebuild landing
-%% between two of this page's `ets:lookup' calls would produce, since the
-%% WRITE side (one atomic `ets:insert/2' per rebuild) does not make the
-%% per-lookup READ side atomic too -- the page must fail closed instead of
-%% silently returning a torn mix of two generations. Pokes the cache table
-%% directly (its name mirrors the private `?READ_ALL_GLOBAL_CACHE' macro)
-%% since there is no other way to construct this exact race
-%% deterministically.
-read_all_global_rejects_torn_page_instead_of_mixing_generations(Config) ->
-    StoreId = proplists:get_value(store_id, Config),
-    S = generate_stream_id(),
-    Marker = integer_to_binary(erlang:unique_integer([positive])),
-    Types = [<<"torn_", Marker/binary, "_", (integer_to_binary(N))/binary>>
-             || N <- lists:seq(1, 3)],
-    lists:foreach(fun({N, T}) ->
-        Ver = case N of 1 -> ?NO_STREAM; _ -> N - 2 end,
-        {ok, _} = reckon_db_streams:append(StoreId, S, Ver, [generate_event(T)])
-    end, lists:zip(lists:seq(1, 3), Types)),
-
-    %% Force a rebuild so the cache is populated, and find our 3 events'
-    %% positions in it.
-    {ok, All} = reckon_db_streams:read_all_global(StoreId, 0, 1000000),
-    AllTypes = [Ev#event.event_type || Ev <- All],
-    OurIndexes = [I || {I, T} <- lists:zip(lists:seq(0, length(AllTypes) - 1), AllTypes),
-                        lists:member(T, Types)],
-    3 = length(OurIndexes),
-    [FirstOurs | _] = lists:sort(OurIndexes),
-
-    %% Corrupt exactly one of our rows' Generation tag in place -- one row
-    %% now disagrees with the meta row's Generation, the rest still agree.
-    CacheTable = reckon_db_read_all_global_cache,
-    [{Key, _Generation, Event}] = ets:lookup(CacheTable, {StoreId, FirstOurs}),
-    true = ets:insert(CacheTable, {Key, make_ref(), Event}),
-
-    %% A page spanning the corrupted position fails closed rather than
-    %% returning a page silently mixing two generations.
-    Result = reckon_db_streams:read_all_global(StoreId, FirstOurs, 3),
-    ?assertEqual({error, cache_generation_changed_mid_page}, Result).
-
 %% @doc The events of ONE append share a single epoch_us, so epoch order
 %% alone cannot place them: every read that promises global order must
 %% return them in version order. Ordered by epoch_us only, they came back
 %% in the order of the Khepri get_many result map (maps:to_list/1), which
 %% for more than 32 events is hash order, not append order -- hecate-tube
 %% lost read-model fields on replay because of it. Covers a full read, a
-%% cache hit, pages that split the batch, a read after an append rebuilds
-%% the cache, and the unindexed read_by_event_types scan.
+%% repeated read, pages that split the batch, a read after a later append,
+%% and the unindexed read_by_event_types scan.
 read_all_global_keeps_one_appends_version_order(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     S = generate_stream_id(),
@@ -734,8 +698,8 @@ read_all_global_keeps_one_appends_version_order(Config) ->
 
     {ok, First} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
     ?assertEqual(Expected, VersionsOf(First)),
-    {ok, CacheHit} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
-    ?assertEqual(Expected, VersionsOf(CacheHit)),
+    {ok, Repeated} = reckon_db_streams:read_all_global(StoreId, 0, 100000),
+    ?assertEqual(Expected, VersionsOf(Repeated)),
     ?assertEqual(Expected, VersionsOf(read_in_pages(StoreId, 0, 7, []))),
 
     {ok, _} = reckon_db_streams:append(StoreId, generate_stream_id(), ?NO_STREAM,
@@ -750,12 +714,24 @@ read_all_global_keeps_one_appends_version_order(Config) ->
 %% Helper Functions
 %%====================================================================
 
-%% @private The whole store read through read_all_global pages of PageSize.
-read_in_pages(StoreId, Offset, PageSize, Acc) ->
-    case reckon_db_streams:read_all_global(StoreId, Offset, PageSize) of
+%% @private The whole store read through read_all_global pages of PageSize,
+%% continuing one past the seq the page ended on.
+read_in_pages(StoreId, Cursor, PageSize, Acc) ->
+    case reckon_db_streams:read_all_global(StoreId, Cursor, PageSize) of
         {ok, []} -> lists:append(lists:reverse(Acc));
-        {ok, Page} -> read_in_pages(StoreId, Offset + length(Page), PageSize, [Page | Acc])
+        {ok, Page} ->
+            read_in_pages(StoreId, lists:max([position(E) || E <- Page]) + 1,
+                          PageSize, [Page | Acc])
     end.
+
+%% @private The seq the store delivered this event at.
+position(#event{metadata = Metadata}) ->
+    maps:get(global_position, Metadata).
+
+%% @private One event type's seq in a page.
+position_of(Events, Type) ->
+    [Seq] = [position(E) || #event{event_type = T} = E <- Events, T =:= Type],
+    Seq.
 
 %% @private Generate a unique stream ID conforming to the
 %% reckon-db user-stream format. See reckon_gater_stream_id.

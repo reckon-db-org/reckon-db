@@ -180,7 +180,13 @@ handle_event_delivery(Topic, Event, #state{
         #{count => 1},
         #{store_id => StoreId, subscription_key => SubscriptionKey, topic => Topic}
     ),
-    deliver_event(Subscriber, Event, StoreId, SubscriptionKey, Topic).
+    %% Live delivery carries the same `global_position' a catch-up page
+    %% carries: a consumer that checkpoints from either path saves the same
+    %% number for the same event, which is what makes a resume point
+    %% comparable across a restart. The trigger fires on the event node and
+    %% hands over the event, not the seq, so the seq is resolved here.
+    Positioned = reckon_db_global_seq:annotate(StoreId, Event),
+    deliver_event(Subscriber, Positioned, StoreId, SubscriptionKey, Topic).
 
 maybe_forward_events(undefined, _Events) ->
     ok;

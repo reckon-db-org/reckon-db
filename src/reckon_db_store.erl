@@ -150,6 +150,12 @@ post_key_load(ok, StoreId, Mode, DataDir, Config, StartTime) ->
     %% fail-closed (appends refused, reads refused) and retries on its
     %% next boot.
     _ = reckon_db_global_seq:backfill(StoreId),
+    %% Authenticate the sequence log, once, when the store has integrity and
+    %% no head for the seqs it holds. Same shape and same place as the two
+    %% steps above: before anything is served, never an operator command. A
+    %% head that exists but does not verify is reported, not re-sealed, and
+    %% the store's appends stay refused.
+    _ = reckon_db_global_seq:ensure_head(StoreId),
     do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime);
 post_key_load({error, KeyReason} = KeyError, StoreId, _Mode, _DataDir, _Config, _StartTime) ->
     logger:error("Failed to load integrity key for store ~p: ~p", [StoreId, KeyReason]),

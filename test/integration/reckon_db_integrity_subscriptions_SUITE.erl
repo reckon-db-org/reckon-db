@@ -216,6 +216,9 @@ install_random_key(StoreId) ->
     Key = crypto:strong_rand_bytes(32),
     persistent_term:put({reckon_db, integrity_key, StoreId}, Key),
     persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
+    %% What a store's own start does when it finds integrity enabled on a
+    %% store that already holds seqs: seal the sequence head over them.
+    ok = reckon_db_global_seq:ensure_head(StoreId),
     Key.
 
 write_n_events(StoreId, StreamId, N) ->

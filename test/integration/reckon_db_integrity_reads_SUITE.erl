@@ -862,6 +862,10 @@ enable_integrity(StoreId) ->
     Key = crypto:strong_rand_bytes(32),
     persistent_term:put({reckon_db, integrity_key, StoreId}, Key),
     persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
+    %% What a store's own start does when it finds integrity enabled on a
+    %% store that already holds seqs: seal the sequence head over them. A
+    %% key installed by hand skips that step, so it is taken here.
+    ok = reckon_db_global_seq:ensure_head(StoreId),
     ok.
 
 write_legacy_events(StoreId, StreamId, N) ->
@@ -883,7 +887,10 @@ write_n_events_starting_at(StoreId, StreamId, StartVersion, N) ->
         false ->
             Key = crypto:strong_rand_bytes(32),
             persistent_term:put({reckon_db, integrity_key, StoreId}, Key),
-            persistent_term:put({reckon_db, integrity_enabled, StoreId}, true);
+            persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
+            %% As enable_integrity/1: the store-start step, for a key
+            %% installed by hand on a store whose seqs are already there.
+            ok = reckon_db_global_seq:ensure_head(StoreId);
         true ->
             ok
     end,

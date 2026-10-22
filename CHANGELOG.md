@@ -5,6 +5,80 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed: a catch-up checkpoint is a sequence number, not an offset
+
+A subscriber's resume point was an OFFSET: a count of events to skip into a
+list the store sorted by `(epoch_us, stream_id, version)`. Both halves of that
+were unsound. `epoch_us` is the appending node's clock, so a step or a skew
+reordered events that already existed; and a scavenge deletes events and
+renumbers nothing, so every offset after a deleted range named a different
+event. A consumer that checkpointed an offset therefore skipped events it
+never processed, or repeated ones it had, and nothing said so.
+
+Every ordinary-stream event now gets a `global_seq` from one counter per
+store, bumped inside the same Ra command that writes the events, with both
+directions of the mapping written with them:
+
+```
+[global_seq, <padded seq>]       -> #{stream_id, version}
+[global_seq_ref, Type, Id, Ver]  -> Seq
+```
+
+Ra is a store's only total order, so the seq order is the commit order and no
+clock is consulted. A seq is never reused and never reassigned, which is what
+makes it usable as a checkpoint. `epoch_us` stays on the event as the
+timestamp it always was.
+
+What a consumer sees:
+
+- `read_all_global/3` takes a seq cursor now (inclusive) instead of an
+  offset, and every event it returns carries `global_position` in its
+  metadata. Live delivery carries the same key, so a checkpoint taken from
+  either path is comparable.
+- A seq whose event a scavenge removed is a hole and is skipped, not counted.
+  A consumer resumes at the next survivor, which is the honest answer to
+  "those events are gone".
+- The whole-store sort and its ETS cache are gone from this path: the read is
+  a seek over the seq log, so a page costs what the page is worth instead of
+  a scan of every event in the store.
+- DCB events are NOT in this log. They keep their own counter, their own
+  numbering and their own reader (`reckon_db_dcb:read_log/3`), and a
+  subscription is in one numbering or the other.
+
+An existing store is numbered once at its first start on this version, before
+anything is served, with the survivors numbered in the order the old reader
+produced them: at the moment of the upgrade a survivor's old offset equals its
+new seq, so a checkpoint written before the upgrade keeps its meaning with no
+translation table. **A store that had already scavenged before the upgrade has
+already lost that correspondence**, and it cannot be reconstructed from what is
+left: each projection on such a store needs one rebuild. Reads and appends on a
+store that has not been numbered are refused (`store_not_migrated`), so a
+half-numbered store is never served as a whole one.
+
+### Added: an authenticated head over the sequence log
+
+On a store with integrity enabled, `[metadata, integrity, global_seq_head]`
+holds `#{from, last, chain, mac}`: the first and last seq the chain covers, a
+SHA-256 chain over every `[global_seq, N] -> #{stream_id, version}` mapping in
+between, and an HMAC over all of it under the store's integrity key with the
+store id inside. The head is written in the append's own transaction, so a
+store cannot commit an event whose seq the head does not cover.
+
+`reckon_db_global_seq:verify/1` recomputes the chain from the tree and names
+what it finds: a head that does not verify, a mapping that was rewritten
+(`ref_moved`), one that was deleted (`ref_missing`), one above the head
+(`ref_beyond_head`), or a counter that disagrees with the head
+(`head_counter_mismatch`). This is the check the per-stream chain cannot make:
+`prev_event_hash` proves order within a stream and says nothing about the log
+a resume point lives in.
+
+A store that gets integrity switched on is sealed at its next start, over the
+seqs it already holds; a head that is present but does not verify is reported,
+not re-sealed, and the store's appends stay refused rather than extending a
+log the store cannot vouch for.
+
 ## [5.12.0] - 2026-10-21
 
 ### Changed: a store config with no mode is a single-node store

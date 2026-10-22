@@ -43,8 +43,7 @@
 %% Internal exports for workers
 -export([
     do_append/4,
-    do_read/5,
-    ensure_cache_table/0
+    do_read/5
 ]).
 
 %%====================================================================
@@ -489,114 +488,37 @@ live_version(Versions, backward, Start) ->
 nearest([], _End) -> none;
 nearest(Versions, End) -> {ok, End(Versions)}.
 
-%% @doc Read all events across all streams in global order.
+%% @doc Read the store's ordinary-stream log from a cursor, in seq order.
 %%
-%% Returns events in global order (epoch_us, then stream_id, then version;
-%% see `reckon_db_index:sort_in_global_order/1'), skipping `Offset' events
-%% and returning up to `BatchSize' events. Used by catch-up subscriptions
-%% to replay historical events to a subscriber, so the events of one append
-%% replay in the order they were appended.
+%% `Cursor' is a `global_seq' (see `reckon_db_global_seq') and is INCLUSIVE:
+%% the page starts at the first event whose seq is at or after it. For the
+%% same integer that is what this reader returned before the sequence
+%% existed, because the backfill numbers survivors in the order this reader
+%% used to produce them - which is what lets a pre-upgrade checkpoint keep
+%% its meaning across the upgrade.
 %%
-%% Parameters:
-%%   StoreId   - The store identifier
-%%   Offset    - Number of events to skip (0-based)
-%%   BatchSize - Maximum number of events to return
+%% Every returned event carries its seq in its metadata under
+%% `global_position', the key a consumer checkpoints on. A seq names one
+%% event for the life of the store; a position in a sorted list named a
+%% different event after every scavenge.
 %%
-%% Returns events in global order (epoch_us, stream_id, version).
+%% The read is a seek, not a scan-and-sort: `[global_seq, N]' names the
+%% stream and version each seq belongs to, and the event node is the
+%% authority on whether it still exists. A seq whose event a scavenge
+%% removed is a hole and is skipped, not an error - scavenge deletes event
+%% nodes and leaves the index entries, so a stale entry is an ordinary
+%% shape, and stopping there would strand every subscriber behind one
+%% scavenged stream.
 %%
-%% == Why this is cached, and why an index inside Khepri cannot replace it ==
-%%
-%% This function has no true server-side pagination: Khepri's `get_many/2'
-%% has no offset/limit primitive (`if_name_matches'/`if_path_matches' are
-%% regex-only, no numeric range condition), so ANY paginated design over
-%% it -- indexed or not -- pays a full-matching-subtree fetch on every
-%% call. Verified by building and benchmarking a secondary `all' index
-%% first (a natural-looking fix, since `reckon_db_index' already does
-%% exactly this for `tags'/`event_type'/`{meta,_}'): at 10k events it was
-%% NOT faster than the plain scan below, because those calls are
-%% ref+point-resolve (fine when a lookup matches a SMALL subset of the
-%% store, wrong when -- like `read_all_global' -- it touches nearly the
-%% whole store every time), and denormalizing full events into the index
-%% just duplicated the same full-subtree-fetch cost under a different path.
-%%
-%% `evoq_store_subscription:catch_up_historical/1' (the only real caller)
-%% pages through a store via a tight sequential burst of
-%% `(StoreId, GrowingOffset, 1000)' calls at subscription start -- which is
-%% exactly the access pattern this cache targets: pay the full scan-and-sort
-%% ONCE per burst (fingerprinted by `global_event_count/1', already O(1) and
-%% already exact -- it only ever increments on append), not once per page.
-%% A store that grows mid-burst invalidates the cache on its own; the TTL
-%% below is a memory-hygiene bound for a burst that stalls or never
-%% completes, not a correctness mechanism.
-%%
-%% == Why the cache indexes one ETS row per event, not one row per store ==
-%%
-%% A first cut of this cache (5.11.1) stored the WHOLE sorted list as a
-%% single ETS value and served a page via `lists:nthtail'/`sublist' on the
-%% list `ets:lookup' handed back. That still copies and walks the ENTIRE
-%% cached list on EVERY page: `ets:lookup' always deep-copies the full
-%% stored term out to the caller, so a "cache hit" against a real
-%% ~87k-event store (reproduced against a real evidence store, not a
-%% synthetic one -- see hecate-sentinel's CHANGELOG) cost ~110-130ms per
-%% page regardless of hit/miss, not the O(1) the fingerprinting was meant
-%% to buy. Against a store that size, blocking `evoq_store_subscription's
-%% synchronous catch-up for the whole burst was long enough on real
-%% (weaker-than-benchmark) hardware to plausibly trip an external liveness
-%% check mid-replay -- see evoq's async catch-up fix, same release train.
-%%
-%% Indexing each event under its own `{StoreId, Position}' key makes a page
-%% read `BatchSize' independent point lookups (each O(1)/O(log N) in ETS,
-%% and each copies exactly one event, not the whole store) instead of one
-%% O(N) copy. The one full scan-and-sort per fingerprint change is
-%% unchanged -- sorting still requires seeing every event at least once --
-%% only the PER-PAGE cost after that scan is fixed.
-%%
-%% Two correctness properties a whole-list cache gets for free and a
-%% per-row one has to earn back, both closed by a per-rebuild Generation
-%% id every row (including the meta row) is tagged with:
-%%
-%% 1. The page bound must be the ACTUAL number of rows this generation
-%%    wrote, never `global_event_count/1'. That counter is a fingerprint
-%%    ("has anything changed"), not an authoritative row count -- it does
-%%    not exist on stores that predate it (reads as 0, nothing backfilled),
-%%    DCB appends (`reckon_db_dcb') never bump it, and deletes never
-%%    decrement it. Any of those makes it diverge from the real scanned
-%%    length: paging against it would silently truncate catch-up (counter
-%%    too low) or let a shrunk generation's stale trailing rows leak back
-%%    in (counter too high). `Len = length(SortedEvents)' from THIS
-%%    rebuild is the only authoritative bound.
-%% 2. A page is `BatchSize' independent `ets:lookup' calls, not one atomic
-%%    read -- so while the WRITE side is atomic (the whole batch lands in
-%%    one `ets:insert/2', which OTP guarantees atomic and isolated for
-%%    `set' tables), the READ side is not: a rebuild can still land between
-%%    two of a page's lookups. If that rebuild's fresh sort reassigns a
-%%    position this page already read (only possible if two events'
-%%    epoch_us values are close enough, or a delete/DCB write races the
-%%    scan, to change relative order --
-%%    `reckon_db_index:sort_in_global_order/1' promises a total order of
-%%    whatever it saw, nothing about positions surviving a later append),
-%%    the page would silently mix two generations. Tagging
-%%    each row with its Generation and checking it on every lookup turns
-%%    that into a detectable condition instead of a silent one: a page
-%%    that spans a rebuild is retried once, against the new generation,
-%%    rather than returned torn.
--define(READ_ALL_GLOBAL_CACHE, reckon_db_read_all_global_cache).
-%% Long enough to cover one catch-up burst (milliseconds to low seconds in
-%% practice); short enough that an entry from a burst nobody ever repeats
-%% doesn't sit in memory indefinitely.
--define(READ_ALL_GLOBAL_CACHE_TTL_MS, 30000).
-%% One rebuild takes low seconds even against a real ~87k-event store (see
-%% the module doc above); a SECOND rebuild landing inside the handful of
-%% BEAM reductions between two ets:lookup calls of the same page would
-%% need back-to-back rebuilds on that timescale. One retry is generous.
--define(PAGE_RETRY_LIMIT, 1).
-
--spec read_all_global(atom(), non_neg_integer(), pos_integer()) ->
+%% DCB events are absent by construction: they keep their own counter, their
+%% own numbering and their own reader (`reckon_db_dcb:read_log/3').
+-spec read_all_global(atom(), non_neg_integer() | none, pos_integer()) ->
     {ok, [event()]} | {error, term()}.
-read_all_global(StoreId, Offset, BatchSize) ->
-    case ensure_cached(StoreId) of
-        {ok, Len, Generation} ->
-            fetch_page(StoreId, Offset, BatchSize, Len, Generation, ?PAGE_RETRY_LIMIT);
+read_all_global(StoreId, Cursor, BatchSize) ->
+    case reckon_db_global_seq:read_from(StoreId, Cursor, BatchSize) of
+        {ok, Pairs} ->
+            {ok, [reckon_db_global_seq:positioned(Seq, Event)
+                  || {Seq, Event} <- Pairs]};
         {error, _} = Error ->
             Error
     end.
@@ -622,136 +544,8 @@ all_events_in_global_order(StoreId) ->
                       || {PathKey, Value} <- maps:to_list(Results)],
             Valid = [E || E <- Events, E =/= undefined],
             {ok, reckon_db_index:sort_in_global_order(Valid)};
-        {ok, _} ->
-            {ok, []};
         {error, _} = Error ->
             Error
-    end.
-
-%% @private Ensure this store's event index is current (rebuilding it, one
-%% scan-and-sort, when the `global_event_count/1' fingerprint has moved or
-%% the entry outlived its TTL) and return `{ok, Len, Generation}' --
-%% `fetch_page/5' pages against Len (the real row count) and verifies
-%% Generation on every row it reads.
--spec ensure_cached(atom()) ->
-    {ok, non_neg_integer(), reference()} | {error, term()}.
-ensure_cached(StoreId) ->
-    ensure_cache_table(),
-    case global_event_count(StoreId) of
-        {ok, Count} -> cached_or_rebuilt(StoreId, Count);
-        {error, _} = Error -> Error
-    end.
-
-cached_or_rebuilt(StoreId, Count) ->
-    Now = erlang:monotonic_time(millisecond),
-    case ets:lookup(?READ_ALL_GLOBAL_CACHE, {meta, StoreId}) of
-        [{_, Count, Len, Generation, InsertedAt}]
-                when Now - InsertedAt < ?READ_ALL_GLOBAL_CACHE_TTL_MS ->
-            {ok, Len, Generation};
-        _ ->
-            rebuild_cache(StoreId, Count, Now)
-    end.
-
-rebuild_cache(StoreId, Count, Now) ->
-    case query_event_results(StoreId, has_data_leaf()) of
-        {ok, Results} ->
-            Events = [convert_result_to_event(PathKey, Value)
-                      || {PathKey, Value} <- Results],
-            ValidEvents = [E || E <- Events, E =/= undefined],
-            SortedEvents = reckon_db_index:sort_in_global_order(ValidEvents),
-            Len = length(SortedEvents),
-            Generation = make_ref(),
-            Rows = index_rows(StoreId, SortedEvents, Generation),
-            true = ets:insert(?READ_ALL_GLOBAL_CACHE,
-                               [{{meta, StoreId}, Count, Len, Generation, Now} | Rows]),
-            {ok, Len, Generation};
-        {error, _} = Error ->
-            Error
-    end.
-
-%% @private One `{{StoreId, Position}, Generation, Event}' row per event,
-%% 0-based and dense -- `fetch_page/5' relies on every position in
-%% `[0, Len)' existing under the SAME Generation this call minted.
-index_rows(StoreId, Events, Generation) ->
-    {Rows, _} = lists:mapfoldl(
-        fun(Event, Position) -> {{{StoreId, Position}, Generation, Event}, Position + 1} end,
-        0, Events),
-    Rows.
-
-%% @private A page is `BatchSize' independent point lookups, not a copy of
-%% the whole cached store -- cost scales with the page, not with Len. Every
-%% row read must carry the SAME Generation this call started with; a
-%% mismatch (or a missing row -- same cause) means a rebuild landed
-%% mid-page, and the page is retried once against the fresh generation
-%% rather than returned as a torn mix of two.
-fetch_page(_StoreId, Offset, _BatchSize, Len, _Generation, _RetriesLeft) when Offset >= Len ->
-    {ok, []};
-fetch_page(StoreId, Offset, BatchSize, Len, Generation, RetriesLeft) ->
-    Last = min(Offset + BatchSize, Len) - 1,
-    Positions = lists:seq(Offset, Last),
-    case lookup_consistent(StoreId, Positions, Generation, []) of
-        {ok, _Events} = Ok -> Ok;
-        stale -> retry_page(StoreId, Offset, BatchSize, RetriesLeft)
-    end.
-
-lookup_consistent(_StoreId, [], _Generation, Acc) ->
-    {ok, lists:reverse(Acc)};
-lookup_consistent(StoreId, [Position | Rest], Generation, Acc) ->
-    case ets:lookup(?READ_ALL_GLOBAL_CACHE, {StoreId, Position}) of
-        [{_, Generation, Event}] -> lookup_consistent(StoreId, Rest, Generation, [Event | Acc]);
-        _ -> stale
-    end.
-
-retry_page(_StoreId, _Offset, _BatchSize, 0) ->
-    {error, cache_generation_changed_mid_page};
-retry_page(StoreId, Offset, BatchSize, RetriesLeft) ->
-    case ensure_cached(StoreId) of
-        {ok, Len, Generation} ->
-            fetch_page(StoreId, Offset, BatchSize, Len, Generation, RetriesLeft - 1);
-        {error, _} = Error ->
-            Error
-    end.
-
-%% @doc Idempotently create the read-all-global cache table.
-%%
-%% Exported (not just called lazily from `ensure_cached/1') so the
-%% top-level supervisor's own init callback can call this itself,
-%% making the SUPERVISOR
-%% the table's owner instead of whichever transient gateway worker
-%% happens to call `read_all_global/3' first.
-%%
-%% That mattered: a `public' ETS table is owned by whoever calls
-%% `ets:new/2', and the table dies with its owner regardless of how
-%% many other processes still reference it by name. A table created
-%% lazily by a short-lived worker vanishes the instant that worker
-%% exits for ANY reason -- including a routine one-off supervised
-%% restart unrelated to this table -- and the next caller's
-%% `ets:lookup/2' in `cached_or_rebuilt/2' then crashes with
-%% `{badarg, "the table identifier does not refer to an existing ETS
-%% table"}'. Reproduced on every boot in practice: gateway workers
-%% restart routinely during a store's own startup churn, and whichever
-%% one happened to win the race to create this table took it down
-%% with it moments later.
-%%
-%% Racing calls to THIS function are still safe on their own terms
-%% (`ets:new/2' raises `badarg' on a name collision, meaning another
-%% process already won -- nothing to do) -- the fix is giving the
-%% table a caller that is never itself the process racing to use it
-%% moments later.
--spec ensure_cache_table() -> ok.
-ensure_cache_table() ->
-    case ets:whereis(?READ_ALL_GLOBAL_CACHE) of
-        undefined -> create_cache_table();
-        _Tid -> ok
-    end.
-
-create_cache_table() ->
-    try
-        ets:new(?READ_ALL_GLOBAL_CACHE,
-                [named_table, public, set, {read_concurrency, true}]),
-        ok
-    catch
-        error:badarg -> ok
     end.
 
 %% @private Leaf condition matching any version/seq node that carries
@@ -1547,6 +1341,15 @@ try_append(StoreId, StreamId, CurrentVersion, CounterExisted, ExpectedVersion,
             backoff_before_retry(?APPEND_ATTEMPTS - Attempts + 1),
             do_append(StoreId, StreamId, ExpectedVersion, Events, Attempts - 1,
                       consistent, CurrentVersion);
+        {error, {global_seq_head_moved, _}} when Attempts > 1 ->
+            %% Another append took the seqs this batch's head was built for
+            %% (only on a store with integrity: the head is prepared outside
+            %% the transaction and cannot be computed inside it). Nothing
+            %% about this stream moved, so the retry carries no version
+            %% hint - it just re-prepares the head and tries again.
+            backoff_before_retry(?APPEND_ATTEMPTS - Attempts + 1),
+            do_append(StoreId, StreamId, ExpectedVersion, Events, Attempts - 1,
+                      consistent, undefined);
         Other ->
             Other
     end.
@@ -1869,14 +1672,27 @@ write_batch(StreamId, StoreId, Writes, IndexEntries, FinalVersion,
             CurrentVersion, CounterExisted, ExpectedVersion) ->
     CounterPath = reckon_db_stream_path:version_counter_path(StreamId),
     PredecessorPath = predecessor_path(StreamId, CurrentVersion),
+    %% Everything the transaction cannot compute is computed here, for the
+    %% same reason the event MACs are: horus will not extract a crypto call
+    %% into a transaction fun. The store's sequence head is the other one.
+    Prepared = reckon_db_global_seq:prepare(StoreId, Writes),
     Fun = fun() ->
-                  write_batch_tx(Writes, IndexEntries, CounterPath,
+                  write_batch_tx(StoreId, Writes, IndexEntries, CounterPath,
                                  PredecessorPath, FinalVersion, CurrentVersion,
-                                 CounterExisted, ExpectedVersion)
+                                 CounterExisted, ExpectedVersion, Prepared)
           end,
     %% There is no bare `ok' clause: khepri:transaction/2 answers {ok, _} or
     %% {error, _}, and the dead clause that matched `ok' was what made
     %% dialyzer call the match impossible.
+    case Prepared of
+        {error, Reason} ->
+            {error, Reason};
+        _ ->
+            run_write_batch(StoreId, Fun)
+    end.
+
+%% @private
+run_write_batch(StoreId, Fun) ->
     case khepri:transaction(StoreId, Fun) of
         {ok, ok}            -> ok;
         %% Khepri 0.17.x catch-all wraps process_command errors as {ok, Err}
@@ -1886,8 +1702,9 @@ write_batch(StreamId, StoreId, Writes, IndexEntries, FinalVersion,
     end.
 
 %% @private The body of the write-batch transaction.
-write_batch_tx(Writes, IndexEntries, CounterPath, PredecessorPath, FinalVersion,
-               CurrentVersion, CounterExisted, ExpectedVersion) ->
+write_batch_tx(StoreId, Writes, IndexEntries, CounterPath, PredecessorPath,
+               FinalVersion, CurrentVersion, CounterExisted, ExpectedVersion,
+               Prepared) ->
     ok = append_guard(CounterPath, PredecessorPath, CurrentVersion,
                       CounterExisted, hd(Writes), ExpectedVersion),
     lists:foreach(fun put_tx_entry/1, Writes),
@@ -1901,7 +1718,7 @@ write_batch_tx(Writes, IndexEntries, CounterPath, PredecessorPath, FinalVersion,
     %% BEFORE the event count is bumped: a store with no events yet is
     %% allowed to start numbering at 0, and the count is how it knows it
     %% is empty.
-    _ = reckon_db_global_seq:assign_in_tx(Writes),
+    _ = reckon_db_global_seq:assign_in_tx(StoreId, Writes, Prepared),
     bump_global_event_count(length(Writes)),
     ok.
 

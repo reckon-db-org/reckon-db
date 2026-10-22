@@ -136,7 +136,7 @@ Use cases:
     <<"order_projection">>,
     #{
         pool_size => 4,              %% Emitter pool size for parallelism
-        start_from => 0,             %% Start position (0 = beginning)
+        start_from => 0,             %% Start seq (0 = beginning)
         subscriber => self()         %% Direct subscriber PID
     }
 ).
@@ -144,8 +144,40 @@ Use cases:
 
 Options:
 - `pool_size`: Number of emitter workers for parallel delivery (default: 1)
-- `start_from`: Starting event position for catch-up (default: 0)
+- `start_from`: Starting seq for catch-up (default: 0)
 - `subscriber`: PID to receive events directly
+
+### The global position a consumer checkpoints on
+
+Every event a subscription delivers — catch-up or live — carries its place in
+the store's ordinary-stream log in its metadata:
+
+```erlang
+#{global_position => 42}
+```
+
+The number is assigned inside the append transaction from one counter per
+store (`reckon_db_global_seq`). It names one event for the life of the store:
+a scavenge deletes events and renumbers nothing, so a checkpoint saved before
+one still names the same event after it, and a restart resumes where the
+consumer left off rather than at whatever now sits at that count.
+
+`start_from` is the same number, and it is INCLUSIVE: a consumer that has
+processed `global_position` N resumes at `N + 1`, which is the value to pass
+back as `start_from`. Passing N again re-delivers that one event rather than
+skipping the next, which is the safe direction (delivery is at-least-once).
+
+Two things a consumer should know:
+
+- A seq whose event was scavenged is skipped, not counted, so a page can
+  jump: that is the log saying "those are gone", not a lost delivery.
+- DCB events are numbered by DCB's own counter and are not in this log; a
+  DCB consumer pages `reckon_db_dcb:read_log/3` from a DCB seq instead.
+
+A store written before the sequence existed is numbered once at start, in the
+order the old reader produced, so an existing checkpoint keeps its meaning. A
+store that had already scavenged cannot be reconstructed: the affected
+projections need one rebuild each (see the Scavenging guide).
 
 ## Receiving Events
 

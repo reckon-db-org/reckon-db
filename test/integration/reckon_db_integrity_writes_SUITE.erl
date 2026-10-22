@@ -221,30 +221,42 @@ watermark_is_recorded_on_first_append(Config) ->
 %% Two stores with different keys, same event payload, produce
 %% different MACs. Validates that the loaded key is actually used
 %% rather than a hard-coded constant.
+%%
+%% Two stores rather than one store whose key is swapped: a store's
+%% sequence head is MAC'd under the key it was written with, so replacing
+%% the key on a live store is key rotation, which this release does not
+%% support (and which already invalidates every event MAC). A store whose
+%% head does not verify refuses to extend its log - that is the check, not
+%% a way around it.
 different_keys_produce_different_macs(Config) ->
     StoreId = proplists:get_value(store_id, Config),
-
-    Key1 = crypto:strong_rand_bytes(32),
-    Key2 = crypto:strong_rand_bytes(32),
-
-    StreamId = reckon_db_test_helpers:sid(<<"stream-mac-vs">>),
-    EventPayload = #{event_type => <<"e">>, data => #{value => 42}},
-
-    %% Append with Key1
-    load_key_directly(StoreId, Key1),
-    {ok, 0} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, [EventPayload]),
-    {ok, [#event{mac = {v2, _, Mac1}}]} =
-        reckon_db_streams:read(StoreId, StreamId, 0, 10, forward),
-
-    %% Reload with Key2 and append to a different stream so we can compare.
-    Stream2 = reckon_db_test_helpers:sid(<<"stream-mac-vs-2">>),
-    load_key_directly(StoreId, Key2),
-    {ok, 0} = reckon_db_streams:append(StoreId, Stream2, ?NO_STREAM, [EventPayload]),
-    {ok, [#event{mac = {v2, _, Mac2}}]} =
-        reckon_db_streams:read(StoreId, Stream2, 0, 10, forward),
-
+    Payload = #{event_type => <<"e">>, data => #{value => 42}},
+    Mac1 = append_and_read_mac(StoreId, crypto:strong_rand_bytes(32), Payload),
+    Mac2 = append_and_read_mac(other_store(Config), crypto:strong_rand_bytes(32),
+                               Payload),
     ?assertNotEqual(Mac1, Mac2),
     ok.
+
+%% @private A second store, so one test can hold two keys.
+other_store(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    DataDir = proplists:get_value(data_dir, Config) ++ "_other",
+    os:cmd("rm -rf " ++ DataDir),
+    ok = filelib:ensure_dir(filename:join(DataDir, "dummy")),
+    Other = list_to_atom(atom_to_list(StoreId) ++ "_other"),
+    {ok, _} = khepri:start(DataDir, Other),
+    ok = khepri:put(Other, [streams], #{}),
+    ok = khepri:put(Other, [metadata], #{}),
+    Other.
+
+%% @private
+append_and_read_mac(StoreId, Key, Payload) ->
+    ok = load_key_directly(StoreId, Key),
+    StreamId = reckon_db_test_helpers:sid(<<"stream-mac-vs">>),
+    {ok, 0} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, [Payload]),
+    {ok, [#event{mac = {v2, _, Mac}}]} =
+        reckon_db_streams:read(StoreId, StreamId, 0, 10, forward),
+    Mac.
 
 %%====================================================================
 %% Helpers
@@ -298,6 +310,9 @@ setup_integrity_store(Config) ->
 load_key_directly(StoreId, Key) when is_binary(Key), byte_size(Key) =:= 32 ->
     persistent_term:put({reckon_db, integrity_key, StoreId}, Key),
     persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
+    %% What a store's own start does when it finds integrity enabled on a
+    %% store that already holds seqs: seal the sequence head over them.
+    ok = reckon_db_global_seq:ensure_head(StoreId),
     ok.
 
 walk_chain_and_verify([], _PrevTip, _Ctx) ->
