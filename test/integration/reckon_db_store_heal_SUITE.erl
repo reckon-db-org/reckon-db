@@ -18,14 +18,16 @@
 -export([suite/0, all/0, init_per_suite/1, end_per_suite/1,
          init_per_testcase/2, end_per_testcase/2]).
 -export([ensure_started_is_noop_when_up/1,
-         ensure_started_heals_torn_down_store/1]).
+         ensure_started_heals_torn_down_store/1,
+         a_dead_life_anchor_is_restarted/1]).
 
 suite() ->
     [{timetrap, {minutes, 2}}].
 
 all() ->
     [ensure_started_is_noop_when_up,
-     ensure_started_heals_torn_down_store].
+     ensure_started_heals_torn_down_store,
+     a_dead_life_anchor_is_restarted].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(crypto),
@@ -101,6 +103,37 @@ ensure_started_heals_torn_down_store(Config) ->
     %% And it is a working store again — a Khepri read round-trips.
     ?assertMatch({ok, N} when is_integer(N),
                  reckon_db_streams:global_event_count(StoreId)).
+
+%% Jupiter J21-5 / Terra T21-3. The store traps exits and ignored the anchor's,
+%% so a crash in the anchor - a badmatch in the writer is enough - left every
+%% integrity-enabled read refusing `life_anchor_unavailable` until the whole
+%% store restarted, with nothing raised. The anchor is restarted, and the crash
+%% is loud.
+a_dead_life_anchor_is_restarted(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    Name = list_to_atom("reckon_db_life_anchor_" ++ atom_to_list(StoreId)),
+    ?assertTimeout(fun() -> is_pid(erlang:whereis(Name)) end),
+    Before = erlang:whereis(Name),
+
+    Self = self(),
+    Ref = make_ref(),
+    Handler = fun(Event, _Measurements, _Meta, _) -> Self ! {crashed, Ref, Event} end,
+    ok = telemetry:attach(Ref, [reckon, db, life_anchor, crashed], Handler, ok),
+
+    exit(Before, kill),
+
+    %% The kill is asynchronous: wait for the registered name to be a NEW
+    %% process, which is the restart itself.
+    ?assertTimeout(fun() -> is_pid(erlang:whereis(Name)) andalso
+                             erlang:whereis(Name) =/= Before end),
+    ?assertEqual(ok, reckon_db_life_anchor:check(StoreId, <<"any">>, 0,
+                                                 undefined)),
+    receive {crashed, Ref, Event} ->
+            ?assertEqual([reckon, db, life_anchor, crashed], Event)
+    after 5000 ->
+            ct:fail("the anchor crash raised no telemetry")
+    end,
+    ok = telemetry:detach(Ref).
 
 assert_timeout(_Fun, 0) -> ct:fail("condition not met within timeout");
 assert_timeout(Fun, N) ->

@@ -24,12 +24,22 @@
 -record(state, {
     store_id :: atom(),
     config :: store_config(),
-    started_at :: integer()
+    started_at :: integer(),
+    anchor :: pid() | undefined,
+    anchor_restarts = [] :: [integer()]
 }).
 
 %% Upper bound for the synchronous ensure_khepri_started/1 call — must
 %% exceed the internal khepri:start + await_store_ready work.
 -define(ENSURE_STARTED_TIMEOUT, 30000).
+
+%% The anchor is restarted after a crash, reloading from its log. More than
+%% this many in the window and the store stops trying: the anchor refuses every
+%% integrity read while it is down (fail-closed), so a restart loop would be an
+%% outage that never ends. Five in a minute covers a genuine crash; a writer
+%% that crashes on every load is a fault an operator has to see.
+-define(ANCHOR_RESTART_LIMIT, 5).
+-define(ANCHOR_RESTART_WINDOW_MS, 60000).
 
 %%====================================================================
 %% API
@@ -141,7 +151,7 @@ post_key_load(ok, StoreId, Mode, DataDir, Config, StartTime) ->
     %% A store whose anchor did not start refuses every integrity-enabled read
     %% (that is the fail-closed rule), so a failure here is an outage and is
     %% logged as one rather than swallowed.
-    _ = start_life_anchor(StoreId, DataDir),
+    Anchor = start_life_anchor(StoreId, DataDir),
     %% Seal the watermarks an earlier version wrote as bare integers, once
     %% per store and before anything is served. Downtime that waits for an
     %% operator to run a command by hand is not an acceptable shape for a
@@ -150,7 +160,7 @@ post_key_load(ok, StoreId, Mode, DataDir, Config, StartTime) ->
     %% fails the start: a store that cannot be migrated stays fail-closed on
     %% the affected streams and retries on its next boot.
     _ = reckon_db_chain_watermark:migrate(StoreId, #{data_dir => DataDir}),
-    do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime);
+    do_post_khepri_init(Anchor, StoreId, Mode, DataDir, Config, StartTime);
 post_key_load({error, KeyReason} = KeyError, StoreId, _Mode, _DataDir, _Config, _StartTime) ->
     logger:error("Failed to load integrity key for store ~p: ~p", [StoreId, KeyReason]),
     {stop, KeyError}.
@@ -162,10 +172,11 @@ post_key_load({error, KeyReason} = KeyError, StoreId, _Mode, _DataDir, _Config, 
 %% the reads that need one - every integrity-enabled read - and serves nothing
 %% tampered. What is NOT acceptable is silence, so a failure is logged and a
 %% telemetry event is raised.
+-spec start_life_anchor(atom(), file:filename_all()) -> pid() | undefined.
 start_life_anchor(StoreId, DataDir) ->
     case reckon_db_life_anchor:start_link(StoreId, DataDir) of
-        {ok, _Pid} ->
-            ok;
+        {ok, Pid} ->
+            Pid;
         {error, Reason} ->
             logger:error("life anchor for store ~p did not start: ~p. Every "
                          "integrity-enabled read of this store refuses with "
@@ -173,11 +184,11 @@ start_life_anchor(StoreId, DataDir) ->
                          [StoreId, Reason]),
             telemetry:execute([reckon, db, life_anchor, start_failed],
                               #{reason => Reason}, #{store_id => StoreId}),
-            {error, Reason}
+            undefined
     end.
 
 %% @private
-do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime) ->
+do_post_khepri_init(Anchor, StoreId, Mode, DataDir, Config, StartTime) ->
     telemetry:execute(
         ?STORE_STARTED,
         #{system_time => StartTime},
@@ -192,7 +203,8 @@ do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime) ->
     State = #state{
         store_id = StoreId,
         config = Config,
-        started_at = StartTime
+        started_at = StartTime,
+        anchor = Anchor
     },
     {ok, State}.
 
@@ -213,9 +225,53 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-%% @private
+%% @private The anchor died. It is restarted, because it reloads from its own
+%% log and every integrity-enabled read refuses while it is down: a security
+%% check that turns a crash in a log writer into a permanent outage is not
+%% acceptable (Jupiter J21-5, Terra T21-3). Restarts are bounded - a writer
+%% that crashes on every load must not become a loop nobody can see - and the
+%% bound, like the crash itself, is loud.
+handle_info({'EXIT', Pid, Reason}, #state{anchor = Pid} = State) ->
+    {noreply, on_anchor_exit(State#state{anchor = undefined}, Reason)};
 handle_info(_Info, State) ->
     {noreply, State}.
+
+%% @private
+on_anchor_exit(#state{store_id = StoreId, anchor_restarts = Previous} = State,
+               Reason) ->
+    Now = erlang:system_time(millisecond),
+    Window = [Now | [T || T <- Previous, Now - T < ?ANCHOR_RESTART_WINDOW_MS]],
+    logger:error("life anchor for store ~p went down: ~p. Every "
+                 "integrity-enabled read refuses with life_anchor_unavailable "
+                 "until it is running again.", [StoreId, Reason]),
+    telemetry:execute([reckon, db, life_anchor, crashed], #{reason => Reason},
+                      #{store_id => StoreId, restarts => length(Window)}),
+    State1 = State#state{anchor_restarts = Window},
+    case length(Window) > ?ANCHOR_RESTART_LIMIT of
+        true -> give_up_on_anchor(State1);
+        false -> State1#state{anchor = restart_anchor(State1)}
+    end.
+
+%% @private
+give_up_on_anchor(#state{store_id = StoreId, anchor_restarts = Window} =
+                      State) ->
+    logger:error("life anchor for store ~p has been restarted ~p times in "
+                 "~p ms and is left down. Every integrity-enabled read of this "
+                 "store refuses until the store is restarted; the log is at "
+                 "~ts.", [StoreId, length(Window), ?ANCHOR_RESTART_WINDOW_MS,
+                          anchor_path(State)]),
+    telemetry:execute([reckon, db, life_anchor, restart_given_up], #{},
+                      #{store_id => StoreId}),
+    State.
+
+%% @private
+restart_anchor(#state{store_id = StoreId,
+                      config = #store_config{data_dir = DataDir}}) ->
+    start_life_anchor(StoreId, DataDir).
+
+%% @private
+anchor_path(#state{config = #store_config{data_dir = DataDir}}) ->
+    reckon_db_life_anchor:log_path(DataDir).
 
 %% @private
 terminate(Reason, #state{store_id = StoreId, started_at = StartedAt}) ->
