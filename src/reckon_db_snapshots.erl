@@ -263,6 +263,12 @@ mac_context(StoreId, StreamId) ->
 %% store AND the snapshot itself carries integrity fields. Returns
 %% {ok, Snapshot} unchanged in all other cases (the snapshot is
 %% treated as legacy data).
+%%
+%% The node-local life anchor answers FIRST. A snapshot MAC binds the life the
+%% stream carries, so restoring an older life's seal, life token, events AND its
+%% snapshot together gives a set that verifies against itself - the snapshot
+%% load path was a targeted read that skipped the anchor (Terra T21-2). The
+%% anchor is what can still tell that life from the one this node recorded.
 maybe_verify_snapshot_on_load(StoreId, StreamId,
                               #snapshot{version = Version} = Snapshot) ->
     verify_if_needed(should_verify_snapshot(StoreId, Snapshot),
@@ -271,8 +277,32 @@ maybe_verify_snapshot_on_load(StoreId, StreamId,
 verify_if_needed(false, _StoreId, _StreamId, _Version, Snapshot) ->
     {ok, Snapshot};
 verify_if_needed(true, StoreId, StreamId, Version, Snapshot) ->
-    verify_against_anchor(compute_event_chain_hash(StoreId, StreamId, Version),
-                          StoreId, StreamId, Version, Snapshot).
+    case life_anchor_verdict(StoreId, StreamId) of
+        ok ->
+            verify_against_anchor(compute_event_chain_hash(StoreId, StreamId,
+                                                           Version),
+                                  StoreId, StreamId, Version, Snapshot);
+        {error, Violation} ->
+            emit_load_violation_telemetry(StoreId, StreamId, Version,
+                                          {integrity_violation, Violation}),
+            {error, {integrity_violation, Violation}}
+    end.
+
+%% @private The same rule the stream read applies: the generation this node
+%% recorded, against the one the seal carries now.
+life_anchor_verdict(StoreId, StreamId) ->
+    {Gen, Life} = seal_generation(StoreId, StreamId),
+    case reckon_db_life_anchor:check(StoreId, StreamId, Gen, Life) of
+        ok -> ok;
+        {refuse, Violation} -> {error, Violation}
+    end.
+
+%% @private
+seal_generation(StoreId, StreamId) ->
+    case reckon_db_chain_watermark:binding(StoreId, StreamId) of
+        {ok, #{life := Life, gen := Gen}} -> {Gen, Life};
+        {ok, undefined} -> {0, undefined}
+    end.
 
 verify_against_anchor({ok, ActualAnchor}, StoreId, StreamId, Version, Snapshot) ->
     Key = reckon_db_integrity_key:get(StoreId),

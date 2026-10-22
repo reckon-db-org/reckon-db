@@ -45,6 +45,7 @@
     tampered_snapshot_anchor_is_caught/1,
     tampered_snapshot_mac_is_caught/1,
     tampered_stream_event_breaks_snapshot/1,
+    a_restored_old_life_cannot_be_read_through_its_snapshot/1,
     legacy_snapshot_passes_through_on_load/1,
     integrity_disabled_store_skips_load_verification/1
 ]).
@@ -76,6 +77,7 @@ groups() ->
             tampered_snapshot_anchor_is_caught,
             tampered_snapshot_mac_is_caught,
             tampered_stream_event_breaks_snapshot,
+            a_restored_old_life_cannot_be_read_through_its_snapshot,
             legacy_snapshot_passes_through_on_load,
             integrity_disabled_store_skips_load_verification
         ]}
@@ -280,6 +282,48 @@ tampered_stream_event_breaks_snapshot(Config) ->
     Result = reckon_db_snapshots:load(StoreId, StreamId),
     ?assertMatch({error, {integrity_violation,
                           #{kind := snapshot_anchor_mismatch}}}, Result),
+    ok.
+
+%% Terra T21-2. The snapshot load path was a targeted read that skipped the
+%% node-local anchor. A snapshot's MAC binds the life its stream carries, so an
+%% attacker who restores an older life's seal, life token and events AND the
+%% snapshot taken under it holds a set that verifies against itself: the stream
+%% read refused, and `load' served the old life's state.
+a_restored_old_life_cannot_be_read_through_its_snapshot(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"snap-old-life">>),
+    write_n_events(StoreId, StreamId, 5),
+    ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{state => old}),
+    {ok, OldSnapshot} = reckon_db_snapshots:load(StoreId, StreamId),
+    {ok, OldLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
+    {ok, OldSeal} = khepri:get(StoreId,
+                               reckon_db_chain_watermark:path(StreamId)),
+    {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 100, forward),
+    OldEvents = [{E#event.version, E} || E <- Events],
+
+    %% Delete, then re-create: the stream now carries generation 2.
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    write_n_events(StoreId, StreamId, 2),
+
+    %% Every part of the older life goes back: seal, life token, events, and
+    %% the snapshot that was taken under it.
+    ok = khepri:put(StoreId, reckon_db_chain_watermark:path(StreamId), OldSeal),
+    ok = khepri:put(StoreId, reckon_db_chain_watermark:life_path(StreamId),
+                    OldLife),
+    ok = khepri:put(StoreId, reckon_db_stream_path:life_gen_path(StreamId), 1),
+    [ok = khepri:put(StoreId,
+                     reckon_db_stream_path:event_path(StreamId,
+                                                      pad_version_for_event(V)),
+                     E) || {V, E} <- OldEvents],
+    ok = put_snapshot_directly(StoreId, StreamId, 4, OldSnapshot),
+
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)),
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := life_gen_rolled_back}}}},
+                 reckon_db_snapshots:load(StoreId, StreamId)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_snapshots:load_at(StoreId, StreamId, 4)),
     ok.
 
 %% A legacy snapshot (no integrity fields) on an integrity-enabled
