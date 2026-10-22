@@ -51,7 +51,6 @@
     path/1,
     life_path/1,
     set_if_absent/3,
-    delete/2,
     migrate/1,
     migrate/2
 ]).
@@ -275,13 +274,6 @@ migrate_at_start(StoreId, Opts) ->
         false -> {ok, 0};
         true -> migrate_store(StoreId, anchor_path(Opts))
     end.
-
-%% @doc Delete a stream's integrity metadata (watermark and life token).
--spec delete(StoreId :: atom(), StreamId :: binary()) -> ok.
-delete(StoreId, StreamId) ->
-    _ = khepri:delete(StoreId, path(StreamId)),
-    _ = khepri:delete(StoreId, life_path(StreamId)),
-    ok.
 
 %%====================================================================
 %% The migration

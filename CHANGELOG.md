@@ -774,6 +774,23 @@ Jupiter and Terra, on `a329134..d30a867`. No API changes.
   current life, because a boundary, a seal and the life token of an older life
   verify as a set once all three are put back - what cannot be restored is the
   new-life event underneath them (Jupiter r17 JR6b).
+
+  Three review rounds produced three costumes of one mistake, so the rule is
+  stated once: **an anchor is believed only where the MAC'd event at its
+  version agrees with it.** The event is what a tree writer cannot re-write,
+  because its MAC needs the key. The seal and the scavenge boundary both
+  vouch for data and are held to the rule; the migration marker and the
+  node-local anchor only decide whether the migration runs, and replaying
+  either leaves streams unsealed, which reads as refused - they fail closed
+  and have no event to agree with. An attacker who rolls back the records
+  *and* strips or deletes every newer event is R-2, R-4 and R-6, named
+  unchanged: where no surviving MAC'd event contradicts the old record,
+  nothing in the tree can tell old from new.
+- **`reckon_db_chain_watermark:delete/2` is gone.** It had no callers and
+  deleted the watermark and the life token but not the scavenge boundary, so
+  anything reaching for it later would have left a boundary behind for a
+  stream that no longer exists. `reckon_db_streams`' own delete is the one
+  path that removes all three, in one transaction.
 - **A scavenge boundary was not bound to its store or its life.** The MAC
   covered the stream, the version and the hash, so a boundary saved from an
   earlier life of the same stream - delete the stream, re-create it, paste the
