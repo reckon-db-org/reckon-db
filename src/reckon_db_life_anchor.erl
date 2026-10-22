@@ -1,0 +1,522 @@
+%% @doc The node-local record of every stream's life generation.
+%%
+%% A MAC keyed inside the store cannot tell a whole-life rollback from the
+%% real thing: an older life's seal, life token and events all verify against
+%% each other once restored together. What a tree writer cannot reach is a
+%% record kept OUTSIDE the tree, beside the store's data directory, naming the
+%% life each stream carries now. That is this module, and it is what a targeted
+%% read consults in O(1) instead of walking version nodes.
+%%
+%% The record is a GENERATION, not the life token alone. Lives are random, so
+%% a token cannot be ordered: a node that has never seen a life could not tell
+%% a legitimate re-create from a rollback. The generation is a per-stream
+%% monotonic counter allocated inside the mint transaction and bound into the
+%% seal's MAC, so the ordering is the store's own claim, not this file's.
+%%
+%% The file is append-only: one length-framed, MAC'd record per write, each
+%% record's MAC covering the one before it. A break localises to the TAIL, so a
+%% damaged or tampered log loses the records after the break and keeps the rest.
+%%
+%% Residual, named in #18: with the file lost, a stream this node has never
+%% recorded is adopted on first sight; a stream deleted on ANOTHER node is not
+%% tombstoned here; and a rollback WITHIN one life is truncation, which no
+%% generation can see.
+-module(reckon_db_life_anchor).
+
+-behaviour(gen_server).
+
+-include("reckon_db.hrl").
+
+-export([start_link/2,
+         highest_gen/2,
+         entry/2,
+         check/4,
+         record_mint/4,
+         record_delete_intent/3,
+         record_deleted/3,
+         rebuild/1,
+         stop/1]).
+
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-define(TABLE_PREFIX, "reckon_db_life_anchor_").
+-define(LOG_FILE, "reckon_db_lives.log").
+-define(LOG_VERSION, 1).
+-define(COMPACT_FACTOR, 2).
+-define(FSYNC_INTERVAL_MS, 5).
+
+-record(state, {
+    store_id :: atom(),
+    path :: file:filename_all(),
+    fd :: file:io_device() | undefined,
+    entries = 0 :: non_neg_integer(),
+    records = 0 :: non_neg_integer(),
+    last_mac = <<>> :: binary(),
+    timer :: reference() | undefined
+}).
+
+%%====================================================================
+%% API
+%%====================================================================
+
+-spec start_link(atom(), file:filename_all()) -> {ok, pid()} | {error, term()}.
+start_link(StoreId, DataDir) ->
+    gen_server:start_link({local, name(StoreId)}, ?MODULE, {StoreId, DataDir}, []).
+
+-spec stop(atom()) -> ok.
+stop(StoreId) ->
+    case whereis(name(StoreId)) of
+        undefined -> ok;
+        Pid -> gen_server:stop(Pid)
+    end.
+
+%% @doc The highest generation this node has recorded for a stream, 0 when it
+%% has none. Answers 0 when the anchor is not running, so a mint falls back to
+%% the tree's counter alone - the named residual.
+-spec highest_gen(atom(), binary()) -> non_neg_integer().
+highest_gen(StoreId, StreamId) ->
+    case lookup(StoreId, StreamId) of
+        {Gen, _Value} -> Gen;
+        undefined -> 0
+    end.
+
+%% @doc The recorded entry: `{Gen, Life}' or `{Gen, deleted}'.
+-spec entry(atom(), binary()) ->
+        {non_neg_integer(), binary() | deleted} | undefined.
+entry(StoreId, StreamId) ->
+    lookup(StoreId, StreamId).
+
+%% @doc The read-side rule, one ETS lookup.
+%%
+%% `TreeGen' and `TreeLife' are what the store's own seal says the stream
+%% carries now; `undefined' means the tree has no life at all - no seal, or a
+%% stream stripped to chain-less.
+-spec check(atom(), binary(), non_neg_integer(), binary() | undefined) ->
+        ok | {refuse, map()}.
+check(StoreId, StreamId, TreeGen, TreeLife) ->
+    case lookup(StoreId, StreamId) of
+        undefined ->
+            adopt(StoreId, StreamId, TreeGen, TreeLife);
+        {Gen, deleted} when TreeLife =:= undefined, TreeGen =< Gen ->
+            ok;
+        {Gen, deleted} when TreeGen > Gen ->
+            adopt(StoreId, StreamId, TreeGen, TreeLife);
+        {Gen, deleted} ->
+            {refuse, refusal(StreamId, TreeGen, life_gen_deleted, Gen)};
+        {_Gen, _Recorded} when TreeLife =:= undefined ->
+            {refuse, refusal(StreamId, TreeGen, life_absent_in_tree, TreeGen)};
+        {Gen, _Recorded} when TreeGen > Gen ->
+            adopt(StoreId, StreamId, TreeGen, TreeLife);
+        {Gen, Recorded} when TreeGen =:= Gen, Recorded =:= TreeLife ->
+            ok;
+        {Gen, _Recorded} when TreeGen =:= Gen ->
+            {refuse, refusal(StreamId, TreeGen, life_gen_mismatch, Gen)};
+        {Gen, _Recorded} ->
+            {refuse, refusal(StreamId, TreeGen, life_gen_rolled_back, Gen)}
+    end.
+
+%% @doc Record a life this node has just committed, read back from the tree
+%% after the transaction - never the caller's own candidate.
+-spec record_mint(atom(), binary(), non_neg_integer(), binary()) -> ok.
+record_mint(StoreId, StreamId, Gen, Life) ->
+    write(StoreId, StreamId, Gen, Life).
+
+%% @doc The tombstone INTENT, fsynced BEFORE the delete commits, so a crash
+%% between the two is resolvable at the next start against the tree.
+%%
+%% Named and not covered: a delete that commits before the intent reached the
+%% disk, and an intent resolved after a tree writer restored the life - both
+%% drop the intent and leave the stream readable.
+-spec record_delete_intent(atom(), binary(), non_neg_integer()) -> ok.
+record_delete_intent(StoreId, StreamId, Gen) ->
+    sync_write(StoreId, StreamId, Gen, deleted).
+
+%% @doc The tombstone, written AFTER the delete commits.
+-spec record_deleted(atom(), binary(), non_neg_integer()) -> ok.
+record_deleted(StoreId, StreamId, Gen) ->
+    write(StoreId, StreamId, Gen, deleted).
+
+%% @doc The operator act: discard what this node recorded and take the tree's
+%% word for every stream (trust on first use, named).
+%%
+%% This is the recovery for an honest restore from backup - every seal's
+%% generation is older than what this node recorded - and for a log whose chain
+%% broke. The old log is kept aside, never deleted. It must be run on EVERY
+%% member: one rebuilt node leaves the others holding higher entries that
+%% refuse honest streams.
+-spec rebuild(atom()) -> {ok, non_neg_integer()}.
+rebuild(StoreId) ->
+    gen_server:call(name(StoreId), rebuild, 120000).
+
+%%====================================================================
+%% gen_server
+%%====================================================================
+
+init({StoreId, DataDir}) ->
+    Path = filename:join(DataDir, ?LOG_FILE),
+    _ = ets:new(table(StoreId), [named_table, public, set,
+                                 {read_concurrency, true}]),
+    State0 = #state{store_id = StoreId, path = Path},
+    State1 = load(State0),
+    State2 = resolve_intents(State1),
+    {ok, maybe_compact(State2)}.
+
+handle_call({append_sync, StreamId, Gen, Value}, _From, State) ->
+    case insert(State#state.store_id, StreamId, Gen, Value) of
+        true -> {reply, ok, append(State, StreamId, Gen, Value)};
+        false -> {reply, ok, State}
+    end;
+handle_call(rebuild, _From, State) ->
+    {Count, State1} = do_rebuild(State),
+    {reply, {ok, Count}, State1};
+handle_call(_Request, _From, State) ->
+    {reply, {error, unknown_call}, State}.
+
+handle_cast({adopt, StreamId, Gen, Value}, State) ->
+    case insert(State#state.store_id, StreamId, Gen, Value) of
+        true -> {noreply, schedule_flush(append(State, StreamId, Gen, Value))};
+        false -> {noreply, State}
+    end;
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_info(flush, State) ->
+    {noreply, flush(State#state{timer = undefined})};
+handle_info(_Info, State) ->
+    {noreply, State}.
+
+terminate(_Reason, #state{fd = undefined}) ->
+    ok;
+terminate(_Reason, #state{fd = Fd}) ->
+    _ = file:sync(Fd),
+    _ = file:close(Fd),
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%====================================================================
+%% The read rule
+%%====================================================================
+
+%% @private A generation above everything this node has seen: a life minted
+%% after this node last looked, here or on another member. The read does not
+%% wait for the fsync; the record is queued.
+adopt(StoreId, StreamId, TreeGen, TreeLife) ->
+    case {TreeLife, whereis(name(StoreId))} of
+        {undefined, _} ->
+            ok;
+        {_, undefined} ->
+            _ = insert(StoreId, StreamId, TreeGen, TreeLife),
+            ok;
+        {_, _Pid} ->
+            gen_server:cast(name(StoreId),
+                            {adopt, StreamId, TreeGen, TreeLife}),
+            ok
+    end.
+
+%% @private
+refusal(StreamId, TreeGen, Detail, RecordedGen) ->
+    #{layer => storage,
+      stream_id => StreamId,
+      version => TreeGen,
+      kind => missing_integrity,
+      context => #{detail => Detail, recorded_gen => RecordedGen}}.
+
+%%====================================================================
+%% Writes
+%%====================================================================
+
+%% @private Coalesced: the table carries the answer for the next read at once,
+%% the record is made durable by the writer within one fsync window.
+write(StoreId, StreamId, Gen, Value) ->
+    case whereis(name(StoreId)) of
+        undefined ->
+            _ = insert(StoreId, StreamId, Gen, Value),
+            ok;
+        _Pid ->
+            case lookup(StoreId, StreamId) of
+                {Existing, _} when Gen =< Existing -> ok;
+                _ -> gen_server:cast(name(StoreId),
+                                     {adopt, StreamId, Gen, Value})
+            end
+    end.
+
+%% @private The delete intent: durable BEFORE it answers.
+sync_write(StoreId, StreamId, Gen, Value) ->
+    case whereis(name(StoreId)) of
+        undefined -> _ = insert(StoreId, StreamId, Gen, Value), ok;
+        _Pid -> gen_server:call(name(StoreId), {append_sync, StreamId, Gen, Value},
+                                30000)
+    end.
+
+%% @private The table only ever moves up.
+insert(StoreId, StreamId, Gen, Value) ->
+    Tab = table(StoreId),
+    case ets:info(Tab, size) of
+        undefined ->
+            false;
+        _ ->
+            case ets:lookup(Tab, StreamId) of
+                [{_, Existing, _}] when Existing >= Gen ->
+                    false;
+                _ ->
+                    ets:insert(Tab, {StreamId, Gen, Value}),
+                    true
+            end
+    end.
+
+%% @private
+lookup(StoreId, StreamId) ->
+    Tab = table(StoreId),
+    case ets:info(Tab, size) of
+        undefined -> undefined;
+        _ ->
+            case ets:lookup(Tab, StreamId) of
+                [{_, Gen, Value}] -> {Gen, Value};
+                [] -> undefined
+            end
+    end.
+
+%%====================================================================
+%% The log
+%%====================================================================
+
+%% @private Replay into ETS, then open the file for appending at its end. A
+%% record that does not parse or does not verify ends the replay: what is
+%% before it is kept, what is after it is dropped.
+load(#state{store_id = StoreId, path = Path} = State) ->
+    {Entries, Records, LastMac, Good} =
+        case file:read_file(Path) of
+            {error, enoent} -> {0, 0, <<>>, 0};
+            {ok, Bin} -> replay(StoreId, Bin, 0, 0, <<>>, 0, byte_size(Bin), Path);
+            {error, Reason} ->
+                logger:error("life anchor ~ts unreadable: ~p", [Path, Reason]),
+                {0, 0, <<>>, 0}
+        end,
+    Fd = open_at_end(Path, Good),
+    State#state{fd = Fd, entries = Entries, records = Records, last_mac = LastMac}.
+
+%% @private
+replay(_StoreId, <<>>, Entries, Records, LastMac, Good, _Size, _Path) ->
+    {Entries, Records, LastMac, Good};
+replay(StoreId, <<Size:32, Rest/binary>>, Entries, Records, LastMac, Good,
+       Total, Path) when byte_size(Rest) >= Size ->
+    <<Bin:Size/binary, Tail/binary>> = Rest,
+    case decode(StoreId, Bin, LastMac) of
+        {ok, #{stream := StreamId, gen := Gen, value := Value, mac := Mac}} ->
+            ok = put_entry(StoreId, StreamId, Gen, Value),
+            replay(StoreId, Tail, Entries + delta(Value), Records + 1, Mac,
+                   Good + 32 + Size, Total, Path);
+        error ->
+            dropped(Path, Total - Good),
+            {Entries, Records, LastMac, Good}
+    end;
+replay(_StoreId, _Torn, Entries, Records, LastMac, Good, Total, Path) ->
+    dropped(Path, Total - Good),
+    {Entries, Records, LastMac, Good}.
+
+%% @private
+put_entry(StoreId, StreamId, Gen, Value) ->
+    _ = insert(StoreId, StreamId, Gen, Value),
+    ok.
+
+%% @private
+delta(Life) when is_binary(Life) -> 1;
+delta(deleted) -> 0.
+
+%% @private
+dropped(_Path, 0) ->
+    ok;
+dropped(Path, Bytes) ->
+    logger:warning("life anchor ~ts: ~p unverifiable bytes dropped from the "
+                   "tail; if a stream then refuses with life_absent_in_tree, "
+                   "run reckon_db_life_anchor:rebuild/1", [Path, Bytes]),
+    telemetry:execute([reckon, db, life_anchor, tail_dropped], #{bytes => Bytes},
+                      #{path => Path}).
+
+%% @private
+decode(StoreId, Bin, PrevMac) ->
+    case safe_term(Bin) of
+        #{version := ?LOG_VERSION, stream := StreamId, gen := Gen,
+          value := Value, prev_mac := PrevMac, mac := Mac}
+                when is_binary(StreamId), is_integer(Gen), is_binary(Mac) ->
+            case mac_matches(Mac, record_mac(StoreId, StreamId, Gen, Value,
+                                             PrevMac)) of
+                true -> {ok, #{stream => StreamId, gen => Gen, value => Value,
+                               mac => Mac}};
+                false -> error
+            end;
+        _ ->
+            error
+    end.
+
+%% @private
+safe_term(Bin) ->
+    try binary_to_term(Bin, [safe]) of
+        Term -> Term
+    catch
+        _:_ -> undefined
+    end.
+
+%% @private One length-framed record.
+append(#state{store_id = StoreId, fd = Fd, last_mac = PrevMac} = State,
+       StreamId, Gen, Value) ->
+    Mac = record_mac(StoreId, StreamId, Gen, Value, PrevMac),
+    Bin = term_to_binary(#{version => ?LOG_VERSION, stream => StreamId,
+                           gen => Gen, value => Value, prev_mac => PrevMac,
+                           mac => Mac}, [deterministic]),
+    case write_framed(Fd, Bin) of
+        ok ->
+            State#state{last_mac = Mac, records = State#state.records + 1,
+                        entries = State#state.entries + delta(Value)};
+        {error, Reason} ->
+            %% A log that cannot be written is loud, never silent: the store
+            %% keeps serving, and the operator has to know that adoptions and
+            %% tombstones are not reaching the disk.
+            logger:error("life anchor ~ts: append failed: ~p",
+                         [State#state.path, Reason]),
+            telemetry:execute([reckon, db, life_anchor, append_failed],
+                              #{reason => Reason}, #{path => State#state.path}),
+            State
+    end.
+
+%% @private
+write_framed(undefined, _Bin) ->
+    {error, no_file};
+write_framed(Fd, Bin) ->
+    file:write(Fd, <<(byte_size(Bin)):32, Bin/binary>>).
+
+%% @private
+schedule_flush(#state{timer = undefined} = State) ->
+    State#state{timer = erlang:send_after(?FSYNC_INTERVAL_MS, self(), flush)};
+schedule_flush(State) ->
+    State.
+
+%% @private
+flush(#state{fd = undefined} = State) ->
+    State;
+flush(#state{fd = Fd} = State) ->
+    _ = file:sync(Fd),
+    State.
+
+%% @private
+open_at_end(Path, Good) ->
+    ok = filelib:ensure_dir(Path),
+    case file:open(Path, [read, write, raw, binary]) of
+        {ok, Fd} ->
+            {ok, _} = file:position(Fd, Good),
+            {ok, _} = file:truncate(Fd),
+            Fd;
+        {error, _} ->
+            undefined
+    end.
+
+%% @private
+record_mac(StoreId, StreamId, Gen, Value, PrevMac) ->
+    case reckon_db_integrity_key:get(StoreId) of
+        Key when is_binary(Key) ->
+            crypto:mac(hmac, sha256, Key,
+                       term_to_binary({?MODULE, record, StoreId, StreamId, Gen,
+                                       Value, PrevMac}, [deterministic]));
+        _ ->
+            <<>>
+    end.
+
+%% @private
+mac_matches(Mac, Expected) ->
+    byte_size(Mac) =:= byte_size(Expected) andalso
+        crypto:hash_equals(Mac, Expected).
+
+%%====================================================================
+%% Start-time passes
+%%====================================================================
+
+%% @private A tombstone intent whose life is still in the tree is a delete that
+%% never committed - or a delete whose life a tree writer put back. Both drop
+%% the intent; the second is named in #18 beside the delete crash window.
+resolve_intents(#state{store_id = StoreId} = State) ->
+    Tab = table(StoreId),
+    _ = ets:foldl(
+          fun({StreamId, Gen, deleted}, Acc) ->
+                  case reckon_db_chain_watermark:life(StoreId, StreamId) of
+                      {ok, undefined} -> Acc;
+                      {ok, _Life} ->
+                          _ = insert(StoreId, StreamId, Gen, <<>>),
+                          Acc
+                  end;
+             ({_StreamId, _Gen, _Life}, Acc) ->
+                  Acc
+          end, ok, Tab),
+    State.
+
+%% @private Compaction: more than twice as many records as lives means the log
+%% carries history nobody will read again. The writer writes a fresh log
+%% (a snapshot record per stream), fsyncs, and renames over the old one.
+maybe_compact(#state{records = Records, entries = Entries} = State)
+        when Entries > 0, Records > ?COMPACT_FACTOR * Entries ->
+    compact(State);
+maybe_compact(State) ->
+    State.
+
+%% @private
+compact(#state{store_id = StoreId, path = Path, fd = OldFd} = State) ->
+    Temp = Path ++ ".new",
+    case file:open(Temp, [write, raw, binary]) of
+        {ok, Fd} ->
+            State1 = lists:foldl(
+                       fun({StreamId, Gen, Value}, Acc) ->
+                               append(Acc, StreamId, Gen, Value)
+                       end, State#state{fd = Fd, entries = 0, records = 0,
+                                        last_mac = <<>>},
+                       ets:tab2list(table(StoreId))),
+            _ = file:sync(Fd),
+            _ = file:close(Fd),
+            _ = file:close(OldFd),
+            ok = file:rename(Temp, Path),
+            State1#state{path = Path, fd = open_at_end(Path, file_size(Path))};
+        {error, Reason} ->
+            logger:warning("life anchor compaction failed: ~p", [Reason]),
+            State
+    end.
+
+%% @private
+do_rebuild(#state{store_id = StoreId, path = Path} = State) ->
+    Aside = Path ++ ".discarded." ++ integer_to_list(erlang:system_time(second)),
+    _ = file:rename(Path, Aside),
+    ets:delete_all_objects(table(StoreId)),
+    logger:warning("life anchor rebuilt: old log kept at ~ts; taking the tree's "
+                   "word for every stream (trust on first use)", [Aside]),
+    telemetry:execute([reckon, db, life_anchor, rebuilt], #{},
+                      #{path => Path, aside => Aside}),
+    Streams = reckon_db_streams:list_streams(StoreId),
+    Count = lists:foldl(fun(StreamId, Acc) -> rebuild_stream(StoreId, StreamId, Acc) end,
+                        0, Streams),
+    {Count, State#state{entries = Count, records = Count, last_mac = <<>>}}.
+
+%% @private
+rebuild_stream(StoreId, StreamId, Acc) ->
+    case reckon_db_chain_watermark:binding(StoreId, StreamId) of
+        {ok, #{life := Life, gen := Gen}} when is_binary(Life) ->
+            _ = insert(StoreId, StreamId, Gen, Life),
+            Acc + 1;
+        _ ->
+            Acc
+    end.
+
+%% @private
+file_size(Path) ->
+    filelib:file_size(Path).
+
+%%====================================================================
+%% Names
+%%====================================================================
+
+-spec name(atom()) -> atom().
+name(StoreId) ->
+    list_to_atom(?MODULE_STRING ++ "_" ++ atom_to_list(StoreId)).
+
+-spec table(atom()) -> atom().
+table(StoreId) ->
+    list_to_atom(?TABLE_PREFIX ++ atom_to_list(StoreId)).

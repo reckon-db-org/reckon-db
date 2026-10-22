@@ -43,6 +43,7 @@
     event_path/2,
     stream_path/1,
     version_counter_path/1,
+    life_gen_path/1,
     versions_pattern/1,
     type_streams_pattern/1,
     all_events_pattern/0,
@@ -116,6 +117,17 @@ versions_pattern(StreamId) ->
 version_counter_path(StreamId) ->
     {Type, Id} = id_nodes(StreamId),
     ?STREAM_VERSION_COUNTERS_PATH ++ [Type, Id].
+
+%% @doc Khepri path of a stream's life generation:
+%% `[metadata, integrity, life_gen, Type, Id]' -> integer.
+%%
+%% A sibling of the version counter, and deliberately NOT removed by a stream
+%% delete: a re-created stream must mint a generation above the one it had, so
+%% a node holding the deleted life's entry refuses a restore of it.
+-spec life_gen_path(binary()) -> khepri_path:native_path().
+life_gen_path(StreamId) ->
+    {Type, Id} = id_nodes(StreamId),
+    ?STREAM_LIFE_GENS_PATH ++ [Type, Id].
 
 %% @doc Pattern matching every aggregate-id node of one type:
 %% `[streams, Type, *]'. Used by links to navigate a type subtree

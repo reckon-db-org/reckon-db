@@ -129,6 +129,13 @@
 %% MAC. It is what makes a sealed watermark from an earlier life of the same
 %% stream id stop verifying after the stream is deleted and re-created.
 -define(INTEGRITY_STREAM_LIFE_PATH, [metadata, integrity, stream_life]).
+%% The generation of a stream's CURRENT (or last) life: bumped once per mint
+%% inside the mint transaction, and NOT removed by a stream delete, so a
+%% re-create is always the deleted life's generation + 1.
+-define(STREAM_LIFE_GENS_PATH, [metadata, integrity, life_gen]).
+%% How many times a mint re-reads the per-stream life generation and retries
+%% its compare-and-set before the append is refused by name.
+-define(MINT_ATTEMPTS, 5).
 -define(INTEGRITY_MIGRATION_VERSION, 1).
 
 %%====================================================================

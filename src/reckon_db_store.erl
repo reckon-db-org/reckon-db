@@ -135,6 +135,10 @@ post_key_load(ok, StoreId, Mode, DataDir, Config, StartTime) ->
     %% Install the store's declared secondary indexes so the append path
     %% can read them. Always succeeds (a [] list just means no indexes).
     ok = reckon_db_index_config:load(Config),
+    %% The node-local life anchor, up before anything is read or migrated: the
+    %% upgrade's life pass records every existing stream in it, and every read
+    %% asks it whether the life the tree carries is the one this node recorded.
+    _ = reckon_db_life_anchor:start_link(StoreId, DataDir),
     %% Seal the watermarks an earlier version wrote as bare integers, once
     %% per store and before anything is served. Downtime that waits for an
     %% operator to run a command by hand is not an acceptable shape for a

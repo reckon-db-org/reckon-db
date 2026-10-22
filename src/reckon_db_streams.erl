@@ -1298,9 +1298,22 @@ delete_validated(StoreId, StreamId) ->
     IntegrityPaths = [reckon_db_chain_watermark:path(StreamId),
                       reckon_db_chain_watermark:life_path(StreamId),
                       reckon_db_scavenge_boundary:boundary_path(StreamId)],
+    %% The tombstone INTENT goes to disk BEFORE the delete commits, so a crash
+    %% between the two is resolvable at the next start (the life is still in
+    %% the tree, so the intent is dropped). A crash after the commit but before
+    %% the intent reached the disk leaves the anchor holding the deleted life,
+    %% and a restore of that stream is accepted - the mint's crash window is
+    %% the same shape and is named beside it in #18.
+    ok = reckon_db_life_anchor:record_delete_intent(
+           StoreId, StreamId,
+           reckon_db_chain_watermark:life_gen(StoreId, StreamId)),
     Fun = fun() -> delete_stream_tx([Path, CounterPath | IntegrityPaths]) end,
     case khepri:transaction(StoreId, Fun) of
-        {ok, ok} -> ok;
+        {ok, ok} ->
+            ok = reckon_db_life_anchor:record_deleted(
+                   StoreId, StreamId,
+                   reckon_db_chain_watermark:life_gen(StoreId, StreamId)),
+            ok;
         {ok, {error, E}}   -> {error, E};
         {error, _} = Error -> Error
     end.
@@ -2094,6 +2107,7 @@ setup_integrity(StoreId, StreamId, CurrentVersion) ->
 setup_integrity_enabled(StoreId, StreamId, NextVersion) ->
     case reckon_db_chain_watermark:set_if_absent(StoreId, StreamId, NextVersion) of
         {ok, ChainStart} ->
+            record_minted_life(StoreId, StreamId, NextVersion),
             enabled_ctx(StoreId, StreamId, ChainStart);
         {error, _} = Error ->
             Error
@@ -2105,6 +2119,23 @@ setup_integrity_enabled(StoreId, StreamId, NextVersion) ->
     {chain_start_missing, binary()} |
     {life_missing, binary()} |
     {integrity_enabled_without_key, atom()}.
+
+%% @private The node-local anchor's record of a stream's life, written when a
+%% NEW stream is opened (the only append that mints).
+%%
+%% The life and generation are read back from the TREE, after the mint
+%% transaction committed - never taken from the caller's own candidate, which
+%% may be the loser of a create race. Recording a loser's read is harmless:
+%% both creators read the winner's record.
+record_minted_life(_StoreId, _StreamId, NextVersion) when NextVersion =/= 0 ->
+    ok;
+record_minted_life(StoreId, StreamId, 0) ->
+    case reckon_db_chain_watermark:binding(StoreId, StreamId) of
+        {ok, #{life := Life, gen := Gen}} when is_binary(Life) ->
+            reckon_db_life_anchor:record_mint(StoreId, StreamId, Gen, Life);
+        _ ->
+            ok
+    end.
 
 %% @private The append context, or the reason this batch cannot be stamped.
 %%
@@ -2363,18 +2394,18 @@ verify_with_mac_context(StoreId, StreamId, StartVersion, Events, Mode,
         {error, Violation} ->
             {integrity_violation, Violation};
         {ok, Limit} ->
-            newest_then_region(StoreId, StreamId, StartVersion, Events, Mode,
-                               Key, Ctx, Limit)
+            life_anchor_then_region(StoreId, StreamId, StartVersion, Events,
+                                    Mode, Key, Ctx, Limit)
     end.
 
-%% @private The newest event first, then whatever the batch needs.
--spec newest_then_region(atom(), binary(), non_neg_integer(), [event()],
-                         verify_mode(), term(), term(),
-                         non_neg_integer() | undefined) ->
+%% @private The node-local life anchor first, then whatever the batch needs.
+-spec life_anchor_then_region(atom(), binary(), non_neg_integer(), [event()],
+                              verify_mode(), term(), term(),
+                              non_neg_integer() | undefined) ->
         {ok, [event()]} | {integrity_violation, map()}.
-newest_then_region(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
-                   Limit) ->
-    case newest_event_verdict(StoreId, StreamId, Events, Key, Ctx, Limit) of
+life_anchor_then_region(StoreId, StreamId, StartVersion, Events, Mode, Key,
+                        Ctx, Limit) ->
+    case life_anchor_verdict(StoreId, StreamId, Ctx) of
         ok ->
             verify_legacy_region(StoreId, StreamId, StartVersion, Events, Mode,
                                  Key, Ctx, Limit);
@@ -2382,122 +2413,37 @@ newest_then_region(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
             Violation
     end.
 
-%% @private The stream's own newest event is verified on every targeted read.
+%% @private The generation this node recorded for the stream, against the one
+%% its seal carries now.
 %%
-%% A read that carries the newest event verifies it with the batch. One that
-%% stops short does not - and the events it serves can be an OLDER life's:
-%% restore the old seal, the old life token and the old events, strip whatever
-%% stood between them and the newest event, and every event in the batch agrees
-%% with itself. What that costs the attacker is the newest event and the event
-%% under it: the check runs through the predecessor link, so a rollback needs
-%% old copies of the top TWO versions as well as the batch (Jupiter r20 J20-6,
-%% J20-7, and Terra's truncation shape - all three pinned as residual tests).
-%%
-%% The trigger is the STREAM, never a legacy event in the batch: a batch of
-%% restored old-life events is exactly as suspect when nothing in it looks
-%% legacy. The newest version comes from the version nodes and never from the
-%% counter: a counter put above a hole (delete the event at 4, set the counter
-%% to 3) hid five live events from the walk above (Terra r19 T19-1).
-%%
-%% What it does not cover is named in R-6. A version-node read is O(versions),
-%% not O(1): 130-150 ms on a 50k-event stream, 1000x the targeted read it
-%% guards, which round 21 answers with a MAC'd tip record rather than this
-%% scan.
--spec newest_event_verdict(atom(), binary(), [event()], term(), term(),
-                           non_neg_integer() | undefined) ->
+%% This is the whole rollback guard, and it is one ETS lookup: a life restored
+%% from an older copy carries an older generation, and a generation is bound
+%% into the seal's MAC, so it cannot be raised. Where the anchor knows nothing
+%% about the stream, it adopts what the tree says (trust on first use, named in
+%% #18) and the read goes on.
+-spec life_anchor_verdict(atom(), binary(), map()) ->
         ok | {integrity_violation, map()}.
-newest_event_verdict(StoreId, StreamId, Events, Key, Ctx, Limit) ->
-    case newest_live_version(StoreId, StreamId) of
-        {ok, Newest} when is_integer(Newest), Newest >= 0 ->
-            batch_below_newest(StoreId, StreamId, Newest, Events, Key, Ctx,
-                               Limit);
-        {ok, _NoStream} ->
-            %% NO_STREAM: there is no event to check, and the batch is empty
-            %% for the same reason.
-            ok;
-        {error, Reason} ->
-            %% A store that cannot say what its newest version is cannot be
-            %% asked whether this batch stops short of it. Failing closed is
-            %% the whole point of the check (Terra r20 T20-2).
-            {integrity_violation, newest_version_unreadable(StreamId, Reason)}
-    end.
-
-%% @private
-batch_below_newest(StoreId, StreamId, Newest, Events, Key, Ctx, Limit) ->
-    case reaches_newest(Events, Newest) of
-        true -> ok;
-        false -> newest_beyond_batch(StoreId, StreamId, Newest, Key, Ctx, Limit)
-    end.
-
-%% @private The batch is in forward order on this path (a backward read is
-%% re-ordered before it gets here), so its LAST event is its highest version.
--spec reaches_newest([event()], non_neg_integer()) -> boolean().
-reaches_newest([], _Newest) ->
-    false;
-reaches_newest(Events, Newest) ->
-    #event{version = Version} = lists:last(Events),
-    Version >= Newest.
-
-%% @private
-newest_beyond_batch(StoreId, StreamId, Newest, Key, Ctx, Limit) ->
-    case predecessor_event(StoreId, StreamId, Newest) of
-        {ok, #event{prev_event_hash = undefined}} ->
-            chainless_newest(StreamId, Newest, Limit);
-        {ok, #event{} = NewestEvent} ->
-            newest_event_mac(StoreId, StreamId, Newest, NewestEvent, Key, Ctx,
-                             Limit);
-        missing ->
-            {integrity_violation, newest_event_missing(StreamId, Newest)}
-    end.
-
-%% @private A chain-less event at or above the seal is an order no writer
-%% produces. Below it the whole stream predates integrity, so there is no MAC
-%% to check and the legacy rules decide what may be served.
-chainless_newest(StreamId, Newest, Limit) when is_integer(Limit),
-                                               Newest >= Limit ->
-    {integrity_violation, chain_break(StreamId, Newest)};
-chainless_newest(_StreamId, _Newest, _Limit) ->
-    ok.
-
-%% @private One MAC, under the context the stream carries now.
-newest_event_mac(StoreId, StreamId, Newest, NewestEvent, Key, Ctx, Limit) ->
-    case verify_from_anchor(StoreId, StreamId, Newest, [NewestEvent], strict,
-                            Key, Ctx, Limit) of
-        {ok, _Verified} -> ok;
-        {integrity_violation, _} = Violation -> Violation
+life_anchor_verdict(StoreId, StreamId, Ctx) ->
+    Gen = maps:get(gen, Ctx, 0),
+    Life = maps:get(life, Ctx, undefined),
+    case reckon_db_life_anchor:check(StoreId, StreamId, Gen, Life) of
+        ok -> ok;
+        {refuse, Violation} -> {integrity_violation, Violation}
     end.
 
 %% @private The newest version the TREE holds, never the counter.
 %%
-%% `local' read options, the same options the batch is read with. These are
-%% separate queries and they are not one atomic view: a write landing between
-%% them can make this answer a version the batch did not see, and that only
-%% ever makes the check run (fail closed), never skip it. What a local view
-%% cannot do is hide an event that is in the same applied state as the batch,
-%% which is the contradiction the check exists to find. A consistency fence
-%% would put a leader round trip on every read to learn something the read's
-%% own view already holds.
+%% The legacy-region walk below still needs a newest bound, and it takes it
+%% from the version nodes rather than the counter: a counter put above a hole
+%% (delete the event at 4, set the counter to 3) answered a version the walk
+%% then started from, so the live events past the hole were never read. The
+%% read path no longer calls this - the anchor's O(1) generation check replaced
+%% it - but this walk is O(suffix) by construction and only runs for a
+%% legacy or migrated region.
+%% @private The newest version the TREE holds, never the counter.
 -spec newest_live_version(atom(), binary()) -> {ok, integer()} | {error, term()}.
 newest_live_version(StoreId, StreamId) ->
-    get_version_from_version_nodes(StoreId, StreamId, read_options(local)).
-
-%% @private A version-node read that fails is not "nothing to check": the
-%% check cannot run, so the read is refused rather than served unchecked.
-newest_version_unreadable(StreamId, Reason) ->
-    #{layer => storage,
-      stream_id => StreamId,
-      version => -1,
-      kind => missing_integrity,
-      context => #{detail => newest_version_unreadable, reason => Reason}}.
-
-%% @private A version node with no event under it is a tree nobody wrote on
-%% purpose. Refusing it is the only answer that is not a guess.
-newest_event_missing(StreamId, Newest) ->
-    #{layer => storage,
-      stream_id => StreamId,
-      version => Newest,
-      kind => missing_integrity,
-      context => #{detail => newest_event_missing}}.
+    get_version_from_version_nodes(StoreId, StreamId, #{}).
 
 %% @private The legacy region has to be explainable before anything in it is
 %% handed back unverified.
@@ -2730,8 +2676,8 @@ mac_context(StoreId, StreamId) ->
 mac_context_fields(StoreId, StreamId) ->
     Base = #{store_id => StoreId},
     case reckon_db_chain_watermark:binding(StoreId, StreamId) of
-        {ok, #{life := Life, v2_from := V2From}} ->
-            Base#{life => Life, v2_from => V2From};
+        {ok, #{life := Life, v2_from := V2From, gen := Gen}} ->
+            Base#{life => Life, v2_from => V2From, gen => Gen};
         {ok, undefined} ->
             Base
     end.

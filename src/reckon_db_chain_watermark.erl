@@ -50,6 +50,7 @@
     life/2,
     path/1,
     life_path/1,
+    life_gen/2,
     set_if_absent/3,
     migrate/1,
     migrate/2
@@ -136,7 +137,8 @@ binding(StoreId, StreamId) ->
                      is_binary(Life) ->
             binding_or_undefined(StoreId, StreamId,
                                  #{version => Version, v2_from => V2From,
-                                   life => Life}, Record);
+                                   life => Life, gen => gen_of(Record)},
+                                 Record);
         _ ->
             {ok, undefined}
     end.
@@ -154,6 +156,18 @@ life(StoreId, StreamId) ->
     case khepri:get(StoreId, life_path(StreamId)) of
         {ok, Life} when is_binary(Life) -> {ok, Life};
         _ -> {ok, undefined}
+    end.
+
+%% @doc A stream's current life generation, 0 when it has none.
+%%
+%% 0 is the generation of a stream the old line wrote: a scheme-2 seal carries
+%% no generation, so a store upgraded from 5.11 reads every pre-5.12 life as
+%% generation 0 without a migration writing anything.
+-spec life_gen(atom(), binary()) -> non_neg_integer().
+life_gen(StoreId, StreamId) ->
+    case khepri:get(StoreId, reckon_db_stream_path:life_gen_path(StreamId)) of
+        {ok, Gen} when is_integer(Gen), Gen >= 0 -> Gen;
+        _ -> 0
     end.
 
 %% @doc The tree path a stream's watermark lives at.
@@ -212,14 +226,46 @@ set_if_absent(StoreId, StreamId, Version)
 %% Khepri transaction (`{horus, extraction_denied, {unknown_instruction,
 %% nif_start}}'), so the record is built here and only stored inside.
 mint_watermark(StoreId, StreamId) ->
+    mint_attempt(StoreId, StreamId, ?MINT_ATTEMPTS).
+
+%% @private The mint, retried a bounded number of times.
+%%
+%% The generation is allocated by compare-and-set, not read-and-trust: it is
+%% read here (a transaction cannot run a MAC, so the seal is built outside),
+%% the seal is MAC'd with it, and the transaction writes only if the counter
+%% still holds what was read. A lost race re-reads and tries again; when the
+%% bound runs out the append is refused BY NAME, never crashed and never
+%% silently retried forever.
+mint_attempt(_StoreId, StreamId, 0) ->
+    {error, {life_gen_contended, StreamId}};
+mint_attempt(StoreId, StreamId, Attempts) ->
+    Counter = life_gen(StoreId, StreamId),
+    Gen = max(Counter, anchor_floor(StoreId, StreamId)) + 1,
     Life = new_life(),
-    Seal = sealed_record(StoreId, StreamId, Life, 0, 0),
-    Fun = fun() -> mint_tx(StreamId, Life, Seal) end,
+    Seal = sealed_record(StoreId, StreamId, Life, Gen, 0, 0),
+    %% The paths are resolved OUTSIDE the transaction: building them splits the
+    %% stream id, and a Ra transaction may not call binary:split/2 (horus
+    %% refuses it: {call_denied, {binary, split, 2}}).
+    GenPath = reckon_db_stream_path:life_gen_path(StreamId),
+    WatermarkPath = path(StreamId),
+    LifePath = life_path(StreamId),
+    Fun = fun() -> mint_tx(StreamId, Life, Gen, Seal, Counter, GenPath,
+                           WatermarkPath, LifePath) end,
     case khepri:transaction(StoreId, Fun) of
         {ok, Version} when is_integer(Version) -> {ok, Version};
+        {ok, retry} -> mint_attempt(StoreId, StreamId, Attempts - 1);
         {ok, {error, _} = Error} -> Error;
         {error, _} = Error -> Error
     end.
+
+%% @private The highest generation this node has recorded for the stream, or 0.
+%%
+%% The floor is what a tree writer who lowers [metadata, integrity, life_gen]
+%% cannot get below: a mint is always above anything this node has already
+%% seen, so lowering the counter cannot make an honest re-create land at or
+%% below an entry or tombstone the node holds.
+anchor_floor(StoreId, StreamId) ->
+    reckon_db_life_anchor:highest_gen(StoreId, StreamId).
 
 %% @private The transaction body: keep whatever is already there, mint only
 %% into an empty path. A map or a bare integer somebody else put there is a
@@ -234,12 +280,12 @@ mint_watermark(StoreId, StreamId) ->
 %% `watermark_mac_invalid`); the garbage never becomes a claim the store
 %% makes. Verifying here instead would mean reading the key and running a MAC
 %% inside the transaction, which crypto cannot do (see below).
-mint_tx(StreamId, Life, Seal) ->
-    case khepri_tx:get(path(StreamId)) of
+mint_tx(_StreamId, Life, Gen, Seal, ExpectedCounter, GenPath, WatermarkPath,
+        LifePath) ->
+    case khepri_tx:get(WatermarkPath) of
         {error, ?khepri_error(node_not_found, _)} ->
-            ok = khepri_tx:put(life_path(StreamId), Life),
-            ok = khepri_tx:put(path(StreamId), Seal),
-            0;
+            mint_into_empty(Life, Gen, Seal, ExpectedCounter, GenPath,
+                            WatermarkPath, LifePath);
         {ok, #{version := Version}} when is_integer(Version) ->
             Version;
         {ok, Version} when is_integer(Version) ->
@@ -249,6 +295,26 @@ mint_tx(StreamId, Life, Seal) ->
         {error, Reason} ->
             {error, {chain_start_unreadable, Reason}}
     end.
+
+%% @private The path is empty, so this transaction is the one that mints - if
+%% the counter it read outside the transaction is still the counter here.
+mint_into_empty(Life, Gen, Seal, ExpectedCounter, GenPath, WatermarkPath,
+                LifePath) ->
+    case khepri_tx:get(GenPath) of
+        {error, ?khepri_error(node_not_found, _)} when ExpectedCounter =:= 0 ->
+            write_mint(Life, Gen, Seal, GenPath, WatermarkPath, LifePath);
+        {ok, ExpectedCounter} ->
+            write_mint(Life, Gen, Seal, GenPath, WatermarkPath, LifePath);
+        _ ->
+            retry
+    end.
+
+%% @private
+write_mint(Life, Gen, Seal, GenPath, WatermarkPath, LifePath) ->
+    ok = khepri_tx:put(GenPath, Gen),
+    ok = khepri_tx:put(LifePath, Life),
+    ok = khepri_tx:put(WatermarkPath, Seal),
+    0.
 
 %% @doc The upgrade, run at store start.
 -spec migrate(atom()) -> ok.
@@ -380,6 +446,7 @@ commit_migration(StoreId, StreamIds, AnchorPath) ->
     case commit_plans(StoreId, Plans) of
         {ok, committed} ->
             _ = ensure_anchor(StoreId, AnchorPath),
+            record_planned_lives(StoreId, Plans),
             report_migration(StoreId, StreamIds, Plans, Evidence),
             {ok, committed_seals(Plans)};
         {ok, already_migrated} ->
@@ -388,6 +455,21 @@ commit_migration(StoreId, StreamIds, AnchorPath) ->
             migration_failed(StoreId, Reason),
             {error, Reason}
     end.
+
+%% @private The upgrade's LIFE PASS: every stream the migration sealed is
+%% recorded in this node's anchor, with the generation its seal carries.
+%%
+%% This is trust on first use AT UPGRADE, and it is the only reason a stream
+%% that existed before 5.12.0 can be protected at all: without it, every
+%% pre-upgrade stream would be unknown to the anchor and a rollback of one
+%% would be adopted as a first sight.
+record_planned_lives(StoreId, Plans) ->
+    lists:foreach(
+      fun(#{kind := seal, stream_id := StreamId, life := Life, gen := Gen}) ->
+              ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, Gen, Life);
+         (_Other) ->
+              ok
+      end, Plans).
 
 %% @private The store already carries a marker: after verifying it, this
 %% node writes its own anchor, so every node in a cluster ends up with one.
@@ -550,12 +632,29 @@ seal_at(Scan, Version) ->
     StoreId = maps:get(store_id, Scan),
     StreamId = maps:get(stream_id, Scan),
     Life = plan_life(Scan),
+    Gen = plan_gen(Scan, StoreId, StreamId),
     V2From = maps:get(newest, Scan) + 1,
-    Seal = sealed_record(StoreId, StreamId, Life, Version, V2From),
-    Writes = [{life_path(StreamId), Life} | boundary_writes(StoreId, Scan, Life)],
-    #{kind => seal, stream_id => StreamId, version => Version,
-      expected => maps:get(raw, Scan),
+    Seal = sealed_record(StoreId, StreamId, Life, Gen, Version, V2From),
+    Writes = [{life_path(StreamId), Life},
+              {reckon_db_stream_path:life_gen_path(StreamId), Gen}
+              | boundary_writes(StoreId, Scan, Life)],
+    #{kind => seal, stream_id => StreamId, version => Version, life => Life,
+      gen => Gen, expected => maps:get(raw, Scan),
       writes => Writes ++ [{path(StreamId), Seal}]}.
+
+%% @private The generation of the life this plan seals.
+%%
+%% A stream that already carries a life keeps that life's generation - a
+%% reseal is not a mint, and bumping it would make an honest stream's reads
+%% expect a generation its own seal does not carry. A stream the migration
+%% mints a life for takes the next one, above both the tree's counter and
+%% anything this node has recorded for it.
+plan_gen(#{life := Life}, StoreId, StreamId) when is_binary(Life) ->
+    max(life_gen(StoreId, StreamId),
+        reckon_db_life_anchor:highest_gen(StoreId, StreamId));
+plan_gen(_Scan, StoreId, StreamId) ->
+    max(max(life_gen(StoreId, StreamId),
+            reckon_db_life_anchor:highest_gen(StoreId, StreamId)), 0) + 1.
 
 %% @private
 plan_life(#{life := Life}) when is_binary(Life) -> Life;
@@ -1162,27 +1261,33 @@ new_life() ->
 %% integrity key - store id and stream id included, so the record does not
 %% fit another store or another life of the same stream.
 -spec sealed_record(atom(), binary(), binary(), non_neg_integer(),
-                    non_neg_integer()) ->
-        #{version := non_neg_integer(), v2_from := non_neg_integer(),
-          life := binary(), mac := binary()}.
-sealed_record(StoreId, StreamId, Life, Version, V2From) ->
+                    non_neg_integer(), non_neg_integer()) ->
+        #{scheme := 3, version := non_neg_integer(),
+          v2_from := non_neg_integer(), life := binary(),
+          gen := non_neg_integer(), mac := binary()}.
+sealed_record(StoreId, StreamId, Life, Gen, Version, V2From) ->
     Key = reckon_db_integrity_key:get(StoreId),
     true = is_binary(Key),
-    #{version => Version,
+    #{scheme => 3,
+      version => Version,
       v2_from => V2From,
       life => Life,
-      mac => seal_mac(StoreId, Key, StreamId, Life, Version, V2From)}.
+      gen => Gen,
+      mac => seal_mac(StoreId, Key, StreamId, Life, Gen, Version, V2From, 3)}.
 
 %% @private
 seal_verifies(StoreId, StreamId,
               #{version := Version, v2_from := V2From, life := Life,
-                mac := Mac})
+                mac := Mac} = Record)
         when is_integer(Version), is_integer(V2From), is_binary(Life),
              is_binary(Mac) ->
-    case reckon_db_integrity_key:get(StoreId) of
-        Key when is_binary(Key) ->
-            mac_matches(Mac,
-                        seal_mac(StoreId, Key, StreamId, Life, Version, V2From));
+    %% The scheme is named in the record, never inferred: a scheme-3 field
+    %% added to a scheme-2 record invalidates its MAC rather than being read as
+    %% the generation somebody asked for.
+    case {scheme_of(Record), reckon_db_integrity_key:get(StoreId)} of
+        {Scheme, Key} when is_binary(Key) ->
+            mac_matches(Mac, seal_mac(StoreId, Key, StreamId, Life,
+                                      gen_of(Record), Version, V2From, Scheme));
         _ ->
             false
     end;
@@ -1204,8 +1309,23 @@ mac_matches(Mac, Expected) ->
 
 %% @private
 -spec seal_mac(atom(), binary(), binary(), binary(), non_neg_integer(),
-               non_neg_integer()) -> binary().
-seal_mac(StoreId, Key, StreamId, Life, Version, V2From) ->
+               non_neg_integer(), non_neg_integer(), 2 | 3) -> binary().
+seal_mac(StoreId, Key, StreamId, Life, _Gen, Version, V2From, 2) ->
+    %% Scheme 2, the shape this line wrote before generations: no generation
+    %% in the MAC, so it reads as generation 0 wherever a generation is asked
+    %% for. Kept verbatim so every seal already in a store verifies.
     crypto:mac(hmac, sha256, Key,
                term_to_binary({?MODULE, seal, StoreId, StreamId, Life,
+                               Version, V2From}, [deterministic]));
+seal_mac(StoreId, Key, StreamId, Life, Gen, Version, V2From, 3) ->
+    crypto:mac(hmac, sha256, Key,
+               term_to_binary({?MODULE, seal, 3, StoreId, StreamId, Life, Gen,
                                Version, V2From}, [deterministic])).
+
+%% @private
+scheme_of(#{scheme := 3}) -> 3;
+scheme_of(_) -> 2.
+
+%% @private
+gen_of(#{scheme := 3, gen := Gen}) when is_integer(Gen), Gen >= 0 -> Gen;
+gen_of(_) -> 0.
