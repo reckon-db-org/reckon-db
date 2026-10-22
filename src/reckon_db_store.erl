@@ -138,7 +138,10 @@ post_key_load(ok, StoreId, Mode, DataDir, Config, StartTime) ->
     %% The node-local life anchor, up before anything is read or migrated: the
     %% upgrade's life pass records every existing stream in it, and every read
     %% asks it whether the life the tree carries is the one this node recorded.
-    _ = reckon_db_life_anchor:start_link(StoreId, DataDir),
+    %% A store whose anchor did not start refuses every integrity-enabled read
+    %% (that is the fail-closed rule), so a failure here is an outage and is
+    %% logged as one rather than swallowed.
+    _ = start_life_anchor(StoreId, DataDir),
     %% Seal the watermarks an earlier version wrote as bare integers, once
     %% per store and before anything is served. Downtime that waits for an
     %% operator to run a command by hand is not an acceptable shape for a
@@ -151,6 +154,27 @@ post_key_load(ok, StoreId, Mode, DataDir, Config, StartTime) ->
 post_key_load({error, KeyReason} = KeyError, StoreId, _Mode, _DataDir, _Config, _StartTime) ->
     logger:error("Failed to load integrity key for store ~p: ~p", [StoreId, KeyReason]),
     {stop, KeyError}.
+
+%% @private The anchor's start, and what an operator sees when it fails.
+%%
+%% It is not fatal here on purpose: a store that fails to start takes every
+%% stream down with it, while one that starts without an anchor refuses exactly
+%% the reads that need one - every integrity-enabled read - and serves nothing
+%% tampered. What is NOT acceptable is silence, so a failure is logged and a
+%% telemetry event is raised.
+start_life_anchor(StoreId, DataDir) ->
+    case reckon_db_life_anchor:start_link(StoreId, DataDir) of
+        {ok, _Pid} ->
+            ok;
+        {error, Reason} ->
+            logger:error("life anchor for store ~p did not start: ~p. Every "
+                         "integrity-enabled read of this store refuses with "
+                         "life_anchor_unavailable until it does.",
+                         [StoreId, Reason]),
+            telemetry:execute([reckon, db, life_anchor, start_failed],
+                              #{reason => Reason}, #{store_id => StoreId}),
+            {error, Reason}
+    end.
 
 %% @private
 do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime) ->

@@ -879,7 +879,11 @@ What else that buys, and what it costs:
 - **A deleted stream cannot be resurrected.** The delete's intent is fsynced
   before the delete commits and its tombstone is written after it, and the
   generation counter survives the delete, so a re-create rises above the
-  deleted life instead of landing on it.
+  deleted life instead of landing on it. The tombstone is recorded at
+  `max(the tree's counter, this node's floor)`, not at the counter alone:
+  lowering the counter to 0 first and then deleting would otherwise leave a
+  tombstone at a generation the log refuses to write, so nothing would be
+  recorded and the deleted life could be put back.
 - **A lowered counter cannot push an honest re-create down.** The generation
   is `max(the stream's counter, this node's floor) + 1`, and the mint is a
   compare-and-set against the counter it read outside the transaction. A lost
