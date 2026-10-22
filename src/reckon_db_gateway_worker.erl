@@ -219,7 +219,7 @@ stream_append_op({dcb_all_event_types, _StoreId}, _From,
     {reply, Result, State};
 
 %% DCB conditional-append (reckon-gater 2.3.0+, reckon-db 3.1.0+).
-%% TagFilter is `reckon_gater_types:tag_filter()`; SeqCutoff is `integer()`
+%% TagFilter is `tag_filter()`; SeqCutoff is `integer()`
 %% (-1 means "saw nothing"). See plans/PLAN_DCB_IMPLEMENTATION.md.
 stream_append_op({append_if_no_tag_matches, _StoreId, TagFilter, SeqCutoff, Events},
             _From,

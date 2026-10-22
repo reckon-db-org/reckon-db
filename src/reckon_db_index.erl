@@ -121,7 +121,7 @@ order_key(#event{epoch_us = EpochUs, stream_id = StreamId, version = Version}) -
 %% stream_id, then version, the order `order_key/1' encodes.
 %%
 %% epoch_us alone is not an order. One append stamps a single epoch_us on
-%% every event it writes (`reckon_db_streams:append_events_to_stream/4'),
+%% every event it writes (`reckon_db_streams:append/5'),
 %% so comparing epoch_us leaves a batch in whatever order the input list
 %% had, and callers build that list from Khepri maps, whose iteration order
 %% Erlang leaves undefined. A catch-up replay then applied one command's

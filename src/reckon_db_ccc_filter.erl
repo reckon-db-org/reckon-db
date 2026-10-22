@@ -46,6 +46,25 @@
 %% tag_filter() and seq_cutoff() are CANONICAL in reckon_gater_types.hrl
 %% (reckon-gater 3.5.0+). Use them via the include; do NOT redefine here.
 
+%% A filter as it reaches the matching functions below: the caller's own
+%% filter, or that filter with every composite payload match already
+%% replaced by its pre-computed hash. Two shapes, because crypto cannot run
+%% inside a Khepri transaction: `preprocess_filter/1' hashes outside it, and
+%% nothing below this line ever sees the unhashed form.
+%%
+%% It is `tag_filter()' with the one shape that must be preprocessed swapped
+%% for the one it becomes, spelled out because Erlang has no type
+%% subtraction. The drift guard is `preprocess_filter/1' itself: its own
+%% clause is `tag_filter() -> filter()', so a shape added to gater's
+%% canonical type fails there rather than quietly passing through here.
+-type filter() :: {any_of, [binary()]}
+                | {all_of, [binary()]}
+                | {event_type, binary()}
+                | {payload_match, Key :: binary(), Value :: binary()}
+                | {payload_hash_match_pre, Hash :: binary()}
+                | {and_, [filter()]}
+                | {or_,  [filter()]}.
+
 %% Fetches the seqs indexed under one lookup key. In production this hits
 %% Khepri via khepri_tx:get_many/1. In tests, supply a mock.
 %%
@@ -82,7 +101,7 @@
 %%   and_(Filters)            = intersection(match_seqs(F) | F in Filters)
 %%
 %% Empty tag/filter lists yield the empty set (no event matches "nothing").
--spec match_seqs(reckon_gater_types:tag_filter(), seqs_provider()) ->
+-spec match_seqs(filter(), seqs_provider()) ->
     sets:set(non_neg_integer()).
 match_seqs({any_of, []}, _Provider) ->
     sets:new();
@@ -137,8 +156,8 @@ match_seqs({payload_hash_match_pre, Hash}, Provider) when is_binary(Hash) ->
 %% transaction form that Ra replicates to all cluster members.
 %%
 %% Filters without payload_hash_match are returned unchanged.
--spec preprocess_filter(reckon_gater_types:tag_filter()) ->
-    reckon_gater_types:tag_filter().
+-spec preprocess_filter(tag_filter()) ->
+    filter().
 preprocess_filter({payload_hash_match, Keys, Values}) ->
     Hash = reckon_db_ccc_paths:payload_combo_hash(Keys, Values),
     {payload_hash_match_pre, Hash};
@@ -155,15 +174,15 @@ preprocess_filter(Other) ->
 %% Cutoff = -1 means "I saw nothing yet" — ANY matching event triggers a
 %% conflict. Cutoff = N (>= 0) means "I saw events through seq N" —
 %% only seqs > N trigger a conflict.
--spec match_any_above_cutoff(reckon_gater_types:tag_filter(),
-                             reckon_gater_types:seq_cutoff()) ->
+-spec match_any_above_cutoff(filter(),
+                             seq_cutoff()) ->
     match_result().
 match_any_above_cutoff(Filter, Cutoff) ->
     match_any_above_cutoff(Filter, Cutoff, fun default_provider/1).
 
 %% @doc Pure-testable variant: the caller supplies the seqs provider.
--spec match_any_above_cutoff(reckon_gater_types:tag_filter(),
-                             reckon_gater_types:seq_cutoff(),
+-spec match_any_above_cutoff(filter(),
+                             seq_cutoff(),
                              seqs_provider()) -> match_result().
 match_any_above_cutoff(Filter, Cutoff, Provider)
   when is_integer(Cutoff) ->

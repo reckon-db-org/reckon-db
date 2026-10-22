@@ -163,8 +163,8 @@ cmp_count_desc({_, C1}, {_, C2}) -> C1 >= C2.
 
 -spec append_if_no_tag_matches(
     StoreId   :: atom() | binary(),
-    TagFilter :: reckon_gater_types:tag_filter(),
-    SeqCutoff :: reckon_gater_types:seq_cutoff(),
+    TagFilter :: tag_filter(),
+    SeqCutoff :: seq_cutoff(),
     Events    :: [map()]
 ) ->
       {ok, LastSeq :: non_neg_integer()}

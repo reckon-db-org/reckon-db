@@ -713,6 +713,30 @@ macula, macula-station, barrel (four apps) and, worth doing first,
 `mcl-om/priv/templates/mcl_service/rebar.config`, which is what a new service
 is scaffolded from.
 
+### Fixed: the ex_doc warning list is empty, and the specs name the types that exist
+
+`rebar3 ex_doc` reported 25 warnings in three classes, and a release here is
+not published with a warning in it. Each is fixed at its source rather than
+muted. No behaviour changes.
+
+- Twelve `-spec`s named `reckon_gater_types:` — a module that does not
+  exist. Those types are canonical in reckon-gater's **header**
+  (`include/reckon_gater_types.hrl`, already pulled in by `reckon_db.hrl`),
+  so the prefix is dropped. Dialyzer can now check those specs against the
+  code, and found one real looseness: `reckon_db_ccc_filter`'s
+  `match_any_above_cutoff/2,3` take a filter whose composite payload match
+  has already been hashed by `preprocess_filter/1` (crypto cannot run inside
+  a Khepri transaction). They are typed with that shape now, and
+  `preprocess_filter/1`'s own `tag_filter() -> filter()` clause is what
+  fails if gater's canonical type grows a shape this module has not been
+  taught.
+- Eleven "Unknown type" findings are struck from `.dialyzer_baseline`: the
+  ratchet is 170 findings, down from 181, with none added.
+- `reckon_db_index`'s doc named `append_events_to_stream/4`; the batch writer
+  is `/6`, and the entry point it documents is `append/5`.
+- One changelog line quoted EDoc's own error message inside backticks, which
+  markdown read as an unclosed inline code span.
+
 ## [5.11.13] - 2026-10-21
 
 ### Fixed: two concurrent appends to one stream silently lost events
@@ -2199,8 +2223,8 @@ updates.
 ### Fixed — EDoc-incompatible backticks across DCB modules
 
 DCB module + function `@doc` blocks used markdown-style backticks for
-inline code references, which EDoc's parser rejected with
-`` `-quote ended unexpectedly ``. Replaced with plain text;
+inline code references, which EDoc's parser rejected with an "unclosed
+quote" error. Replaced with plain text;
 `rebar3 ex_doc` now builds clean. Affects `reckon_db_dcb`,
 `reckon_db_dcb_paths`, `reckon_db_dcb_filter`, `reckon_db_streams`.
 

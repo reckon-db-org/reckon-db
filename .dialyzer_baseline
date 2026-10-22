@@ -16,13 +16,6 @@ src/reckon_db_capability_verifier.erl	912ea1e89641	Type specification reckon_db_
 src/reckon_db_capability_verifier.erl	d1564eaec17b	Type specification reckon_db_capability_verifier:verify_signature(capability()) -> 'ok' | {'error',capability_
 src/reckon_db_capability_verifier.erl	e3f7b691c856	The specification for reckon_db_capability_verifier:is_revoked/1 states that the function might also return 't
 src/reckon_db_capability_verifier.erl	feac90696fc8	The specification for reckon_db_capability_verifier:maybe_check_revocation/2 states that the function might al
-src/reckon_db_ccc_filter.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
-src/reckon_db_ccc_filter.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
-src/reckon_db_ccc_filter.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
-src/reckon_db_ccc_filter.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
-src/reckon_db_ccc_filter.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
-src/reckon_db_ccc_filter.erl	958a0fcfb1d5	Unknown type reckon_gater_types:seq_cutoff/0
-src/reckon_db_ccc_filter.erl	958a0fcfb1d5	Unknown type reckon_gater_types:seq_cutoff/0
 src/reckon_db_ccc_paths.erl	3b85565165d9	Type specification reckon_db_ccc_paths:by_payload_path(binary(),binary(),non_neg_integer()) -> [term()] is a s
 src/reckon_db_ccc_paths.erl	5cd509e09481	Type specification reckon_db_ccc_paths:by_payload_pattern(binary(),binary()) -> [term()] is a supertype of the
 src/reckon_db_ccc_paths.erl	62ceb3fc577b	Type specification reckon_db_ccc_paths:by_payload_hash_path(binary(),non_neg_integer()) -> [term()] is a super
@@ -42,9 +35,7 @@ src/reckon_db_consistency_checker.erl	ca5f260dfd03	Type specification reckon_db_
 src/reckon_db_consistency_checker.erl	e57618365e7d	Type specification reckon_db_consistency_checker:analyze_raft_consistency(#{node()=>term()},term()) -> {'ok',m
 src/reckon_db_consistency_checker.erl	e8d43229ff73	Type specification reckon_db_consistency_checker:verify_raft_consistency(atom()) -> {'ok',map()} | {'error',te
 src/reckon_db_consistency_checker.erl	ed05e30e08ba	Type specification reckon_db_consistency_checker:verify_leader_consensus(atom()) -> {'ok',map()} | {'error',te
-src/reckon_db_dcb.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
 src/reckon_db_dcb.erl	44b19cbc9210	The variable _ can never match since previous clauses completely covered the type binary() | map()
-src/reckon_db_dcb.erl	958a0fcfb1d5	Unknown type reckon_gater_types:seq_cutoff/0
 src/reckon_db_dcb_paths.erl	49b6f2e0d5f8	Type specification reckon_db_dcb_paths:by_tag_path(binary(),non_neg_integer()) -> [term()] is a supertype of t
 src/reckon_db_dcb_paths.erl	6fb40c9e6976	Type specification reckon_db_dcb_paths:by_event_type_pattern(binary()) -> [term()] is a supertype of the succe
 src/reckon_db_dcb_paths.erl	a4a4999321a8	Type specification reckon_db_dcb_paths:by_event_type_path(binary(),non_neg_integer()) -> [term()] is a superty
@@ -155,12 +146,10 @@ src/reckon_db_store_inspector.erl	948736894b3f	Type specification reckon_db_stor
 src/reckon_db_streams.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
 src/reckon_db_streams.erl	03744c8f323c	The pattern {'ok', _} can never match the type {'error',_}
 src/reckon_db_streams.erl	0d2296c883b7	The variable _ can never match since previous clauses completely covered the type []
-src/reckon_db_streams.erl	16537ceff7b3	Unknown type reckon_gater_types:tag_filter/0
 src/reckon_db_streams.erl	28d0a137f178	Expression produces a value of type atom() | ets:tid(), but this value is unmatched
 src/reckon_db_streams.erl	36abc62b53d9	Record construction #event{event_id::'_',stream_id::'_',version::'_',data::'_',metadata::'_',tags::'_',timesta
 src/reckon_db_streams.erl	7bfe9b04e074	Unknown type khepri:condition/0
 src/reckon_db_streams.erl	7bfe9b04e074	Unknown type khepri:condition/0
-src/reckon_db_streams.erl	958a0fcfb1d5	Unknown type reckon_gater_types:seq_cutoff/0
 src/reckon_db_streams.erl	b1d3dacbe5bd	Type specification reckon_db_streams:warn_unindexed(atom(),index_decl()) -> 'ok' is a supertype of the success
 src/reckon_db_streams.erl	b52d9de6c8fb	The pattern [SingleCondition] can never match the type []
 src/reckon_db_streams.erl	db3918da04e2	The pattern Error = {'error', _} can never match the type {'ok',non_neg_integer()}
