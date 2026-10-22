@@ -709,13 +709,23 @@ a_junk_marker_does_not_count_as_migrated(Config) ->
     ?assertNot(filelib:is_regular(anchor_file(DataDir))).
 
 %% @doc GIVEN a stream whose prefix was removed by a scavenge the store
-%%           recorded a snapshot for, so the genesis event is gone
+%%           recorded a snapshot for, so the genesis event is gone, left in
+%%           the shape the 5.11 line leaves: no watermark and no life token
 %%      WHEN the store starts
-%%      THEN the stream is sealed at the cut, not read as deletion evidence
+%%      THEN the stream is sealed at the cut, not read as deletion evidence,
+%%           and the boundary the seal mints verifies under the life the
+%%           migration writes - so the stream it just sealed still reads
 %%
 %% A snapshot whose anchor_hash is the hash the surviving event carries, at
 %% one below its version, is proof the store wrote. Without it the stream is
 %% refused (see the evidence case above).
+%%
+%% The life token is deleted on purpose (Jupiter r16 JR6): with one present
+%% the migration reuses it, and a boundary minted under either the old or the
+%% new life would verify, hiding the mistake. On a 5.11-shaped stream the plan
+%% mints a NEW life in the same transaction as the seal and the boundary, and
+%% a boundary that names the old (absent) one stops verifying the instant the
+%% seal lands - the stream refuses every read, silently.
 a_snapshot_authenticated_cut_is_sealed(Config) ->
     {StoreId, DataDir} = store(Config),
     StreamId = stream(<<"snapshot-cut">>),
@@ -723,16 +733,32 @@ a_snapshot_authenticated_cut_is_sealed(Config) ->
     ok = start_store(StoreId, DataDir, enabled),
     {ok, 9} = append_events(StoreId, StreamId, 10),
     ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{state => s}),
+    %% The survivors, the snapshot and the chain as 5.11 left them: scheme-1
+    %% MACs over the whole stream, no life token, no watermark. Rewriting the
+    %% MACs leaves the chain hashes alone, so the snapshot still anchors the
+    %% event at 5 exactly as it did before.
+    ok = chain_scheme_one(StoreId, StreamId, 0, 10),
     ok = delete_events(StoreId, StreamId, 0, 4),
+    ok = make_old_line_snapshot(StoreId, StreamId),
     ok = forget_migration(StoreId),
     ok = forget_anchor(DataDir),
     ok = delete_watermark(StoreId, StreamId),
+    ok = khepri:delete(StoreId, life_path(StreamId)),
     ok = stop_store(StoreId),
 
     ok = start_store(StoreId, DataDir, enabled),
     ?assertMatch({ok, {sealed, 5}},
                  reckon_db_chain_watermark:lookup(StoreId, StreamId)),
-    ?assertEqual(5, length(events(StoreId, StreamId))).
+    ?assertEqual(5, length(events(StoreId, StreamId))),
+    %% The boundary the migration minted beside the seal must VERIFY, or the
+    %% stream it just sealed refuses every read: the migration writes the new
+    %% life token in the same transaction, so the boundary has to name the new
+    %% life and not the one the stream happened to hold before (Jupiter r16
+    %% JR6 - the half that is easy to get wrong, and silent when wrong).
+    {ok, Boundary} = reckon_db_scavenge_boundary:lookup(StoreId, StreamId),
+    ?assert(reckon_db_scavenge_boundary:verify(StoreId, StreamId, Boundary)),
+    {ok, Served} = reckon_db_streams:read(StoreId, StreamId, 5, 10, forward),
+    ?assertEqual(5, length(Served)).
 
 %% @doc GIVEN a chain whose first five events were STRIPPED but still sit in
 %%           the tree, a snapshot taken at 4, and the watermark deleted
@@ -924,11 +950,22 @@ make_old_line_chain(StoreId, StreamId, N) ->
     ok = khepri:put(StoreId, watermark_path(StreamId), 0),
     ok.
 
-%% @private A stream whose events below `Start' predate integrity and whose
-%% events from `Start' carry a scheme-1 chain beginning at the genesis
-%% predecessor - the shape the 5.11 line leaves when integrity was enabled
-%% part-way through a stream's life.
-make_old_line_chain_from(StoreId, StreamId, Start, N, Watermark) ->
+%% @private Rewrite a stream's newest snapshot as the 5.11 line wrote it: a
+%% scheme-1 MAC over the snapshot and the key alone, with neither the store
+%% nor a life token bound to it. That is the shape a store holding no life
+%% token at all has, and the only one whose MAC still verifies for a stream
+%% whose life the migration is about to mint.
+make_old_line_snapshot(StoreId, StreamId) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    ?assert(is_binary(Key)),
+    Snapshot = reckon_db_snapshots_store:get_latest(StoreId, StreamId),
+    Mac = reckon_gater_integrity:compute_snapshot_mac(Snapshot, Key),
+    reckon_db_snapshots_store:put(StoreId, Snapshot#snapshot{mac = Mac}).
+
+%% @private Give versions `Start'..`N'-1 a scheme-1 chain that begins at the
+%% genesis predecessor: the chain and the MACs the 5.11 line wrote, bound to
+%% the key alone.
+chain_scheme_one(StoreId, StreamId, Start, N) ->
     Key = reckon_db_integrity_key:get(StoreId),
     ?assert(is_binary(Key)),
     _Tip = lists:foldl(
@@ -943,6 +980,14 @@ make_old_line_chain_from(StoreId, StreamId, Start, N, Watermark) ->
                      reckon_gater_integrity:compute_chain_hash(Event, PrevTip)
              end, reckon_gater_integrity:genesis_prev_hash(),
              lists:seq(Start, N - 1)),
+    ok.
+
+%% @private A stream whose events below `Start' predate integrity and whose
+%% events from `Start' carry a scheme-1 chain beginning at the genesis
+%% predecessor - the shape the 5.11 line leaves when integrity was enabled
+%% part-way through a stream's life.
+make_old_line_chain_from(StoreId, StreamId, Start, N, Watermark) ->
+    ok = chain_scheme_one(StoreId, StreamId, Start, N),
     lists:foreach(fun(V) -> ok = clear_integrity_fields(StoreId, StreamId, V) end,
                   lists:seq(0, Start - 1)),
     ok = khepri:delete(StoreId, life_path(StreamId)),
