@@ -350,16 +350,32 @@ migrate_at_start(StoreId, Opts) ->
 %%====================================================================
 
 %% @private
+-spec migrate_store(atom(), file:filename_all()) ->
+        {ok, non_neg_integer()} | {error, term()}.
 migrate_store(StoreId, AnchorPath) ->
     case migration_state(StoreId, AnchorPath) of
         migrated ->
             _ = ensure_anchor(StoreId, AnchorPath),
+            _ = life_pass_if_anchor_empty(StoreId),
             {ok, 0};
         unauthorised ->
             migration_violation(StoreId),
             {error, migration_marker_missing};
         not_migrated ->
             run_migration(StoreId, AnchorPath)
+    end.
+
+%% @private The marker is on the tree, so it reached this node whole; the
+%% anchor is per node and is not. A node that carries the marker and no anchor
+%% records - a member that has just joined, or one whose log did not survive -
+%% would otherwise treat every stream as a first sight and adopt whatever life
+%% the tree holds at the first read, including a restore that happened before
+%% anyone read it. The pass records each stream's sealed generation once, and
+%% says loudly that it did (r21 review, item 7 / design item 8).
+life_pass_if_anchor_empty(StoreId) ->
+    case reckon_db_life_anchor:has_records(StoreId) of
+        true -> ok;
+        false -> reckon_db_life_anchor:life_pass(StoreId)
     end.
 
 %% @private
@@ -481,6 +497,7 @@ cluster_loser(StoreId, AnchorPath) ->
     case read_marker(StoreId) of
         {ok, _Refused} ->
             _ = ensure_anchor(StoreId, AnchorPath),
+            _ = life_pass_if_anchor_empty(StoreId),
             {ok, 0};
         none ->
             logger:error("integrity migration on store ~p found a marker that "

@@ -45,7 +45,8 @@
     an_honest_old_line_upgrade_seals_its_legacy_streams/1,
     a_junk_watermark_is_refused_by_name/1,
     a_bare_watermark_below_a_genesis_start_is_evidence/1,
-    a_forged_prefix_below_a_sealed_cut_is_refused/1
+    a_forged_prefix_below_a_sealed_cut_is_refused/1,
+    a_lost_anchor_log_is_refilled_from_the_tree_at_start/1
 ]).
 
 -define(KEY_ENV, "RECKON_DB_MIGRATION_TEST_KEY").
@@ -75,7 +76,8 @@ all() ->
         an_honest_old_line_upgrade_seals_its_legacy_streams,
         a_junk_watermark_is_refused_by_name,
         a_bare_watermark_below_a_genesis_start_is_evidence,
-        a_forged_prefix_below_a_sealed_cut_is_refused
+        a_forged_prefix_below_a_sealed_cut_is_refused,
+        a_lost_anchor_log_is_refilled_from_the_tree_at_start
     ].
 
 suite() ->
@@ -406,6 +408,45 @@ a_deleted_watermark_is_evidence_and_refuses_chainless_streams(Config) ->
                  reckon_db_chain_watermark:lookup(StoreId, Chainless)),
     ?assertMatch({error, {integrity_violation, #{kind := missing_integrity}}},
                  read_raw(StoreId, Chainless)).
+
+%% @doc GIVEN a migrated store whose node-local anchor log is gone
+%%      WHEN it starts
+%%      THEN the life pass records every stream's sealed generation at once,
+%%           before any read could adopt whatever the tree holds
+%%
+%% The marker is on the tree and reached this node whole; the anchor is per
+%% node and did not. Without the pass, every stream would be a first sight, and
+%% an older life restored before the first read of one would be adopted (r21
+%% review, item 7 / design item 8).
+a_lost_anchor_log_is_refilled_from_the_tree_at_start(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"life-pass">>),
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, _} = append_events(StoreId, StreamId, 3),
+    {ok, Life} = reckon_db_chain_watermark:life(StoreId, StreamId),
+    ?assertEqual({1, Life}, await_entry(StoreId, StreamId)),
+
+    ok = stop_store(StoreId),
+    %% The LIVES log, not the migration's own anchor file: this is the node's
+    %% record of stream generations, and it is the one that is missing.
+    ok = file:delete(reckon_db_life_anchor:log_path(DataDir)),
+    ok = start_store(StoreId, DataDir, enabled),
+
+    %% Nobody has read the stream since the restart: the entry is the pass's.
+    ?assertEqual({1, Life}, reckon_db_life_anchor:entry(StoreId, StreamId)),
+    ok = stop_store(StoreId).
+
+%% @private The anchor writer coalesces; wait for the table to say it.
+await_entry(StoreId, StreamId) ->
+    await_entry(StoreId, StreamId, 600).
+
+await_entry(_StoreId, _StreamId, 0) ->
+    ct:fail("the anchor recorded nothing");
+await_entry(StoreId, StreamId, Attempts) ->
+    case reckon_db_life_anchor:entry(StoreId, StreamId) of
+        undefined -> timer:sleep(5), await_entry(StoreId, StreamId, Attempts - 1);
+        Entry -> Entry
+    end.
 
 %% @doc GIVEN a store where the migration refused a chain-less stream
 %%      WHEN the operator names that stream in accept_missing
