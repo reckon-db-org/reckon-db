@@ -143,6 +143,13 @@ post_key_load(ok, StoreId, Mode, DataDir, Config, StartTime) ->
     %% fails the start: a store that cannot be migrated stays fail-closed on
     %% the affected streams and retries on its next boot.
     _ = reckon_db_chain_watermark:migrate(StoreId, #{data_dir => DataDir}),
+    %% Number the events an earlier version wrote, once per store and
+    %% before anything is served: an append on a store that has not been
+    %% numbered is refused, so this is what makes the upgrade a start
+    %% rather than an operator step. A store it cannot finish stays
+    %% fail-closed (appends refused, reads refused) and retries on its
+    %% next boot.
+    _ = reckon_db_global_seq:backfill(StoreId),
     do_post_khepri_init(StoreId, Mode, DataDir, Config, StartTime);
 post_key_load({error, KeyReason} = KeyError, StoreId, _Mode, _DataDir, _Config, _StartTime) ->
     logger:error("Failed to load integrity key for store ~p: ~p", [StoreId, KeyReason]),

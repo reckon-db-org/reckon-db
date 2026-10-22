@@ -41,6 +41,7 @@
 -export([
     validate/1,
     event_path/2,
+    version_key/1,
     stream_path/1,
     version_counter_path/1,
     versions_pattern/1,
@@ -55,6 +56,15 @@
 %%====================================================================
 %% The boundary check
 %%====================================================================
+
+%% @doc The tree key a stream version is stored under.
+%%
+%% Fixed-width and zero-padded, so byte order is version order. Exporting
+%% it keeps the width in the module that owns the layout: a second copy
+%% anywhere else is a second place a version key can be built wrong.
+-spec version_key(non_neg_integer()) -> binary().
+version_key(Version) when is_integer(Version), Version >= 0 ->
+    iolist_to_binary(io_lib:format("~*..0B", [?VERSION_PADDING, Version])).
 
 %% @doc Does this stream id decompose into path segments?
 %%

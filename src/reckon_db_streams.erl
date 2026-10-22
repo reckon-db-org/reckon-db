@@ -25,6 +25,7 @@
     read_all/4,
     fold_event_batches/6,
     read_all_global/3,
+    all_events_in_global_order/1,
     read_by_event_types/3,
     read_by_tags/4,
     read_by_metadata/3,
@@ -596,6 +597,33 @@ read_all_global(StoreId, Offset, BatchSize) ->
     case ensure_cached(StoreId) of
         {ok, Len, Generation} ->
             fetch_page(StoreId, Offset, BatchSize, Len, Generation, ?PAGE_RETRY_LIMIT);
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @doc Every ordinary-stream event, in today's global order.
+%%
+%% The order the store produced before the stable sequence existed:
+%% `(epoch_us, stream_id, version)'. `reckon_db_global_seq:backfill/1'
+%% numbers survivors in exactly this order, which is what lets a
+%% pre-upgrade checkpoint keep its meaning.
+%%
+%% DCB events are deliberately absent: they keep their own counter and
+%% their own numbering, and the seq log numbers ordinary streams only.
+-spec all_events_in_global_order(atom()) -> {ok, [event()]} | {error, term()}.
+all_events_in_global_order(StoreId) ->
+    Pattern = [streams,
+               ?KHEPRI_WILDCARD_STAR,
+               ?KHEPRI_WILDCARD_STAR,
+               has_data_leaf()],
+    case khepri:get_many(StoreId, Pattern) of
+        {ok, Results} when is_map(Results) ->
+            Events = [convert_result_to_event(PathKey, Value)
+                      || {PathKey, Value} <- maps:to_list(Results)],
+            Valid = [E || E <- Events, E =/= undefined],
+            {ok, reckon_db_index:sort_in_global_order(Valid)};
+        {ok, _} ->
+            {ok, []};
         {error, _} = Error ->
             Error
     end.
@@ -1868,6 +1896,12 @@ write_batch_tx(Writes, IndexEntries, CounterPath, PredecessorPath, FinalVersion,
     %% events: a counter that could drift from the tree would reintroduce
     %% exactly the overwrite this replaces.
     ok = khepri_tx:put(CounterPath, FinalVersion),
+    %% The stable global sequence, assigned in the same Ra command: the
+    %% seq order is the commit order, and no clock decides it. Assigned
+    %% BEFORE the event count is bumped: a store with no events yet is
+    %% allowed to start numbering at 0, and the count is how it knows it
+    %% is empty.
+    _ = reckon_db_global_seq:assign_in_tx(Writes),
     bump_global_event_count(length(Writes)),
     ok.
 
