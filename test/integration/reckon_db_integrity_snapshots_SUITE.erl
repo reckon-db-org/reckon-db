@@ -49,6 +49,7 @@
     a_legacy_shaped_snapshot_on_a_sealed_stream_is_refused/1,
     a_snapshot_under_a_broken_seal_is_refused/1,
     a_snapshot_list_with_no_anchor_is_refused/1,
+    a_snapshot_load_on_an_unreadable_tree_is_refused/1,
     legacy_snapshot_passes_through_on_load/1,
     integrity_disabled_store_skips_load_verification/1
 ]).
@@ -84,6 +85,7 @@ groups() ->
             a_legacy_shaped_snapshot_on_a_sealed_stream_is_refused,
             a_snapshot_under_a_broken_seal_is_refused,
             a_snapshot_list_with_no_anchor_is_refused,
+            a_snapshot_load_on_an_unreadable_tree_is_refused,
             legacy_snapshot_passes_through_on_load,
             integrity_disabled_store_skips_load_verification
         ]}
@@ -428,6 +430,34 @@ a_snapshot_list_with_no_anchor_is_refused(Config) ->
     ?assertMatch({error, {integrity_violation,
                           #{context := #{detail := life_anchor_unavailable}}}},
                  reckon_db_snapshots:list(StoreId, StreamId)),
+    ok.
+
+%% Jupiter J23-2 / Terra T23-2, the snapshot half. A tree that will not say
+%% what the stream carries is refused, not crashed and not served as "this
+%% stream has no seal": seal_generation/2 had no clause for the {error, _} that
+%% binding/2 answers now, so this path was a case_clause crash before handoff.
+a_snapshot_load_on_an_unreadable_tree_is_refused(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"snap-unreadable">>),
+    write_n_events(StoreId, StreamId, 5),
+    ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{state => intact}),
+    SealPath = reckon_db_chain_watermark:path(StreamId),
+
+    meck:new(khepri, [passthrough, no_link]),
+    try
+        meck:expect(khepri, get,
+                    fun(_S, P) when P =:= SealPath -> {error, timeout};
+                       (S, P) -> meck:passthrough([S, P])
+                    end),
+        ?assertMatch({error, {integrity_violation,
+                              #{context := #{detail := life_unreadable}}}},
+                     reckon_db_snapshots:load(StoreId, StreamId)),
+        ?assertMatch({error, {integrity_violation,
+                              #{context := #{detail := life_unreadable}}}},
+                     reckon_db_snapshots:list(StoreId, StreamId))
+    after
+        meck:unload(khepri)
+    end,
     ok.
 
 %% A legacy snapshot (no integrity fields) on an integrity-enabled
