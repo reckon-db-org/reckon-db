@@ -56,8 +56,12 @@
     a_forced_genesis_field_does_not_excuse_a_stripped_prefix/1,
     a_replayed_boundary_does_not_anchor_a_new_life/1,
     a_restored_life_token_does_not_anchor_a_new_life/1,
+    a_verified_cut_with_events_below_it_is_refused/1,
     a_restored_event_at_the_seal_does_not_anchor_a_new_life/1,
     a_boundary_copied_from_another_store_does_not_anchor/1,
+    a_rolled_back_run_above_a_stripped_prefix_refuses_a_targeted_read/1,
+    a_restored_early_life_does_not_survive_a_read_below_the_newest_event/1,
+    a_counter_above_a_hole_does_not_hide_the_events_above_it/1,
     a_delete_takes_the_scavenge_boundary_with_it/1
 ]).
 
@@ -129,7 +133,11 @@ groups() ->
             a_forced_genesis_field_does_not_excuse_a_stripped_prefix,
             a_replayed_boundary_does_not_anchor_a_new_life,
             a_restored_life_token_does_not_anchor_a_new_life,
+            a_verified_cut_with_events_below_it_is_refused,
             a_restored_event_at_the_seal_does_not_anchor_a_new_life,
+            a_rolled_back_run_above_a_stripped_prefix_refuses_a_targeted_read,
+            a_restored_early_life_does_not_survive_a_read_below_the_newest_event,
+            a_counter_above_a_hole_does_not_hide_the_events_above_it,
             a_boundary_copied_from_another_store_does_not_anchor,
             a_delete_takes_the_scavenge_boundary_with_it
         ]},
@@ -850,6 +858,32 @@ event_path(StreamId, Version) ->
     reckon_db_stream_path:event_path(StreamId, pad_version(Version, ?VERSION_PADDING)).
 
 %% @private
+counter_path(StreamId) ->
+    reckon_db_stream_path:version_counter_path(StreamId).
+
+%% @private What an attacker saves before the stream is deleted: the sealed
+%% watermark, the life token and the events that a rollback would paste back.
+save_life_and_events(StoreId, StreamId, Versions) ->
+    {ok, Seal} = khepri:get(StoreId, watermark_path(StreamId)),
+    {ok, Life} = reckon_db_chain_watermark:life(StoreId, StreamId),
+    Events =
+        [begin
+             {ok, Event} = khepri:get(StoreId, event_path(StreamId, Version)),
+             {Version, Event}
+         end || Version <- Versions],
+    #{seal => Seal, life => Life, events => Events}.
+
+%% @private
+restore_life_and_events(StoreId, StreamId, #{seal := Seal, life := Life,
+                                             events := Events}) ->
+    ok = khepri:put(StoreId, watermark_path(StreamId), Seal),
+    ok = khepri:put(StoreId, life_path(StreamId), Life),
+    lists:foreach(fun({Version, Event}) ->
+                          ok = khepri:put(StoreId, event_path(StreamId, Version),
+                                          Event)
+                  end, Events).
+
+%% @private
 boundary_path(StreamId) ->
     reckon_db_scavenge_boundary:boundary_path(StreamId).
 
@@ -921,17 +955,30 @@ a_replayed_watermark_on_a_mid_chain_event_refuses_its_legacy_region(Config) ->
     {StoreId, Key} = setup_integrity_store(Config),
     StreamId = reckon_db_test_helpers:sid(<<"replayed-mid-chain">>),
     write_n_events(StoreId, StreamId, 7),
+    {ok, RealLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
 
+    %% The region rule on its own: a limit at the newest version, minted under
+    %% the life the stream really carries, and one stripped event below it. The
+    %% newest-event check is satisfied, so the only question left is what
+    %% explains the region below the limit - and a mid-chain event explains
+    %% nothing, whatever the seal says.
+    SameLifeRecord = sealed_watermark(Key, StoreId, StreamId, RealLife, 6),
+    ok = khepri:put(StoreId, watermark_path(StreamId), SameLifeRecord),
+    ok = clear_integrity_fields(StoreId, StreamId, 4),
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := legacy_region_unexplained}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 4, 1, forward)),
+
+    %% The r15 replay itself: the same limit under an earlier life's token,
+    %% with the run above the stripped prefix stripped too. From round 20 the
+    %% newest event, which no rollback can rewrite, is checked first.
     OldLife = crypto:strong_rand_bytes(16),
     OldRecord = sealed_watermark(Key, StoreId, StreamId, OldLife, 6),
     ok = khepri:put(StoreId, life_path(StreamId), OldLife),
     ok = khepri:put(StoreId, watermark_path(StreamId), OldRecord),
-    ok = clear_integrity_fields(StoreId, StreamId, 4),
     ok = clear_integrity_fields(StoreId, StreamId, 5),
     ok = rewrite_event(StoreId, StreamId, 4, #{tampered => 1}),
-
-    ?assertMatch({error, {integrity_violation,
-                          #{context := #{detail := legacy_region_unexplained}}}},
+    ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_streams:read(StoreId, StreamId, 4, 1, forward)).
 
 %% @doc GIVEN an earlier life's sealed record replayed ABOVE every new-life
@@ -947,17 +994,28 @@ a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region(Config) ->
     {StoreId, Key} = setup_integrity_store(Config),
     StreamId = reckon_db_test_helpers:sid(<<"replayed-past-newest">>),
     write_n_events(StoreId, StreamId, 5),
+    {ok, RealLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
 
+    %% The region rule on its own: a limit above every event, under the life
+    %% the stream really carries. No event sits at the limit, and the newest
+    %% one carries a chain, which is the same replay over a shorter life.
+    SameLifeRecord = sealed_watermark(Key, StoreId, StreamId, RealLife, 9),
+    ok = khepri:put(StoreId, watermark_path(StreamId), SameLifeRecord),
+    ok = clear_integrity_fields(StoreId, StreamId, 1),
+    ok = clear_integrity_fields(StoreId, StreamId, 2),
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := legacy_region_unexplained}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 1, 1, forward)),
+
+    %% The replay itself, under an earlier life's token: the newest event was
+    %% written under the life the stream really carries, and that MAC is the
+    %% first thing a targeted read checks from round 20.
     OldLife = crypto:strong_rand_bytes(16),
     OldRecord = sealed_watermark(Key, StoreId, StreamId, OldLife, 9),
     ok = khepri:put(StoreId, life_path(StreamId), OldLife),
     ok = khepri:put(StoreId, watermark_path(StreamId), OldRecord),
-    ok = clear_integrity_fields(StoreId, StreamId, 1),
-    ok = clear_integrity_fields(StoreId, StreamId, 2),
     ok = rewrite_event(StoreId, StreamId, 1, #{tampered => 1}),
-
-    ?assertMatch({error, {integrity_violation,
-                          #{context := #{detail := legacy_region_unexplained}}}},
+    ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_streams:read(StoreId, StreamId, 1, 1, forward)).
 
 %% @doc GIVEN a replayed sealed watermark over a stripped and tampered prefix,
@@ -974,11 +1032,10 @@ a_forced_genesis_field_does_not_excuse_a_stripped_prefix(Config) ->
     {StoreId, Key} = setup_integrity_store(Config),
     StreamId = reckon_db_test_helpers:sid(<<"forced-genesis-field">>),
     write_n_events(StoreId, StreamId, 10),
+    {ok, RealLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
 
-    OldLife = crypto:strong_rand_bytes(16),
-    ok = khepri:put(StoreId, life_path(StreamId), OldLife),
     ok = khepri:put(StoreId, watermark_path(StreamId),
-                    sealed_watermark(Key, StoreId, StreamId, OldLife, 3)),
+                    sealed_watermark(Key, StoreId, StreamId, RealLife, 3)),
     ok = clear_integrity_fields(StoreId, StreamId, 0),
     ok = clear_integrity_fields(StoreId, StreamId, 1),
     ok = clear_integrity_fields(StoreId, StreamId, 2),
@@ -987,8 +1044,20 @@ a_forced_genesis_field_does_not_excuse_a_stripped_prefix(Config) ->
     ok = tamper_event(StoreId, StreamId, 3,
                       fun(E) -> E#event{prev_event_hash = Genesis} end),
 
+    %% The forced field under the life the stream really carries: the newest
+    %% event checks out, so the region rule is what answers, and the MAC over
+    %% the event at the limit is what it answers with.
     ?assertMatch({error, {integrity_violation,
                           #{context := #{detail := legacy_region_unexplained}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)),
+
+    %% The same shape with an earlier life's token put back: the newest event
+    %% contradicts it, which is checked before the region is looked at.
+    OldLife = crypto:strong_rand_bytes(16),
+    ok = khepri:put(StoreId, life_path(StreamId), OldLife),
+    ok = khepri:put(StoreId, watermark_path(StreamId),
+                    sealed_watermark(Key, StoreId, StreamId, OldLife, 3)),
+    ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
 
 %% @doc GIVEN a scavenge boundary the store wrote in an EARLIER life of this
@@ -1017,15 +1086,28 @@ a_replayed_boundary_does_not_anchor_a_new_life(Config) ->
     %% pasted back over a stripped prefix.
     ok = reckon_db_streams:delete(StoreId, StreamId),
     write_n_events(StoreId, StreamId, 10),
-    ok = khepri:put(StoreId, watermark_path(StreamId), OldWatermark),
+    {ok, NewLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
     ok = khepri:put(StoreId, boundary_path(StreamId), OldBoundary),
     ok = clear_integrity_fields(StoreId, StreamId, 0),
     ok = clear_integrity_fields(StoreId, StreamId, 1),
     ok = clear_integrity_fields(StoreId, StreamId, 2),
     ok = rewrite_event(StoreId, StreamId, 1, #{tampered => 1}),
 
+    %% The boundary alone, under a limit the NEW life carries, so the newest
+    %% event checks out and the only question is the boundary. Its MAC names
+    %% the life it was written under, so it does not verify here and the
+    %% region below the limit is unexplained.
+    ok = khepri:put(StoreId, watermark_path(StreamId),
+                    sealed_watermark(Key, StoreId, StreamId, NewLife, 3)),
     ?assertMatch({error, {integrity_violation,
                           #{context := #{detail := legacy_region_unexplained}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)),
+
+    %% The whole old-life set - seal, token and boundary - put back together.
+    %% The newest event of the life that is really current contradicts it, and
+    %% from round 20 that MAC is checked before the region is looked at.
+    ok = khepri:put(StoreId, watermark_path(StreamId), OldWatermark),
+    ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
 
 %% @doc GIVEN a boundary copied from ANOTHER STORE that shares this store's
@@ -1102,9 +1184,32 @@ a_restored_life_token_does_not_anchor_a_new_life(Config) ->
     ok = clear_integrity_fields(StoreId, StreamId, 2),
     ok = rewrite_event(StoreId, StreamId, 1, #{tampered => 1}),
 
-    %% The boundary is what refuses it now, and it does so before any MAC is
-    %% consulted: a boundary records a prefix the scavenge removed, so
-    %% anything surviving below it contradicts it.
+    %% The newest event of the life that is really current is what answers
+    %% from round 20: the restored seal, token and boundary agree with each
+    %% other and with the events below, and the one thing none of them can
+    %% carry is the MAC of an event written under the newer life.
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
+
+%% @doc GIVEN a stream that really did scavenge a prefix - the boundary the
+%%           scavenge recorded sits at the seal, in the life the stream carries
+%%      WHEN a read covers events that survived below it
+%%      THEN it refuses, naming the survivors, because a boundary records a
+%%           prefix that was REMOVED
+%%
+%% Terra r18 T18-1, the honest-life half. Round 19 made a verified boundary at
+%% the limit a refusal rather than an explanation; round 20 changed what is
+%% checked first, not this.
+a_verified_cut_with_events_below_it_is_refused(Config) ->
+    {StoreId, _Key} = setup_integrity_store_with_legacy_prefix(Config, 3),
+    StreamId = reckon_db_test_helpers:sid(<<"verified-cut-survivors">>),
+    write_legacy_events(StoreId, StreamId, 3),
+    ok = enable_integrity(StoreId),
+    ok = reckon_db_chain_watermark:migrate(StoreId),
+    write_n_events_starting_at(StoreId, StreamId, 3, 7),
+    ok = reckon_db_scavenge_boundary:record(
+           StoreId, StreamId, 3, carried_hash(StoreId, StreamId, 3)),
+
     ?assertMatch({error, {integrity_violation,
                           #{context := #{detail := survivors_below_boundary}}}},
                  reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
@@ -1148,6 +1253,88 @@ a_restored_event_at_the_seal_does_not_anchor_a_new_life(Config) ->
     ok = clear_integrity_fields(StoreId, StreamId, 1),
     ok = clear_integrity_fields(StoreId, StreamId, 2),
     ok = rewrite_event(StoreId, StreamId, 1, #{tampered => 1}),
+
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
+
+%% @doc GIVEN a legacy prefix, a sealed life above it, and then the stream
+%%           re-created - the old seal, the old life token and the old events
+%%           3..5 pasted back over the new life, with the prefix stripped
+%%      WHEN a targeted read starts inside the restored run, so no event in
+%%           the batch is legacy
+%%      THEN it refuses, and so does the same read backward
+%%
+%% Jupiter r19 J19-1 and J19-2. The round-19 rule triggered on a legacy event
+%% IN THE BATCH, so a read that started above the stripped prefix never walked
+%% and served an old life's events as ok. Raf r20: the trigger is the STREAM.
+%% The newest event of the life that is really current cannot be restored with
+%% them, and its MAC is what says so.
+a_rolled_back_run_above_a_stripped_prefix_refuses_a_targeted_read(Config) ->
+    {StoreId, _Key} = setup_integrity_store_with_legacy_prefix(Config, 3),
+    StreamId = reckon_db_test_helpers:sid(<<"rolled-back-run">>),
+    write_legacy_events(StoreId, StreamId, 3),
+    ok = enable_integrity(StoreId),
+    ok = reckon_db_chain_watermark:migrate(StoreId),
+    write_n_events_starting_at(StoreId, StreamId, 3, 7),
+    Saved = save_life_and_events(StoreId, StreamId, [3, 4, 5]),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    write_n_events(StoreId, StreamId, 10),
+    ok = restore_life_and_events(StoreId, StreamId, Saved),
+
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 3, 1, forward)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 3, 1, backward)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 3, 3, forward)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 4, 2, forward)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 100, forward)).
+
+%% @doc GIVEN a stream BORN with integrity - sealed at 0, no legacy event
+%%           anywhere - re-created, with the old seal, life token and events
+%%           0..2 restored
+%%      WHEN a targeted read asks for exactly those three events
+%%      THEN it refuses
+%%
+%% Jupiter r19 J19-5. Same rollback as the legacy case with the prefix never
+%% being legacy at all, which is what makes the trigger "a legacy event in the
+%% batch" the wrong one.
+a_restored_early_life_does_not_survive_a_read_below_the_newest_event(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"born-with-integrity">>),
+    write_n_events(StoreId, StreamId, 10),
+    Saved = save_life_and_events(StoreId, StreamId, [0, 1, 2]),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    write_n_events(StoreId, StreamId, 10),
+    ok = restore_life_and_events(StoreId, StreamId, Saved),
+
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
+
+%% @doc GIVEN the same restored life, with one event deleted and the version
+%%           COUNTER put above the hole
+%%      WHEN a targeted read asks for the three events below it
+%%      THEN it refuses, and the newest version it is judged against is the
+%%           one the version nodes hold, never the counter
+%%
+%% Terra r19 T19-1. `suffix_from/3' took its bound from the counter: delete the
+%% event at 4, put the counter at 3, and five live events above the hole were
+%% never read by the walk that exists to cover them.
+a_counter_above_a_hole_does_not_hide_the_events_above_it(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"counter-above-a-hole">>),
+    write_n_events(StoreId, StreamId, 10),
+    Saved = save_life_and_events(StoreId, StreamId, [0, 1, 2]),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    write_n_events(StoreId, StreamId, 10),
+    ok = restore_life_and_events(StoreId, StreamId, Saved),
+    ok = khepri:delete(StoreId, event_path(StreamId, 4)),
+    ok = khepri:put(StoreId, counter_path(StreamId), 3),
 
     ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).

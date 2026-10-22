@@ -2363,9 +2363,120 @@ verify_with_mac_context(StoreId, StreamId, StartVersion, Events, Mode,
         {error, Violation} ->
             {integrity_violation, Violation};
         {ok, Limit} ->
-            verify_legacy_region(StoreId, StreamId, StartVersion, Events, Mode,
-                                 Key, Ctx, Limit)
+            newest_then_region(StoreId, StreamId, StartVersion, Events, Mode,
+                               Key, Ctx, Limit)
     end.
+
+%% @private The newest event first, then whatever the batch needs.
+-spec newest_then_region(atom(), binary(), non_neg_integer(), [event()],
+                         verify_mode(), term(), term(),
+                         non_neg_integer() | undefined) ->
+        {ok, [event()]} | {integrity_violation, map()}.
+newest_then_region(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
+                   Limit) ->
+    case newest_event_verdict(StoreId, StreamId, Events, Key, Ctx, Limit) of
+        ok ->
+            verify_legacy_region(StoreId, StreamId, StartVersion, Events, Mode,
+                                 Key, Ctx, Limit);
+        {integrity_violation, _} = Violation ->
+            Violation
+    end.
+
+%% @private The stream's own newest event is verified on every targeted read.
+%%
+%% A read that carries the newest event verifies it with the batch. One that
+%% stops short does not - and the events it serves can be an OLDER life's:
+%% restore the old seal, the old life token and the old events, strip whatever
+%% stood between them and the newest event, and every event in the batch agrees
+%% with itself. What cannot be restored is the newest event underneath: its MAC
+%% names the store and the life it was written under, so under a restored old
+%% life it does not verify (Jupiter r19 J19-1 and J19-5, the second a stream
+%% born with integrity, sealed at 0, carrying no legacy event at all).
+%%
+%% The trigger is the STREAM, never a legacy event in the batch: a batch of
+%% restored old-life events is exactly as suspect when nothing in it looks
+%% legacy. The newest version comes from the version nodes and never from the
+%% counter: a counter put above a hole (delete the event at 4, set the counter
+%% to 3) hid five live events from the walk above (Terra r19 T19-1).
+%%
+%% One tree read and one MAC per targeted read, which is what Raf chose over
+%% walking the suffix on every read. What it does not cover is named in R-6.
+-spec newest_event_verdict(atom(), binary(), [event()], term(), term(),
+                           non_neg_integer() | undefined) ->
+        ok | {integrity_violation, map()}.
+newest_event_verdict(StoreId, StreamId, Events, Key, Ctx, Limit) ->
+    case newest_live_version(StoreId, StreamId) of
+        {ok, Newest} when is_integer(Newest), Newest >= 0 ->
+            batch_below_newest(StoreId, StreamId, Newest, Events, Key, Ctx,
+                               Limit);
+        _ ->
+            ok
+    end.
+
+%% @private
+batch_below_newest(StoreId, StreamId, Newest, Events, Key, Ctx, Limit) ->
+    case reaches_newest(Events, Newest) of
+        true -> ok;
+        false -> newest_beyond_batch(StoreId, StreamId, Newest, Key, Ctx, Limit)
+    end.
+
+%% @private The batch is in forward order on this path (a backward read is
+%% re-ordered before it gets here), so its LAST event is its highest version.
+-spec reaches_newest([event()], non_neg_integer()) -> boolean().
+reaches_newest([], _Newest) ->
+    false;
+reaches_newest(Events, Newest) ->
+    #event{version = Version} = lists:last(Events),
+    Version >= Newest.
+
+%% @private
+newest_beyond_batch(StoreId, StreamId, Newest, Key, Ctx, Limit) ->
+    case predecessor_event(StoreId, StreamId, Newest) of
+        {ok, #event{prev_event_hash = undefined}} ->
+            chainless_newest(StreamId, Newest, Limit);
+        {ok, #event{} = NewestEvent} ->
+            newest_event_mac(StoreId, StreamId, Newest, NewestEvent, Key, Ctx,
+                             Limit);
+        missing ->
+            {integrity_violation, newest_event_missing(StreamId, Newest)}
+    end.
+
+%% @private A chain-less event at or above the seal is an order no writer
+%% produces. Below it the whole stream predates integrity, so there is no MAC
+%% to check and the legacy rules decide what may be served.
+chainless_newest(StreamId, Newest, Limit) when is_integer(Limit),
+                                               Newest >= Limit ->
+    {integrity_violation, chain_break(StreamId, Newest)};
+chainless_newest(_StreamId, _Newest, _Limit) ->
+    ok.
+
+%% @private One MAC, under the context the stream carries now.
+newest_event_mac(StoreId, StreamId, Newest, NewestEvent, Key, Ctx, Limit) ->
+    case verify_from_anchor(StoreId, StreamId, Newest, [NewestEvent], strict,
+                            Key, Ctx, Limit) of
+        {ok, _Verified} -> ok;
+        {integrity_violation, _} = Violation -> Violation
+    end.
+
+%% @private The newest version the TREE holds, never the counter.
+%%
+%% `local' read options, like the batch read it is compared with: both then
+%% answer from the same applied state, and an event that is here to contradict
+%% a rollback is here for both. A consistency fence would put a leader round
+%% trip on every read of the store to learn something the read's own view
+%% already contains.
+-spec newest_live_version(atom(), binary()) -> {ok, integer()} | {error, term()}.
+newest_live_version(StoreId, StreamId) ->
+    get_version_from_version_nodes(StoreId, StreamId, read_options(local)).
+
+%% @private A version node with no event under it is a tree nobody wrote on
+%% purpose. Refusing it is the only answer that is not a guess.
+newest_event_missing(StreamId, Newest) ->
+    #{layer => storage,
+      stream_id => StreamId,
+      version => Newest,
+      kind => missing_integrity,
+      context => #{detail => newest_event_missing}}.
 
 %% @private The legacy region has to be explainable before anything in it is
 %% handed back unverified.
@@ -2421,9 +2532,14 @@ verify_from_anchor_then(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
     end.
 
 %% @private Every event from the seal to the newest one, in order.
+%%
+%% The newest version comes from the version nodes, never the counter: a
+%% counter put above a hole answers a version the walk then starts from, and
+%% the live events past the hole are never read, so the walk that exists to
+%% cover them covers nothing (Terra r19 T19-1).
 -spec suffix_from(atom(), binary(), non_neg_integer()) -> {ok, [event()]}.
 suffix_from(StoreId, StreamId, Limit) ->
-    case newest_event_version(StoreId, StreamId) of
+    case newest_live_version(StoreId, StreamId) of
         {ok, Newest} when is_integer(Newest), Newest >= Limit ->
             read_events(StoreId, StreamId, Limit, Newest - Limit + 1, forward);
         _ ->
@@ -2524,13 +2640,18 @@ is_genesis_event(#event{prev_event_hash = PrevHash}) ->
 event_at_version(StoreId, StreamId, Version) ->
     predecessor_event(StoreId, StreamId, Version).
 
-%% @private
+%% @private The newest event the tree holds. The version comes from the version
+%% nodes and never from the counter, for the same reason suffix_from/3 does:
+%% this decides whether a region below a seal may be served at all, and a
+%% counter put above a hole would answer "no chain-bearing newest event" while
+%% five of them sit in the tree.
 -spec newest_event(atom(), binary()) -> {ok, event()} | missing.
 newest_event(StoreId, StreamId) ->
-    case newest_event_version(StoreId, StreamId) of
+    case newest_live_version(StoreId, StreamId) of
         {ok, ?NO_STREAM} -> missing;
-        {ok, Version} -> predecessor_event(StoreId, StreamId, Version);
-        {error, _} -> missing
+        {ok, Version} when is_integer(Version), Version >= 0 ->
+            predecessor_event(StoreId, StreamId, Version);
+        _ -> missing
     end.
 
 %% @private

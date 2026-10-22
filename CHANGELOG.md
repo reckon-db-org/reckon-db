@@ -787,20 +787,30 @@ Jupiter and Terra, on `a329134..d30a867`. No API changes.
   and a verified scavenge boundary at the seal is a refusal rather than an
   explanation, because a boundary records a prefix that was removed and
   nothing honest survives below it.
+  From round 20 the trigger is the STREAM, never a legacy event in the batch:
+  **every targeted read verifies the MAC of the stream's newest event** under
+  the context the stream carries now - one tree read and one MAC - so a read
+  that starts above a stripped prefix is answered by the one event a rollback
+  cannot rewrite without also destroying the data it was protecting (Jupiter
+  J19-1, and J19-5 for a stream born with integrity, sealed at 0, carrying no
+  legacy event at all). The newest version comes from the version nodes and
+  never from the counter: a counter put above a hole hid five live events from
+  the walk that exists to cover them (Terra T19-1).
 - **What the rule does not buy, by name.** *R-1*: deleting the marker and
   every seal with no node-local anchor re-runs the migration, which MINTS
   vouching anchors from the tree - replaying the marker fails closed,
   deleting it does not. *R-2*: a strip or tamper of a genuinely pre-integrity
   region below a seal that is really there; nothing is rolled back. *R-4*: an
   entirely older life restored, consistent with itself - a clean shorter
-  stream; freshness is out of scope. *R-6 and JR7's remainder*: an old life
-  restored under a surviving newer one - the newer MAC'd events do contradict
-  it, and a full read refuses; what used to miss them was a targeted read, and
-  round 19 closes that, leaving only the case where the attacker also strips
-  or restores the whole suffix, which is R-2 or R-4. *Scheme 1*: events below
-  `v2_from` are MAC'd over the event and the key only, so a restored old-life
-  scheme-1 tail is indistinguishable by MAC; only newer scheme-2 events
-  contradict it.
+  stream; freshness is out of scope. *R-6*, exactly: (i) a whole-suffix
+  rollback that also restores the OLD NEWEST event's copy along with the seal,
+  the life token and the rest of the run, so the newest event a read checks is
+  itself an old-life one; (ii) payload tampering strictly ABOVE the read's
+  batch, which only a full read or a legacy-region walk verifies - a targeted
+  read checks the newest event, not every event between. *Scheme 1*: events
+  below `v2_from` are MAC'd over the event and the key only, so a restored
+  old-life scheme-1 tail is indistinguishable by MAC; only newer scheme-2
+  events contradict it.
 - **`reckon_db_chain_watermark:delete/2` is gone.** It had no callers and
   deleted the watermark and the life token but not the scavenge boundary, so
   anything reaching for it later would have left a boundary behind for a
@@ -831,12 +841,24 @@ Jupiter and Terra, on `a329134..d30a867`. No API changes.
 An attacker who saves an earlier life's sealed watermark and life token
 before a stream is deleted, then restores both afterwards and strips new-life
 events to chain-less, is refused wherever a read includes a chain-bearing
-event followed by a chain-less one, or a region below a seal that the store
-cannot explain (R-6 in the #18 model). **What is left:** a strip that reaches
-from the read up to the stream's newest event, when the new life is shorter
-than the restored seal, is served by a read that STARTS at the top of that
-run. Closing it needs an O(prefix) walk on every read; no fixed number of
-reads avoids it.
+event followed by a chain-less one, wherever the store cannot explain a region
+below a seal, and - from round 20 - wherever the newest event of the life that
+is really current is still there to contradict the restored one, which is every
+targeted read of such a stream.
+
+**What is left, exactly:**
+
+1. A whole-suffix rollback: the attacker also restores the OLD NEWEST event's
+   copy, so the one event a targeted read checks is itself an old-life one.
+   The stream is then consistent with itself from the seal up; only a
+   monotonic counter held outside the store could tell the difference.
+2. Payload tampering strictly above the read's batch. A targeted read verifies
+   the batch and the newest event, not every event between them; a full read,
+   or a read that touches a legacy or migrated region, verifies the range.
+
+Reckon-db's `read_all_global/3`, `read_by_event_types/3`, `read_by_tags/3` and
+`read_by_metadata/3` verify no MAC at all; that predates this range and is
+tracked as its own issue rather than fixed here.
 
 ### Fixed: the ex_doc warning list is empty, and the specs name the types that exist
 
