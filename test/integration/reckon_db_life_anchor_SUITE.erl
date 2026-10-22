@@ -159,7 +159,7 @@ a_restored_older_life_refuses(Config) ->
     start_anchor(Config),
     Life = crypto:strong_rand_bytes(16),
     ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, 1, Life),
-    settle(),
+    await_entry(StoreId, StreamId, {1, Life}),
     {refuse, Violation} = reckon_db_life_anchor:check(StoreId, StreamId, 0, Life),
     ?assertEqual(life_gen_rolled_back, detail(Violation)),
     ?assertEqual(1, recorded_gen(Violation)),
@@ -175,7 +175,7 @@ a_different_life_at_the_recorded_generation_refuses(Config) ->
     Life = crypto:strong_rand_bytes(16),
     Other = crypto:strong_rand_bytes(16),
     ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, 1, Life),
-    settle(),
+    await_entry(StoreId, StreamId, {1, Life}),
     {refuse, Violation} = reckon_db_life_anchor:check(StoreId, StreamId, 1, Other),
     ?assertEqual(life_gen_mismatch, detail(Violation)),
     ?assertEqual({1, Life}, reckon_db_life_anchor:entry(StoreId, StreamId)),
@@ -190,9 +190,9 @@ a_higher_generation_is_adopted(Config) ->
     Life = crypto:strong_rand_bytes(16),
     NewLife = crypto:strong_rand_bytes(16),
     ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, 1, Life),
-    settle(),
+    await_entry(StoreId, StreamId, {1, Life}),
     ok = reckon_db_life_anchor:check(StoreId, StreamId, 2, NewLife),
-    settle(),
+    await_entry(StoreId, StreamId, {2, NewLife}),
     ?assertEqual({2, NewLife}, reckon_db_life_anchor:entry(StoreId, StreamId)),
     ?assertEqual(2, reckon_db_life_anchor:highest_gen(StoreId, StreamId)),
     ok.
@@ -206,7 +206,7 @@ a_recorded_life_the_tree_no_longer_has_refuses(Config) ->
     start_anchor(Config),
     Life = crypto:strong_rand_bytes(16),
     ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, 1, Life),
-    settle(),
+    await_entry(StoreId, StreamId, {1, Life}),
     {refuse, Violation} = reckon_db_life_anchor:check(StoreId, StreamId, 0, undefined),
     ?assertEqual(life_absent_in_tree, detail(Violation)),
     ok.
@@ -221,7 +221,7 @@ a_tombstone_refuses_the_life_it_replaced(Config) ->
     ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, 1, Life),
     ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1),
     ok = reckon_db_life_anchor:record_deleted(StoreId, StreamId, 1),
-    settle(),
+    await_entry(StoreId, StreamId, {1, deleted}),
     ?assertEqual({1, deleted}, reckon_db_life_anchor:entry(StoreId, StreamId)),
     {refuse, Violation} = reckon_db_life_anchor:check(StoreId, StreamId, 1, Life),
     ?assertEqual(life_gen_deleted, detail(Violation)),
@@ -243,11 +243,10 @@ a_delete_keeps_the_generation_and_the_re_create_rises_above_it(Config) ->
 
     First = create(StoreId, StreamId),
     ok = reckon_db_streams:delete(StoreId, StreamId),
-    settle(),
-    ?assertEqual({1, deleted}, reckon_db_life_anchor:entry(StoreId, StreamId)),
+    await_entry(StoreId, StreamId, {1, deleted}),
 
     Second = create(StoreId, StreamId),
-    settle(),
+    await_entry(StoreId, StreamId, {2, Second}),
     ?assertEqual({2, Second}, reckon_db_life_anchor:entry(StoreId, StreamId)),
     ?assert(Second =/= First),
     ?assertEqual(2, gen_on_seal(StoreId, StreamId)),
@@ -264,13 +263,13 @@ a_lowered_counter_cannot_lower_the_next_generation(Config) ->
 
     _First = create(StoreId, StreamId),
     ok = reckon_db_streams:delete(StoreId, StreamId),
-    settle(),
+    await_entry(StoreId, StreamId, {1, deleted}),
 
     %% The tree writer's move: put the per-stream counter back to 0.
     ok = khepri:put(StoreId, reckon_db_stream_path:life_gen_path(StreamId), 0),
 
     Second = create(StoreId, StreamId),
-    settle(),
+    await_entry(StoreId, StreamId, {2, Second}),
     ?assertEqual(2, gen_on_seal(StoreId, StreamId)),
     ?assertEqual({2, Second}, reckon_db_life_anchor:entry(StoreId, StreamId)),
 
@@ -278,9 +277,9 @@ a_lowered_counter_cannot_lower_the_next_generation(Config) ->
     %% floor is the ANCHOR, not a value the counter happens to hold.
     ok = khepri:put(StoreId, reckon_db_stream_path:life_gen_path(StreamId), 0),
     ok = reckon_db_streams:delete(StoreId, StreamId),
-    settle(),
+    await_entry(StoreId, StreamId, {2, deleted}),
     Third = create(StoreId, StreamId),
-    settle(),
+    await_entry(StoreId, StreamId, {3, Third}),
     ?assertEqual(3, gen_on_seal(StoreId, StreamId)),
     ?assertEqual({3, Third}, reckon_db_life_anchor:entry(StoreId, StreamId)),
     ok.
@@ -393,7 +392,7 @@ rebuild_takes_the_tree_word_and_leaves_a_log_behind(Config) ->
     OlderLife = crypto:strong_rand_bytes(16),
     ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, 5, Late),
     ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, 1, OlderLife),
-    settle(),
+    await_entry(StoreId, StreamId, {5, Late}),
     ?assertEqual({5, Late}, reckon_db_life_anchor:entry(StoreId, StreamId)),
     {refuse, _} = reckon_db_life_anchor:check(StoreId, StreamId, 1, OlderLife),
 
@@ -420,7 +419,8 @@ two_members_each_need_their_own_rebuild(Config) ->
         %% shape a Khepri-only restore leaves behind.
         ok = reckon_db_life_anchor:record_mint(StoreA, StreamId, 5, <<"newer">>),
         ok = reckon_db_life_anchor:record_mint(StoreB, StreamId, 5, <<"newer">>),
-        settle(),
+        await_entry(StoreA, StreamId, {5, <<"newer">>}),
+        await_entry(StoreB, StreamId, {5, <<"newer">>}),
         ok = put_older_life_in_the_tree(StoreA, StreamId, LifeA, 1),
         ok = put_older_life_in_the_tree(StoreB, StreamId, LifeB, 1),
 
@@ -482,7 +482,7 @@ what_was_recorded_survives_a_restart(Config) ->
     %% and the later one is what a restart must find.
     ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1),
     ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, 2, <<"next">>),
-    settle(),
+    await_entry(StoreId, StreamId, {2, <<"next">>}),
     ?assertEqual({2, <<"next">>}, reckon_db_life_anchor:entry(StoreId, StreamId)),
     restart_anchor(StoreId, DataDir),
     ?assertEqual({2, <<"next">>}, reckon_db_life_anchor:entry(StoreId, StreamId)),
@@ -498,7 +498,6 @@ a_damaged_tail_costs_the_tail_not_the_head(Config) ->
     start_anchor(Config),
 
     Life = create(StoreId, StreamId),
-    settle(),
     reckon_db_life_anchor:stop(StoreId),
     Path = filename:join(DataDir, "reckon_db_lives.log"),
     {ok, Bin} = file:read_file(Path),
@@ -565,17 +564,37 @@ restart_anchor(StoreId, DataDir) ->
     {ok, _} = reckon_db_life_anchor:start_link(StoreId, DataDir),
     ok.
 
-%% The writer coalesces, so a record is durable a moment after the call. The
-%% tests read the table, which is the same answer one step earlier; this makes
-%% the ordering explicit rather than accidental.
-settle() ->
-    timer:sleep(20),
-    ok.
+%% The writer coalesces, so a record lands a moment after the call. The tests
+%% wait for the table to say what they are about to assert rather than for a
+%% fixed time: on a loaded CI runner a fixed sleep is a coin toss.
+await_entry(StoreId, StreamId, Expected) ->
+    await(fun() ->
+                  reckon_db_life_anchor:entry(StoreId, StreamId) =:= Expected
+          end).
+
+await_life(StoreId, StreamId, Life) ->
+    await(fun() ->
+                  case reckon_db_life_anchor:entry(StoreId, StreamId) of
+                      {_Gen, Life} -> true;
+                      _ -> false
+                  end
+          end).
+
+await(Fun) ->
+    await(Fun, 600).
+
+await(Fun, 0) ->
+    ?assert(Fun());
+await(Fun, Attempts) ->
+    case Fun() of
+        true -> ok;
+        false -> timer:sleep(5), await(Fun, Attempts - 1)
+    end.
 
 create(StoreId, StreamId) ->
     {ok, _} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, events(1)),
-    settle(),
     {ok, Life} = reckon_db_chain_watermark:life(StoreId, StreamId),
+    await_life(StoreId, StreamId, Life),
     Life.
 
 gen_on_seal(StoreId, StreamId) ->

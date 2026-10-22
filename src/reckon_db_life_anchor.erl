@@ -149,12 +149,25 @@ record_mint(StoreId, StreamId, Gen, Life) ->
 %% drop the intent and leave the stream readable.
 -spec record_delete_intent(atom(), binary(), non_neg_integer()) -> ok.
 record_delete_intent(StoreId, StreamId, Gen) ->
-    sync_write(StoreId, StreamId, Gen, deleted).
+    sync_write(StoreId, StreamId, tombstone_gen(StoreId, StreamId, Gen),
+               deleted).
 
 %% @doc The tombstone, written AFTER the delete commits.
 -spec record_deleted(atom(), binary(), non_neg_integer()) -> ok.
 record_deleted(StoreId, StreamId, Gen) ->
-    write(StoreId, StreamId, Gen, deleted).
+    write(StoreId, StreamId, tombstone_gen(StoreId, StreamId, Gen), deleted).
+
+%% @private The generation a tombstone is recorded at: never below what this
+%% node has already recorded for the stream.
+%%
+%% The caller reads the stream's generation from the tree, and the tree is
+%% what an attacker writes. Lower the counter to 0, delete the stream, and a
+%% tombstone at 0 is one the table refuses (it never moves down) - so nothing
+%% is recorded, the entry keeps the life that was deleted, and restoring that
+%% life and its events is served. The floor is this node's own record.
+-spec tombstone_gen(atom(), binary(), non_neg_integer()) -> non_neg_integer().
+tombstone_gen(StoreId, StreamId, Gen) ->
+    max(Gen, highest_gen(StoreId, StreamId)).
 
 %% @doc The operator act: discard what this node recorded and take the tree's
 %% word for every stream (trust on first use, named).
