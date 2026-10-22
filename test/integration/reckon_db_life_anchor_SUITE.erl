@@ -333,20 +333,26 @@ a_held_counter_race_refuses_by_name(Config) ->
     %% Every read of the counter is followed by somebody else writing it, so
     %% the value the seal was MAC'd with is never the value the transaction
     %% finds. Both arities are intercepted: life_gen/2 reads with get/2.
+    %%
+    %% The write is read + 1, exactly: this test used to write a random value
+    %% in 100..150, which the counter reaches after the first bump, so roughly
+    %% one attempt in fifty wrote back the value it had just read and the mint
+    %% legitimately won its compare-and-swap. That is a flake in the test, not
+    %% in the store, and it failed a CI run on 639b95a.
     meck:new(khepri, [passthrough, no_link]),
     try
         meck:expect(khepri, get,
                     fun(S, P) ->
                             Result = meck:passthrough([S, P]),
                             _ = (P =:= CounterPath) andalso
-                                khepri:put(S, P, 100 + rand:uniform(50)),
+                                move_counter(S, P, Result),
                             Result
                     end),
         meck:expect(khepri, get,
                     fun(S, P, Opts) ->
                             Result = meck:passthrough([S, P, Opts]),
                             _ = (P =:= CounterPath) andalso
-                                khepri:put(S, P, 100 + rand:uniform(50)),
+                                move_counter(S, P, Result),
                             Result
                     end),
         ?assertEqual({error, {life_gen_contended, StreamId}},
@@ -1150,6 +1156,15 @@ events(N) ->
 %% prefix is the module name.
 anchor_name(StoreId) ->
     list_to_atom("reckon_db_life_anchor_" ++ atom_to_list(StoreId)).
+
+%% Somebody else moves the counter past the value just read: the mint's
+%% compare-and-swap cannot find the value it MAC'd the seal with.
+move_counter(StoreId, Path, {ok, Value}) when is_integer(Value) ->
+    khepri:put(StoreId, Path, Value + 1);
+move_counter(StoreId, Path, _Absent) ->
+    %% A fresh stream has no counter node at all, so the first read fails:
+    %% create one, at a value the mint did not read.
+    khepri:put(StoreId, Path, 1).
 
 %% A tree writer's cheapest move against the witness: flip a byte of the seal's
 %% MAC, so binding/2 cannot vouch for it.
