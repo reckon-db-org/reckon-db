@@ -810,12 +810,13 @@ Jupiter and Terra, on `a329134..d30a867`. No API changes.
   deleting it does not. *R-2*: a strip or tamper of a genuinely pre-integrity
   region below a seal that is really there; nothing is rolled back. *R-4*: an
   entirely older life restored, consistent with itself - a clean shorter
-  stream; freshness is out of scope. *R-6*, exactly: (i) a whole-suffix
-  rollback that also restores the OLD NEWEST event's copy along with the seal,
-  the life token and the rest of the run, so the newest event a read checks is
-  itself an old-life one; (ii) payload tampering strictly ABOVE the read's
-  batch, which only a full read or a legacy-region walk verifies - a targeted
-  read checks the newest event, not every event between. *Scheme 1*: events
+  stream; freshness is out of scope. *R-6* was worded for the newest-event
+  check and went with it in round 21: a restored older life is refused by the
+  node-local anchor's generation, not by the newest event, and the check the
+  anchor replaced is gone. What R-6 named that still holds is payload tampering
+  strictly above a targeted read's batch, which only a full read or a
+  legacy-region walk verifies; the current list is "Known residual in this
+  release, named", below. *Scheme 1*: events
   below `v2_from` are MAC'd over the event and the key only, so a restored
   old-life scheme-1 tail is indistinguishable by MAC; only newer scheme-2
   events contradict it.
@@ -909,6 +910,66 @@ renamed to say so: `a_restored_old_life_with_the_top_two_versions_does_not_survi
 `a_truncated_new_life_does_not_serve_a_restored_run_backward` (was
 `residual_a_truncated_new_life_serves_a_restored_run_backward`).
 
+### Fixed: the round-21 review, six bugs and two decisions it forced
+
+Jupiter and Terra, on `a329134..4fd2168`. Every item was required; each fix
+has a test that fails on `4fd2168` and passes now. No API shape changes.
+
+- **Every committed tombstone was resolved as an uncommitted intent at the
+  next start** (Jupiter J21-1, Terra T21-1). The intent and the tombstone
+  shared one log value, and the start-time pass took every `deleted` row for
+  an intent: read the deleted life back into the table, and served a stream
+  the store had deleted. Both reviewers probed it - delete a stream, put its
+  old seal, life token and events back, restart - and every delete ever made
+  was resurrected once per restart. The intent has its own value now
+  (`delete_intent`), only an intent is ever resolved, and an intent whose
+  delete did commit at the moment of a crash becomes the tombstone it was
+  standing in for.
+- **A delete whose transaction did not commit refused the honest stream until
+  the next restart** (Jupiter J21-2). A Ra timeout or a leader change is an
+  honest failure, and the intent is already fsynced by then, so the stream
+  answered `life_gen_deleted` for a delete that never happened. The delete
+  path now puts the life back, at the generation the intent names, before it
+  answers the caller.
+- **An anchor crash was a permanent outage** (Jupiter J21-5, Terra T21-3).
+  The store traps exits and ignored this one, and the anchor is started from
+  it: kill it, and two seconds later every integrity-enabled read answered
+  `life_anchor_unavailable` until the whole store restarted, with nothing
+  raised. The store restarts it - the anchor reloads from its log - and the
+  crash raises telemetry. Restarts are bounded (five in a minute) and giving
+  up is logged and raised too: a writer that crashes on every load must be an
+  incident an operator sees, not a silent loop.
+- **The snapshot load path was a targeted read that skipped the anchor**
+  (Terra T21-2). A snapshot's MAC binds the life its stream carries, so
+  restoring an older life's seal, life token, events AND the snapshot taken
+  under it gave a set that verified against itself: `load/2` and `load_at/3`
+  served the old life's state while the stream read refused. Both now run the
+  anchor's O(1) generation check first, and answer the same refusal the read
+  does.
+- **The tombstone's generation took the counter, not the seal** (item 6). The
+  seal's generation is MAC'd and the counter is a plain tree node, so on a
+  node that had never recorded the stream (floor 0) a writer who lowered the
+  counter to 0 and then deleted wrote the tombstone at 0 - below the restored
+  life's generation 1, which was then adopted. The tombstone is recorded at
+  `max(the seal's generation, the counter, this node's floor)`.
+- **A member whose anchor log was missing adopted every stream.** The marker
+  is on the tree and arrived whole; the anchor is per node and did not. The
+  start now runs the upgrade's life pass when the marker is there and the
+  anchor holds nothing, recording each stream's sealed generation once, and
+  says so loudly - an anchor removed by an operator and one newly created
+  look the same to this module, and the message says which consequence
+  follows.
+- **Compaction ran only in `init/1`, after a full replay.** A long-running
+  node writes three records per delete cycle and would grow its log without
+  bound until the next start. It runs on append now.
+- **Two flips are pinned as decisions, not accidents.** A chain-less event
+  planted above a stream's newest version used to make a read of the HEAD
+  refuse; with the newest-event check withdrawn it is served, and only the
+  genuine events come back (item 9). And a stream deleted through this node
+  answers `stream_not_found`, not an integrity violation - the anchor holds a
+  life and the tree holds no stream at all, and an honest delete called
+  tampering is a false alarm (item 5). Both are tests now.
+
 ### Known residual in this release, named
 
 An attacker who saves an earlier life's sealed watermark and life token
@@ -932,15 +993,26 @@ every targeted read of such a stream, in one ETS lookup.
    range.
 3. The anchor itself, which lives in the data directory. An attacker who can
    write there can restore an older `reckon_db_lives.log` - which refuses
-   honest streams until `rebuild/1` runs - or delete it. A node that has never
-   seen a stream adopts what the tree says on its first read, which includes
-   every pre-upgrade stream after the upgrade pass and every member of a
-   cluster that has not read the stream yet.
+   honest streams until `rebuild/1` runs - or delete it. With it deleted, the
+   start's life pass records every stream the tree can vouch for, once, and
+   says loudly that it did; what is left is the UPGRADE WINDOW: a life
+   restored before that pass has been adopted, and the module cannot tell a
+   log an operator removed from one that was never there. A member of a
+   cluster that has not read a stream yet adopts it on first sight, unless
+   the marker sent it through the same pass.
 4. A tombstone exists only on the node that ran the delete. A stream deleted
    through one member and restored wholesale is not refused by another.
+   The shape a caller sees there is also named: on the node that ran the
+   delete the read answers `stream_not_found` (a test), but a member that
+   still holds an anchor entry for a stream the tree no longer carries refuses
+   with `life_absent_in_tree` - indistinguishable, from the anchor's side, from
+   a seal stripped off a live stream.
 5. Crash windows: a delete that committed before its intent reached the disk,
    and an intent resolved at start after a tree writer restored the life, both
-   leave the stream readable - the intent is dropped in each case.
+   leave the stream readable - the intent is dropped in each case. What is no
+   longer a window is the two that were bugs: a committed tombstone is never
+   resolved as an intent, and a delete whose transaction failed puts the life
+   back before it answers.
 
 Reckon-db's `read_all_global/3`, `read_by_event_types/3`, `read_by_tags/3` and
 `read_by_metadata/3` verify no MAC at all; that predates this range and is
