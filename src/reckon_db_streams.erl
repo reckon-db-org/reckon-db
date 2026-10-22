@@ -2385,10 +2385,54 @@ verify_explained_region(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
                         Limit) ->
     case legacy_region_ok(StoreId, StreamId, Limit) of
         ok ->
-            verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode,
-                               Key, Ctx, Limit);
+            verify_explained_suffix(StoreId, StreamId, StartVersion, Events,
+                                    Mode, Key, Ctx, Limit);
         {violation, Violation} ->
             {integrity_violation, Violation}
+    end.
+
+%% @private The store has explained the region below the seal, so it may serve
+%% it - but only having verified the events this read did NOT ask for, from the
+%% seal up to the newest one, exactly as a full read verifies them.
+%%
+%% Without that, a targeted read below the seal was blind to a newer event that
+%% contradicts the seal, which a full read refuses: a restored older life's
+%% seal, life token AND the event at the seal all agree with each other, and
+%% only the new-life events above them disagree (Jupiter r18 JR7). Raf's
+%% decision for round 19: a targeted read that touches a legacy or migrated
+%% region carries the same guarantee as a full read, at O(suffix) cost, rather
+%% than a weaker one.
+verify_explained_suffix(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
+                        Limit) ->
+    case suffix_from(StoreId, StreamId, Limit) of
+        {ok, Tail} ->
+            verify_from_anchor_then(StoreId, StreamId, StartVersion, Events,
+                                    Mode, Key, Ctx, Limit, Tail);
+        {error, Reason} ->
+            {integrity_violation, suffix_unreadable(StreamId, Limit, Reason)}
+    end.
+
+%% @private
+verify_from_anchor_then(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
+                        Limit, Tail) ->
+    case verify_from_anchor(StoreId, StreamId, Limit, Tail, Mode, Key, Ctx,
+                            Limit) of
+        {ok, _SuffixVerified} ->
+            verify_from_anchor(StoreId, StreamId, StartVersion, Events, Mode,
+                               Key, Ctx, Limit);
+        {integrity_violation, _} = Violation ->
+            Violation
+    end.
+
+%% @private Every event from the seal to the newest one, in order.
+-spec suffix_from(atom(), binary(), non_neg_integer())
+        -> {ok, [event()]} | {error, term()}.
+suffix_from(StoreId, StreamId, Limit) ->
+    case newest_event_version(StoreId, StreamId) of
+        {ok, Newest} when is_integer(Newest), Newest >= Limit ->
+            read_events(StoreId, StreamId, Limit, Newest - Limit + 1, forward);
+        _ ->
+            {ok, []}
     end.
 
 %% @private Is this batch about to hand back an event it treats as legacy?
@@ -2399,13 +2443,14 @@ honouring_legacy(Events, Limit) ->
 %% @private Is there something the store wrote that explains the region below
 %% `Limit'?
 %%
-%% Two shapes are honest, and the point is that a REPLAYED watermark produces
-%% neither. The event AT the limit carries the genesis predecessor when the
-%% limit is a chain start this stream really began at; a verified scavenge
-%% boundary there says the same thing for a prefix that was removed. Jupiter
-%% r15 JP3: an earlier life's sealed record replayed over a new life lands on
-%% a MID-CHAIN event of that life, whose predecessor is a chain hash, and with
-%% no boundary there either - so no legacy region may be honoured below it.
+%% There are exactly two explanations, and a REPLAYED watermark produces
+%% neither. The event AT the limit carries the genesis predecessor, and its MAC
+%% holds, when the limit is a chain start this stream really began at. A
+%% verified scavenge boundary there says the prefix was REMOVED - and then
+%% nothing may survive below it at all. Jupiter r15 JP3: an earlier life's
+%% sealed record replayed over a new life lands on a MID-CHAIN event of that
+%% life, whose predecessor is a chain hash, and with no boundary there either -
+%% so no legacy region may be honoured below it.
 %%
 %% When there is no event at the limit (an honest chain-less stream is sealed
 %% at newest + 1, so this is legal), the stream must not carry a chain at all:
@@ -2421,32 +2466,39 @@ legacy_region_ok(StoreId, StreamId, Limit) ->
 
 %% @private
 at_limit_verdict(StoreId, StreamId, Event, Limit) ->
-    case seal_explains(StoreId, StreamId, Event, Limit) of
+    case boundary_at_limit(StoreId, StreamId, Limit) of
+        true ->
+            %% A boundary records a prefix the scavenge REMOVED, so nothing
+            %% honest survives below it - and this read is serving something
+            %% that does: planted records, or a prefix put back (Terra r18
+            %% T18-1). The two cannot both be true.
+            {violation, survivors_below_boundary(StreamId, Limit)};
+        false ->
+            genesis_region_verdict(StoreId, StreamId, Event, Limit)
+    end.
+
+%% @private The other explanation, and it is about the EVENT, not a record
+%% beside it: the event at the seal carries the genesis predecessor and its
+%% MAC holds under the stream's current life. The field alone is tree data
+%% (Jupiter r16 JR5). The MAC alone is not the whole answer either, because a
+%% seal, a life token and the event at the seal can be restored as a set
+%% (Jupiter r18 JR7) - which is why the caller also verifies the suffix.
+genesis_region_verdict(StoreId, StreamId, Event, Limit) ->
+    case is_genesis_event(Event) andalso
+         event_verifies_at(StoreId, StreamId, Event,
+                           reckon_gater_integrity:genesis_prev_hash()) of
         true -> ok;
         false -> {violation, legacy_region_unexplained(StreamId, Limit)}
     end.
 
-%% @private Is the event at the seal the one the store's own anchor says sits
-%% there?
-%%
-%% A scavenge boundary names the chain hash its survivor carries; a genesis
-%% proof names the genesis value. Either way the event's MAC has to hold under
-%% the stream's CURRENT context, because the anchor itself can be saved and
-%% restored: a boundary, a seal and the life token of an older life, put back
-%% together over a stripped prefix, verify as a set - what cannot be restored
-%% is the new-life event underneath them, MAC'd under the life that is gone
-%% (Jupiter r17 JR6b, JR5).
-seal_explains(StoreId, StreamId, Event, Limit) ->
-    case boundary_prev(StoreId, StreamId, Limit) of
-        {ok, PrevHash} -> event_verifies_at(StoreId, StreamId, Event, PrevHash);
-        none -> genesis_explains(StoreId, StreamId, Event)
+%% @private Is a verified scavenge boundary recorded at exactly the limit?
+boundary_at_limit(StoreId, StreamId, Limit) ->
+    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
+        {ok, #{version := Limit} = Boundary} ->
+            reckon_db_scavenge_boundary:verify(StoreId, StreamId, Boundary);
+        _ ->
+            false
     end.
-
-%% @private
-genesis_explains(StoreId, StreamId, Event) ->
-    is_genesis_event(Event) andalso
-        event_verifies_at(StoreId, StreamId, Event,
-                          reckon_gater_integrity:genesis_prev_hash()).
 
 %% @private One MAC, with the context the event's own scheme needs.
 event_verifies_at(StoreId, StreamId, Event, ExpectedPrev) ->
@@ -2456,24 +2508,6 @@ event_verifies_at(StoreId, StreamId, Event, ExpectedPrev) ->
                 =:= ok;
         error ->
             false
-    end.
-
-%% @private The hash a verified scavenge boundary at `Limit' names, or none.
--spec boundary_prev(atom(), binary(), non_neg_integer())
-        -> {ok, binary()} | none.
-boundary_prev(StoreId, StreamId, Limit) ->
-    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
-        {ok, #{version := Limit, prev_hash := PrevHash} = Boundary} ->
-            boundary_prev_verified(StoreId, StreamId, Boundary, PrevHash);
-        _ ->
-            none
-    end.
-
-%% @private
-boundary_prev_verified(StoreId, StreamId, Boundary, PrevHash) ->
-    case reckon_db_scavenge_boundary:verify(StoreId, StreamId, Boundary) of
-        true -> {ok, PrevHash};
-        false -> none
     end.
 
 %% @private
@@ -2511,6 +2545,23 @@ legacy_region_unexplained(StreamId, Limit) ->
       version => Limit,
       kind => missing_integrity,
       context => #{detail => legacy_region_unexplained, limit => Limit}}.
+
+%% @private A scavenge boundary says the prefix was removed; events are there.
+survivors_below_boundary(StreamId, Limit) ->
+    #{layer => storage,
+      stream_id => StreamId,
+      version => Limit,
+      kind => missing_integrity,
+      context => #{detail => survivors_below_boundary, limit => Limit}}.
+
+%% @private The suffix this read had to verify could not be read at all.
+suffix_unreadable(StreamId, Limit, Reason) ->
+    #{layer => storage,
+      stream_id => StreamId,
+      version => Limit,
+      kind => missing_integrity,
+      context => #{detail => suffix_unreadable, limit => Limit,
+                   reason => Reason}}.
 
 %% @private Integrity is enabled but the store has no key, so nothing this
 %% read returns can be verified. Refusing is the only answer that does not

@@ -56,6 +56,7 @@
     a_forced_genesis_field_does_not_excuse_a_stripped_prefix/1,
     a_replayed_boundary_does_not_anchor_a_new_life/1,
     a_restored_life_token_does_not_anchor_a_new_life/1,
+    a_restored_event_at_the_seal_does_not_anchor_a_new_life/1,
     a_boundary_copied_from_another_store_does_not_anchor/1,
     a_delete_takes_the_scavenge_boundary_with_it/1
 ]).
@@ -128,6 +129,7 @@ groups() ->
             a_forced_genesis_field_does_not_excuse_a_stripped_prefix,
             a_replayed_boundary_does_not_anchor_a_new_life,
             a_restored_life_token_does_not_anchor_a_new_life,
+            a_restored_event_at_the_seal_does_not_anchor_a_new_life,
             a_boundary_copied_from_another_store_does_not_anchor,
             a_delete_takes_the_scavenge_boundary_with_it
         ]},
@@ -803,6 +805,24 @@ sealed_watermark(Key, StoreId, StreamId, Life, Version) ->
                                     [deterministic])),
     #{version => Version, v2_from => Version, life => Life, mac => Mac}.
 
+%% @private The authenticated watermark shape with an explicit v2_from, for
+%% the old-line streams whose events sit below it.
+sealed_watermark(Key, StoreId, StreamId, Life, Version, V2From) ->
+    Mac = crypto:mac(hmac, sha256, Key,
+                     term_to_binary({reckon_db_chain_watermark, seal, StoreId,
+                                     StreamId, Life, Version, V2From},
+                                    [deterministic])),
+    #{version => Version, v2_from => V2From, life => Life, mac => Mac}.
+
+%% @private The event at a chain start as the 5.11 line wrote it: the genesis
+%% predecessor and a scheme-1 MAC over the event and the key.
+make_genesis_event(StoreId, StreamId, Version) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    {ok, Event0} = khepri:get(StoreId, event_path(StreamId, Version)),
+    Bare = Event0#event{prev_event_hash = reckon_gater_integrity:genesis_prev_hash(),
+                        mac = undefined, signature = undefined},
+    Bare#event{mac = reckon_gater_integrity:compute_event_mac(Bare, Key)}.
+
 %% @private
 life_path(StreamId) ->
     ?INTEGRITY_STREAM_LIFE_PATH ++ [StreamId].
@@ -1082,8 +1102,54 @@ a_restored_life_token_does_not_anchor_a_new_life(Config) ->
     ok = clear_integrity_fields(StoreId, StreamId, 2),
     ok = rewrite_event(StoreId, StreamId, 1, #{tampered => 1}),
 
+    %% The boundary is what refuses it now, and it does so before any MAC is
+    %% consulted: a boundary records a prefix the scavenge removed, so
+    %% anything surviving below it contradicts it.
     ?assertMatch({error, {integrity_violation,
-                          #{context := #{detail := legacy_region_unexplained}}}},
+                          #{context := #{detail := survivors_below_boundary}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
+
+%% @doc GIVEN the old life's SEAL, LIFE TOKEN and the event AT THE SEAL all
+%%           restored together, so the genesis predecessor and the MAC under
+%%           the restored life both hold
+%%      WHEN a targeted read covers the stripped prefix below them
+%%      THEN it refuses anyway: the read verifies through to the newest MAC'd
+%%           event, and the new-life events above contradict the restored seal
+%%
+%% Jupiter r18 JR7. The rule's premise ("the event is what a tree writer
+%% cannot re-write") was false: the writer cannot FORGE it, but it can
+%% RESTORE an older one together with the seal that sets its life. A full
+%% read refused at the first new-life event above the restored seal; a
+%% targeted read below it never looked there. Raf r19: a targeted read that
+%% touches a legacy region now verifies through to the newest MAC'd event,
+%% the same guarantee as a full read.
+a_restored_event_at_the_seal_does_not_anchor_a_new_life(Config) ->
+    {StoreId, Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"restored-seal-event">>),
+    write_n_events(StoreId, StreamId, 10),
+    {ok, OldLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
+
+    %% The old life: the chain starts at 3 with a scheme-1 genesis event, and
+    %% the seal names the old life with v2_from above it.
+    OldSeal = sealed_watermark(Key, StoreId, StreamId, OldLife, 3, 10),
+    ok = khepri:put(StoreId, watermark_path(StreamId), OldSeal),
+    OldEvent = make_genesis_event(StoreId, StreamId, 3),
+    ok = khepri:put(StoreId, event_path(StreamId, 3), OldEvent),
+    {ok, Saved} = khepri:get(StoreId, watermark_path(StreamId)),
+
+    %% A new life under the same stream id, then the old life's seal, token
+    %% and the event at the seal, pasted back over a stripped prefix.
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    write_n_events(StoreId, StreamId, 10),
+    ok = khepri:put(StoreId, watermark_path(StreamId), Saved),
+    ok = khepri:put(StoreId, life_path(StreamId), OldLife),
+    ok = khepri:put(StoreId, event_path(StreamId, 3), OldEvent),
+    ok = clear_integrity_fields(StoreId, StreamId, 0),
+    ok = clear_integrity_fields(StoreId, StreamId, 1),
+    ok = clear_integrity_fields(StoreId, StreamId, 2),
+    ok = rewrite_event(StoreId, StreamId, 1, #{tampered => 1}),
+
+    ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
 
 %% @doc GIVEN a stream deleted while it holds a scavenge boundary

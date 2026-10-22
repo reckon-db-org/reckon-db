@@ -44,7 +44,8 @@
     a_cut_with_a_watermark_above_the_survivors_is_refused/1,
     an_honest_old_line_upgrade_seals_its_legacy_streams/1,
     a_junk_watermark_is_refused_by_name/1,
-    a_bare_watermark_below_a_genesis_start_is_evidence/1
+    a_bare_watermark_below_a_genesis_start_is_evidence/1,
+    a_forged_prefix_below_a_sealed_cut_is_refused/1
 ]).
 
 -define(KEY_ENV, "RECKON_DB_MIGRATION_TEST_KEY").
@@ -73,7 +74,8 @@ all() ->
         a_cut_with_a_watermark_above_the_survivors_is_refused,
         an_honest_old_line_upgrade_seals_its_legacy_streams,
         a_junk_watermark_is_refused_by_name,
-        a_bare_watermark_below_a_genesis_start_is_evidence
+        a_bare_watermark_below_a_genesis_start_is_evidence,
+        a_forged_prefix_below_a_sealed_cut_is_refused
     ].
 
 suite() ->
@@ -894,6 +896,44 @@ a_bare_watermark_below_a_genesis_start_is_evidence(Config) ->
     ?assertMatch({error, {integrity_violation, #{kind := missing_integrity}}},
                  read_raw(StoreId, ChainlessId)).
 
+%% @doc GIVEN a stream the migration sealed at a cut (a boundary at 5, the
+%%           prefix removed by a scavenge), with chain-less events PLANTED at
+%%           2..4 afterwards
+%%      WHEN a read covers the planted range
+%%      THEN it refuses: a boundary records a prefix that was REMOVED, so
+%%           nothing honest survives below it and no region there is honoured
+%%
+%% Terra r18 T18-1. is_legacy/2 only asked whether an event has no chain and
+%% sits below the seal, so planted records below a sealed cut were served as
+%% pre-integrity data. A full read refused at the seal; a read that started
+%% inside the planted range never looked there.
+a_forged_prefix_below_a_sealed_cut_is_refused(Config) ->
+    {StoreId, DataDir} = store(Config),
+    StreamId = stream(<<"forged-below-cut">>),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 9} = append_events(StoreId, StreamId, 10),
+    ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{state => s}),
+    ok = chain_scheme_one(StoreId, StreamId, 0, 10),
+    ok = delete_events(StoreId, StreamId, 0, 4),
+    ok = make_old_line_snapshot(StoreId, StreamId),
+    ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
+    ok = delete_watermark(StoreId, StreamId),
+    ok = khepri:delete(StoreId, life_path(StreamId)),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {sealed, 5}},
+                 reckon_db_chain_watermark:lookup(StoreId, StreamId)),
+    {ok, #{} = _Boundary} =
+        reckon_db_scavenge_boundary:lookup(StoreId, StreamId),
+
+    lists:foreach(fun(V) -> ok = plant_chainless_event(StoreId, StreamId, V) end,
+                  lists:seq(2, 4)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 2, 3, forward)).
+
 %% @doc GIVEN a junk MAC map at the watermark path
 %%      WHEN the store starts
 %%      THEN that stream alone is refused, by a reason that names the junk
@@ -949,6 +989,17 @@ make_old_line_chain(StoreId, StreamId, N) ->
     ok = khepri:delete(StoreId, life_path(StreamId)),
     ok = khepri:put(StoreId, watermark_path(StreamId), 0),
     ok.
+
+%% @private Plant an event with no chain fields at `Version', which is what a
+%% tree writer can do: a forged "pre-integrity" record.
+plant_chainless_event(StoreId, StreamId, Version) ->
+    Event = #event{event_id = integer_to_binary(Version),
+                   event_type = <<"forged">>,
+                   stream_id = StreamId,
+                   version = Version,
+                   data = #{forged => 1},
+                   metadata = #{}},
+    khepri:put(StoreId, event_path(StreamId, Version), Event).
 
 %% @private Rewrite a stream's newest snapshot as the 5.11 line wrote it: a
 %% scheme-1 MAC over the snapshot and the key alone, with neither the store
