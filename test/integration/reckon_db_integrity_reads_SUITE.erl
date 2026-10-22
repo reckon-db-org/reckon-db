@@ -56,6 +56,7 @@
     a_forced_genesis_field_does_not_excuse_a_stripped_prefix/1,
     a_replayed_boundary_does_not_anchor_a_new_life/1,
     a_restored_life_token_does_not_anchor_a_new_life/1,
+    a_chain_less_event_planted_past_the_stream_does_not_hide_the_head/1,
     a_verified_cut_with_events_below_it_is_refused/1,
     a_restored_old_life_with_the_top_two_versions_does_not_survive/1,
     a_planted_old_life_above_a_hole_does_not_survive/1,
@@ -136,6 +137,7 @@ groups() ->
             a_forced_genesis_field_does_not_excuse_a_stripped_prefix,
             a_replayed_boundary_does_not_anchor_a_new_life,
             a_restored_life_token_does_not_anchor_a_new_life,
+            a_chain_less_event_planted_past_the_stream_does_not_hide_the_head,
             a_verified_cut_with_events_below_it_is_refused,
             a_restored_old_life_with_the_top_two_versions_does_not_survive,
             a_planted_old_life_above_a_hole_does_not_survive,
@@ -609,6 +611,32 @@ a_hand_deleted_prefix_is_read_as_a_violation(Config) ->
     ?assertMatch({error, {integrity_violation, #{kind := missing_predecessor}}},
                  reckon_db_streams:fold_event_batches(
                    StoreId, StreamId, 7, forward, Collect, [])).
+
+%% @doc GIVEN an intact integrity stream
+%%      WHEN a chain-less event is planted ABOVE its newest version
+%%      THEN a read of the head is served (the planted event is not in it)
+%%      AND a read that would cover the planted event refuses
+%%
+%% The r21 review, item 9. Retiring the newest-event check flipped this shape
+%% from refused to served. It is benign - only the genuine events come back -
+%% and it is pinned here so the flip is a decision, not an accident.
+a_chain_less_event_planted_past_the_stream_does_not_hide_the_head(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"integrity-planted-above">>),
+    write_n_events(StoreId, StreamId, 10),
+    {ok, [#event{version = 9}]} =
+        reckon_db_streams:read(StoreId, StreamId, 9, 1, forward),
+
+    {ok, Plated} = khepri:get(StoreId, event_path(StreamId, 9)),
+    ok = khepri:put(StoreId, event_path(StreamId, 12),
+                    Plated#event{version = 12, prev_event_hash = undefined,
+                                 mac = undefined}),
+
+    {ok, Head} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
+    ?assertEqual([0, 1, 2], [E#event.version || E <- Head]),
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_streams:read(StoreId, StreamId, 10, 3, forward)),
+    ok.
 
 %% @doc GIVEN an intact integrity stream
 %%      WHEN the single event just before a read's start is deleted by hand

@@ -1304,19 +1304,49 @@ delete_validated(StoreId, StreamId) ->
     %% the intent reached the disk leaves the anchor holding the deleted life,
     %% and a restore of that stream is accepted - the mint's crash window is
     %% the same shape and is named beside it in #18.
-    ok = reckon_db_life_anchor:record_delete_intent(
-           StoreId, StreamId,
-           reckon_db_chain_watermark:life_gen(StoreId, StreamId)),
+    %%
+    %% The generation the tombstone is recorded at takes the SEAL's generation
+    %% as well as the counter: the seal's is MAC'd and the counter is a plain
+    %% node, so a writer who lowers the counter to 0 and then deletes would
+    %% otherwise place the tombstone at 0 - at or below a restored life of
+    %% generation 1 - and the restoration would be adopted (r21 review, item 6).
+    Witness = delete_witness(StoreId, StreamId),
+    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId,
+                                                   maps:get(gen, Witness)),
     Fun = fun() -> delete_stream_tx([Path, CounterPath | IntegrityPaths]) end,
     case khepri:transaction(StoreId, Fun) of
         {ok, ok} ->
-            ok = reckon_db_life_anchor:record_deleted(
-                   StoreId, StreamId,
-                   reckon_db_chain_watermark:life_gen(StoreId, StreamId)),
+            ok = reckon_db_life_anchor:record_deleted(StoreId, StreamId,
+                                                     maps:get(gen, Witness)),
             ok;
-        {ok, {error, E}}   -> {error, E};
-        {error, _} = Error -> Error
+        {ok, {error, E}}   -> delete_failed(StoreId, StreamId, Witness, {error, E});
+        {error, _} = Error -> delete_failed(StoreId, StreamId, Witness, Error)
     end.
+
+%% @private What the tombstone is recorded at, and what a failed transaction
+%% has to put back: the seal's own generation and life (MAC'd, so neither can
+%% be raised or replaced), and the tree's generation counter.
+-spec delete_witness(atom(), binary()) -> #{gen := non_neg_integer(),
+                                           life := binary() | undefined}.
+delete_witness(StoreId, StreamId) ->
+    CounterGen = reckon_db_chain_watermark:life_gen(StoreId, StreamId),
+    case reckon_db_chain_watermark:binding(StoreId, StreamId) of
+        {ok, #{life := Life, gen := Gen}} when is_binary(Life) ->
+            #{gen => max(Gen, CounterGen), life => Life};
+        _ ->
+            #{gen => CounterGen, life => undefined}
+    end.
+
+%% @private A transaction that did not commit - a Ra timeout, a leader change -
+%% leaves the intent standing, and an intent refuses an honest stream until the
+%% next restart. The life goes back before the caller is told (Jupiter J21-2).
+delete_failed(StoreId, StreamId, #{gen := Gen, life := Life} = _Witness, Error)
+        when is_binary(Life) ->
+    ok = reckon_db_life_anchor:record_delete_undone(StoreId, StreamId, Gen,
+                                                   Life),
+    Error;
+delete_failed(_StoreId, _StreamId, _Witness, Error) ->
+    Error.
 
 %% @private Every node in one command: they go together or none does.
 delete_stream_tx(Paths) ->

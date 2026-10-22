@@ -17,10 +17,12 @@
 %% record's MAC covering the one before it. A break localises to the TAIL, so a
 %% damaged or tampered log loses the records after the break and keeps the rest.
 %%
-%% Residual, named in #18: with the file lost, a stream this node has never
-%% recorded is adopted on first sight; a stream deleted on ANOTHER node is not
-%% tombstoned here; and a rollback WITHIN one life is truncation, which no
-%% generation can see.
+%% Residual, named in #18: with the file lost, the start's life pass records
+%% every stream the tree can vouch for, once and loudly - what it cannot see is
+%% a life restored BEFORE that pass, nor a stream on another node that has not
+%% read the stream yet; a stream deleted on ANOTHER node is not tombstoned
+%% here; and a rollback WITHIN one life is truncation, which no generation can
+%% see.
 -module(reckon_db_life_anchor).
 
 -behaviour(gen_server).
@@ -33,7 +35,11 @@
          check/4,
          record_mint/4,
          record_delete_intent/3,
+         record_delete_undone/4,
          record_deleted/3,
+         life_pass/1,
+         has_records/1,
+         log_path/1,
          rebuild/1,
          stop/1]).
 
@@ -71,6 +77,12 @@ stop(StoreId) ->
         Pid -> gen_server:stop(Pid)
     end.
 
+%% @doc Where this store's anchor log lives, so an operator message names the
+%% file the module actually writes.
+-spec log_path(file:filename_all()) -> file:filename_all().
+log_path(DataDir) ->
+    filename:join(DataDir, ?LOG_FILE).
+
 %% @doc The highest generation this node has recorded for a stream, 0 when it
 %% has none. Answers 0 when the anchor is not running, so a mint falls back to
 %% the tree's counter alone - the named residual.
@@ -81,9 +93,10 @@ highest_gen(StoreId, StreamId) ->
         undefined -> 0
     end.
 
-%% @doc The recorded entry: `{Gen, Life}' or `{Gen, deleted}'.
+%% @doc The recorded entry: `{Gen, Life}', `{Gen, delete_intent}' or
+%% `{Gen, deleted}'.
 -spec entry(atom(), binary()) ->
-        {non_neg_integer(), binary() | deleted} | undefined.
+        {non_neg_integer(), binary() | deleted | delete_intent} | undefined.
 entry(StoreId, StreamId) ->
     lookup(StoreId, StreamId).
 
@@ -108,10 +121,24 @@ check(StoreId, StreamId, TreeGen, TreeLife) ->
     end.
 
 %% @private
+%%
+%% An INTENT (delete_intent) is a delete that has not been recorded as
+%% committed, so it refuses nothing: the stream it names may still be there,
+%% and a failed transaction has to leave an honest stream serving. What it
+%% cannot do is excuse a rollback - a tree below the generation the intent
+%% names is refused like any other.
 check_recorded(StoreId, StreamId, TreeGen, TreeLife) ->
     case lookup(StoreId, StreamId) of
         undefined ->
             adopt(StoreId, StreamId, TreeGen, TreeLife);
+        {Gen, delete_intent} when TreeLife =:= undefined, TreeGen =< Gen ->
+            ok;
+        {Gen, delete_intent} when TreeGen > Gen ->
+            adopt(StoreId, StreamId, TreeGen, TreeLife);
+        {Gen, delete_intent} when TreeGen =:= Gen ->
+            ok;
+        {Gen, delete_intent} ->
+            {refuse, refusal(StreamId, TreeGen, life_gen_rolled_back, Gen)};
         {Gen, deleted} when TreeLife =:= undefined, TreeGen =< Gen ->
             ok;
         {Gen, deleted} when TreeGen > Gen ->
@@ -144,13 +171,31 @@ record_mint(StoreId, StreamId, Gen, Life) ->
 %% @doc The tombstone INTENT, fsynced BEFORE the delete commits, so a crash
 %% between the two is resolvable at the next start against the tree.
 %%
+%% It is NOT the tombstone: an intent and a committed delete that shared one
+%% value were indistinguishable at the next start, so every restart took each
+%% committed tombstone for an uncommitted intent, read the life back into the
+%% table, and served a stream the store had deleted (Jupiter J21-1, Terra
+%% T21-1 - every delete ever made, resurrected once per restart). The intent
+%% carries its own value and only an intent is ever resolved.
+%%
 %% Named and not covered: a delete that commits before the intent reached the
 %% disk, and an intent resolved after a tree writer restored the life - both
 %% drop the intent and leave the stream readable.
 -spec record_delete_intent(atom(), binary(), non_neg_integer()) -> ok.
 record_delete_intent(StoreId, StreamId, Gen) ->
     sync_write(StoreId, StreamId, tombstone_gen(StoreId, StreamId, Gen),
-               deleted).
+               delete_intent).
+
+%% @doc Undo an intent whose delete transaction did not commit.
+%%
+%% A transaction can fail for honest reasons - a Ra timeout, a leader change -
+%% and the intent is already on the disk by then. Left standing, it refuses the
+%% honest stream (life_gen_deleted) until the next restart (Jupiter J21-2).
+%% The life goes back at the generation the intent names, which is the same
+%% generation it was recorded at, so the entry is the one the mint wrote.
+-spec record_delete_undone(atom(), binary(), non_neg_integer(), binary()) -> ok.
+record_delete_undone(StoreId, StreamId, Gen, Life) ->
+    sync_write(StoreId, StreamId, tombstone_gen(StoreId, StreamId, Gen), Life).
 
 %% @doc The tombstone, written AFTER the delete commits.
 -spec record_deleted(atom(), binary(), non_neg_integer()) -> ok.
@@ -181,6 +226,34 @@ tombstone_gen(StoreId, StreamId, Gen) ->
 rebuild(StoreId) ->
     gen_server:call(name(StoreId), rebuild, 120000).
 
+%% @doc Whether this node has recorded anything at all.
+-spec has_records(atom()) -> boolean().
+has_records(StoreId) ->
+    case ets:info(table(StoreId), size) of
+        undefined -> false;
+        Size -> Size > 0
+    end.
+
+%% @doc Record every stream the tree can vouch for that this node has no entry
+%% for, and say so loudly.
+%%
+%% This is the UPGRADE PASS, run at start by a store whose migration marker is
+%% already there but whose anchor carries nothing: every pre-5.12 stream would
+%% otherwise be unknown to this node, and the first read of each would adopt it
+%% - including a restore of an older life that happened before anyone read it.
+%% A marker means the streams were sealed by 5.12 or later, so their seals carry
+%% the generation this pass records. It runs again on every member at upgrade,
+%% because the marker arrives on one write and the anchor is per node.
+%%
+%% It never overwrites an entry this node already holds: a pass after a real
+%% restart would otherwise adopt a restored life for every stream at once.
+-spec life_pass(atom()) -> ok | {error, term()}.
+life_pass(StoreId) ->
+    case whereis(name(StoreId)) of
+        undefined -> {error, not_running};
+        _Pid -> gen_server:call(name(StoreId), life_pass, 300000)
+    end.
+
 %%====================================================================
 %% gen_server
 %%====================================================================
@@ -200,9 +273,14 @@ init({StoreId, DataDir}) ->
 %% delete nothing can resolve.
 handle_call({append_sync, StreamId, Gen, Value}, _From, State) ->
     case insert(State#state.store_id, StreamId, Gen, Value) of
-        true -> {reply, ok, flush(append(State, StreamId, Gen, Value))};
-        false -> {reply, ok, State}
+        true ->
+            Written = flush(append(State, StreamId, Gen, Value)),
+            {reply, ok, maybe_compact(Written)};
+        false ->
+            {reply, ok, State}
     end;
+handle_call(life_pass, _From, State) ->
+    {reply, ok, run_life_pass(State)};
 handle_call(rebuild, _From, State) ->
     {Count, State1} = do_rebuild(State),
     {reply, {ok, Count}, State1};
@@ -211,14 +289,17 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({adopt, StreamId, Gen, Value}, State) ->
     case insert(State#state.store_id, StreamId, Gen, Value) of
-        true -> {noreply, schedule_flush(append(State, StreamId, Gen, Value))};
-        false -> {noreply, State}
+        true ->
+            {noreply, schedule_flush(
+                        maybe_compact(append(State, StreamId, Gen, Value)))};
+        false ->
+            {noreply, State}
     end;
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(flush, State) ->
-    {noreply, flush(State#state{timer = undefined})};
+    {noreply, maybe_compact(flush(State#state{timer = undefined}))};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -379,6 +460,7 @@ put_entry(StoreId, StreamId, Gen, Value) ->
 
 %% @private
 delta(Life) when is_binary(Life) -> 1;
+delta(delete_intent) -> 0;
 delta(deleted) -> 0.
 
 %% @private
@@ -495,29 +577,38 @@ mac_matches(Mac, Expected) ->
 %% Start-time passes
 %%====================================================================
 
-%% @private A tombstone intent whose life is still in the tree is a delete that
-%% never committed - or a delete whose life a tree writer put back. Both drop
-%% the intent; the second is named in #18 beside the delete crash window.
+%% @private An INTENT whose life is still in the tree is a delete that never
+%% committed - or a delete whose life a tree writer put back. Both drop the
+%% intent; the second is named in #18 beside the delete crash window. An intent
+%% whose life is gone is the delete that committed, and it becomes the
+%% tombstone it was standing in for.
 %%
-%% Dropping it has to be a WRITE, not the absence of one: the tombstone is in
-%% the table and in the log, so a restart that only declined to act would keep
+%% Only an intent is resolved. A committed tombstone carries its own value
+%% (`deleted'), so a restart leaves it exactly where the delete put it.
+%%
+%% Resolving has to be a WRITE, not the absence of one: the intent is in the
+%% table and in the log, so a restart that only declined to act would keep
 %% refusing a stream that is still there. The life goes back at the generation
-%% the tombstone carries, and a superseding record goes into the log, so the
-%% next replay reaches the same answer.
+%% the intent carries, and a superseding record goes into the log, so the next
+%% replay reaches the same answer.
 resolve_intents(#state{store_id = StoreId} = State) ->
     Intents = ets:tab2list(table(StoreId)),
     lists:foldl(fun(Entry, Acc) -> resolve_intent(StoreId, Acc, Entry) end,
                 State, Intents).
 
-%% @private A tombstone whose life is still in the tree is dropped; one whose
-%% life is gone is the delete that committed, and it stays.
-resolve_intent(StoreId, Acc, {StreamId, Gen, deleted}) ->
+%% @private
+resolve_intent(StoreId, Acc, {StreamId, Gen, delete_intent}) ->
     case reckon_db_chain_watermark:life(StoreId, StreamId) of
-        {ok, undefined} -> Acc;
+        {ok, undefined} -> commit_intent(Acc, StreamId, Gen);
         {ok, Life} when is_binary(Life) -> drop_intent(Acc, StreamId, Gen, Life)
     end;
 resolve_intent(_StoreId, Acc, _Entry) ->
     Acc.
+
+%% @private
+commit_intent(#state{store_id = StoreId} = State, StreamId, Gen) ->
+    _ = insert(StoreId, StreamId, Gen, deleted),
+    append(State, StreamId, Gen, deleted).
 
 %% @private
 drop_intent(#state{store_id = StoreId, path = Path} = State, StreamId, Gen,
@@ -563,6 +654,58 @@ compact_into(#state{store_id = StoreId, path = Path} = State, Fd, OldFd, Temp) -
 %% @private
 compact_entry({StreamId, Gen, Value}, Acc) ->
     append(Acc, StreamId, Gen, Value).
+
+%% @private The upgrade pass, in the writer.
+%%
+%% Loud on purpose: a node that had an anchor and finds none is either the
+%% first start after an upgrade or a log somebody removed, and an operator has
+%% to be able to tell the two apart. It records only streams this node has no
+%% entry for, so it can run on every start without ever taking a newer
+%% generation down.
+run_life_pass(#state{store_id = StoreId} = State) ->
+    case reckon_db_streams:list_streams(StoreId) of
+        {ok, StreamIds} ->
+            {Recorded, State1} = lists:foldl(fun life_pass_one/2, {0, State},
+                                             StreamIds),
+            announce_life_pass(State1, length(StreamIds), Recorded),
+            State1;
+        {error, Reason} ->
+            logger:error("life anchor ~ts: the life pass could not list the "
+                         "store's streams: ~p", [State#state.path, Reason]),
+            State
+    end.
+
+%% @private
+life_pass_one(StreamId, {N, Acc}) ->
+    StoreId = Acc#state.store_id,
+    case entry(StoreId, StreamId) of
+        undefined -> record_sealed_life(StoreId, StreamId, N, Acc);
+        _Known -> {N, Acc}
+    end.
+
+%% @private
+record_sealed_life(StoreId, StreamId, N,
+                   #state{store_id = StoreId} = Acc) ->
+    case reckon_db_chain_watermark:binding(StoreId, StreamId) of
+        {ok, #{life := Life, gen := Gen}} when is_binary(Life) ->
+            _ = insert(StoreId, StreamId, Gen, Life),
+            {N + 1, append(Acc, StreamId, Gen, Life)};
+        _ ->
+            {N, Acc}
+    end.
+
+%% @private
+announce_life_pass(_State, 0, _Recorded) ->
+    ok;
+announce_life_pass(#state{path = Path}, Streams, Recorded) ->
+    logger:warning("life anchor ~ts: the life pass recorded ~p of ~p streams "
+                   "(the log carried nothing for them). If this node's anchor "
+                   "was removed rather than newly created, an older life "
+                   "restored before this start has been adopted: the anchor "
+                   "cannot tell the two apart.", [Path, Recorded, Streams]),
+    telemetry:execute([reckon, db, life_anchor, life_pass],
+                      #{streams => Streams, recorded => Recorded},
+                      #{path => Path}).
 
 %% @private Discard the log and take the tree's word for every stream.
 %%

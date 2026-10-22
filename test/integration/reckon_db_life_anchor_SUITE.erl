@@ -50,6 +50,16 @@
     %% Intents and resolution
     an_intent_whose_delete_committed_stays_a_tombstone/1,
     an_intent_whose_delete_never_committed_is_dropped/1,
+    a_committed_tombstone_survives_a_restart/1,
+    an_uncommitted_delete_leaves_an_honest_stream_serving/1,
+    a_failed_delete_transaction_puts_the_life_back/1,
+    a_tombstone_takes_the_seals_generation_not_only_the_counter/1,
+
+    %% The upgrade pass
+    the_life_pass_records_what_a_missing_log_lost/1,
+
+    %% The user-facing shape of an honest delete
+    a_deleted_stream_answers_not_found_not_a_violation/1,
 
     %% Rebuild
     rebuild_takes_the_tree_word_and_leaves_a_log_behind/1,
@@ -60,6 +70,7 @@
 
     %% The log
     what_was_recorded_survives_a_restart/1,
+    the_log_compacts_while_the_store_runs/1,
     a_damaged_tail_costs_the_tail_not_the_head/1
 ]).
 
@@ -76,10 +87,17 @@ all() ->
         a_held_counter_race_refuses_by_name,
         an_intent_whose_delete_committed_stays_a_tombstone,
         an_intent_whose_delete_never_committed_is_dropped,
+        a_committed_tombstone_survives_a_restart,
+        an_uncommitted_delete_leaves_an_honest_stream_serving,
+        a_failed_delete_transaction_puts_the_life_back,
+        a_tombstone_takes_the_seals_generation_not_only_the_counter,
+        the_life_pass_records_what_a_missing_log_lost,
+        a_deleted_stream_answers_not_found_not_a_violation,
         rebuild_takes_the_tree_word_and_leaves_a_log_behind,
         two_members_each_need_their_own_rebuild,
         concurrent_first_appends_leave_every_creator_readable,
         what_was_recorded_survives_a_restart,
+        the_log_compacts_while_the_store_runs,
         a_damaged_tail_costs_the_tail_not_the_head
     ].
 
@@ -508,9 +526,222 @@ a_damaged_tail_costs_the_tail_not_the_head(Config) ->
     ok.
 
 %%====================================================================
+%% The commit/rollback pair, and what a restart does with each
+%%====================================================================
+
+%% Jupiter J21-1 / Terra T21-1. A committed tombstone must not be resolved as
+%% an intent at the next start. The shape: save the whole old life, delete,
+%% put the old life back, restart. The intent and the tombstone shared one
+%% value, so every restart read the deleted life back into the table and the
+%% stream was resurrected - every delete ever made, once per restart.
+a_committed_tombstone_survives_a_restart(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = sid(<<"tombstone-restart">>),
+    DataDir = proplists:get_value(data_dir, Config),
+    start_anchor(Config),
+
+    OldLife = create(StoreId, StreamId),
+    {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 100, forward),
+    {ok, OldSeal} = khepri:get(StoreId, reckon_db_chain_watermark:path(StreamId)),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    await_entry(StoreId, StreamId, {1, deleted}),
+
+    %% The attacker puts the whole old life back: seal, life token, events.
+    ok = khepri:put(StoreId, reckon_db_chain_watermark:path(StreamId), OldSeal),
+    ok = khepri:put(StoreId, reckon_db_chain_watermark:life_path(StreamId),
+                    OldLife),
+    ok = khepri:put(StoreId, reckon_db_stream_path:life_gen_path(StreamId), 1),
+    [ok = khepri:put(StoreId, event_path(StreamId, V), E)
+     || {V, E} <- index(Events)],
+    ?assertMatch({error, _}, reckon_db_streams:read(StoreId, StreamId, 0, 3,
+                                                    forward)),
+
+    restart_anchor(StoreId, DataDir),
+
+    ?assertEqual({1, deleted}, reckon_db_life_anchor:entry(StoreId, StreamId)),
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := life_gen_deleted}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)),
+    ok.
+
+%% Jupiter J21-2. A delete whose transaction did not commit leaves the intent
+%% standing. An honest stream has to keep serving while that intent is there,
+%% and the caller puts the life back before it answers (below).
+an_uncommitted_delete_leaves_an_honest_stream_serving(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = sid(<<"intent-standing">>),
+    start_anchor(Config),
+
+    Life = create(StoreId, StreamId),
+    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1),
+    await_entry(StoreId, StreamId, {1, delete_intent}),
+
+    {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
+    ?assertEqual([0], [E#event.version || E <- Events]),
+
+    %% And the rollback restores the life it was recorded over.
+    ok = reckon_db_life_anchor:record_delete_undone(StoreId, StreamId, 1, Life),
+    await_entry(StoreId, StreamId, {1, Life}),
+    ok = reckon_db_life_anchor:check(StoreId, StreamId, 1, Life),
+    ok.
+
+%% The caller's half of J21-2: reckon_db_streams:delete must put the life back
+%% when the transaction answers an error, not only when it crashes. Without it
+%% an honest stream refuses `life_gen_deleted` until the next restart.
+a_failed_delete_transaction_puts_the_life_back(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = sid(<<"delete-tx-failed">>),
+    start_anchor(Config),
+
+    Life = create(StoreId, StreamId),
+    meck:new(khepri, [passthrough, no_link]),
+    try
+        meck:expect(khepri, transaction,
+                    fun(_Store, _Fun) -> {error, {tx, failed}} end),
+        ?assertEqual({error, {tx, failed}},
+                     reckon_db_streams:delete(StoreId, StreamId))
+    after
+        meck:unload(khepri)
+    end,
+
+    await_entry(StoreId, StreamId, {1, Life}),
+    {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
+    ?assertEqual([0], [E#event.version || E <- Events]),
+    ok.
+
+%% The r21 review, item 6. The tombstone's generation takes the SEAL's, not
+%% only the tree's counter. A node whose anchor has no floor yet - it has never
+%% recorded the stream - and a tree writer who lowers the counter to 0 before
+%% the delete would otherwise write the tombstone at 0, below the restored
+%% life's generation 1, which is then adopted.
+a_tombstone_takes_the_seals_generation_not_only_the_counter(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = sid(<<"tombstone-gen-floor">>),
+
+    %% The stream is minted while this node's anchor is down, so the anchor
+    %% holds no entry for it: the floor is 0, which is the shape under test.
+    {ok, _} = reckon_db_streams:append(StoreId, StreamId, ?NO_STREAM, events(1)),
+    {ok, Life} = reckon_db_chain_watermark:life(StoreId, StreamId),
+    {ok, E0} = khepri:get(StoreId, event_path(StreamId, 0)),
+    {ok, Seal} = khepri:get(StoreId, reckon_db_chain_watermark:path(StreamId)),
+    start_anchor(Config),
+
+    %% The tree writer's move: the generation counter goes back to 0.
+    ok = khepri:put(StoreId, reckon_db_stream_path:life_gen_path(StreamId), 0),
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    await_entry(StoreId, StreamId, {1, deleted}),
+
+    ok = khepri:put(StoreId, reckon_db_chain_watermark:path(StreamId), Seal),
+    ok = khepri:put(StoreId, reckon_db_chain_watermark:life_path(StreamId), Life),
+    ok = khepri:put(StoreId, event_path(StreamId, 0), E0),
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := life_gen_deleted}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)),
+    ok.
+
+%%====================================================================
+%% The upgrade pass
+%%====================================================================
+
+%% The r21 review, item 7. A node that carries the migration marker and no
+%% anchor records records each stream's sealed generation once, instead of
+%% adopting whatever life the tree holds at the first read of each.
+the_life_pass_records_what_a_missing_log_lost(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    DataDir = proplists:get_value(data_dir, Config),
+    StreamId = sid(<<"life-pass">>),
+    start_anchor(Config),
+
+    Life = create(StoreId, StreamId),
+    reckon_db_life_anchor:stop(StoreId),
+    ok = file:delete(reckon_db_life_anchor:log_path(DataDir)),
+    {ok, _} = reckon_db_life_anchor:start_link(StoreId, DataDir),
+    ?assertEqual(undefined, reckon_db_life_anchor:entry(StoreId, StreamId)),
+    ?assertNot(reckon_db_life_anchor:has_records(StoreId)),
+
+    ok = reckon_db_life_anchor:life_pass(StoreId),
+
+    ?assertEqual({1, Life}, reckon_db_life_anchor:entry(StoreId, StreamId)),
+    ok = reckon_db_life_anchor:check(StoreId, StreamId, 1, Life),
+    %% ... and a life restored from below is refused rather than adopted.
+    {refuse, Violation} = reckon_db_life_anchor:check(StoreId, StreamId, 0, Life),
+    ?assertEqual(life_gen_rolled_back, detail(Violation)),
+    ok.
+
+%%====================================================================
+%% The user-facing shape of an honest delete
+%%====================================================================
+
+%% The r21 review, item 5. A stream deleted through this node and read again
+%% is NOT an integrity violation: the anchor holds a life, the tree holds no
+%% stream at all, and what the caller asked about is gone. A refusal there told
+%% an honest operator their store was tampered with.
+a_deleted_stream_answers_not_found_not_a_violation(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = sid(<<"deleted-not-found">>),
+    start_anchor(Config),
+
+    _Life = create(StoreId, StreamId),
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    await_entry(StoreId, StreamId, {1, deleted}),
+
+    ?assertEqual({error, {stream_not_found, StreamId}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)),
+    ok.
+
+%% The r21 review, item 8. Compaction runs while the store serves, not only in
+%% init/1 after a full replay: a long-running node writes three records per
+%% delete cycle (a mint, an intent, a tombstone) and would otherwise replay all
+%% of them at the next start.
+the_log_compacts_while_the_store_runs(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = sid(<<"compacting">>),
+    DataDir = proplists:get_value(data_dir, Config),
+    start_anchor(Config),
+
+    lists:foreach(
+      fun(_N) ->
+              _Life = create(StoreId, StreamId),
+              ok = reckon_db_streams:delete(StoreId, StreamId)
+      end, lists:seq(1, 20)),
+
+    %% Sixty-odd records were written for one live entry. After compaction the
+    %% file holds the live entries, not the history.
+    Path = reckon_db_life_anchor:log_path(DataDir),
+    {ok, Bin} = file:read_file(Path),
+    ?assert(records_in(Bin) < 20),
+    restart_anchor(StoreId, DataDir),
+    ?assertEqual({20, deleted}, reckon_db_life_anchor:entry(StoreId, StreamId)),
+    ok.
+
+%%====================================================================
 %% Helpers
 %%====================================================================
 
+%% @private
+event_path(StreamId, Version) ->
+    reckon_db_stream_path:event_path(StreamId,
+                                     pad_version(Version, ?VERSION_PADDING)).
+
+%% @private
+pad_version(Version, Length) ->
+    Str = integer_to_list(Version),
+    list_to_binary(lists:duplicate(Length - length(Str), $0) ++ Str).
+
+%% @private
+index(Events) ->
+    [{E#event.version, E} || E <- Events].
+
+%% Count the length-framed records in a log image.
+records_in(Bin) ->
+    records_in(Bin, 0).
+
+records_in(<<Size:32, Rest/binary>>, N) when byte_size(Rest) >= Size ->
+    <<_Record:Size/binary, Tail/binary>> = Rest,
+    records_in(Tail, N + 1);
+records_in(_Torn, N) ->
+    N.
 sid(Label) ->
     reckon_db_test_helpers:sid(Label).
 
