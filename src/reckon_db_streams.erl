@@ -1389,13 +1389,24 @@ recorded_witness(StoreId, StreamId, CounterGen) ->
             #{gen => CounterGen, life => undefined}
     end.
 
-%% @private The transaction answered an error, and an error is AMBIGUOUS: a
-%% Ra timeout can still commit. Nothing is decided here - the anchor resolves
-%% the intent against the tree once the cluster has nothing in flight, in its
-%% own process, so no cleanup races the command and a slow or dying anchor
-%% cannot take this caller down (Terra T23-3, T23-5).
+%% @private The transaction answered an error, and an error is AMBIGUOUS: a Ra
+%% timeout can still commit. NOTHING is decided here, exactly as Raf ruled for
+%% 5.12.0: a delete whose outcome is unclear answers the error to the caller,
+%% loudly, and nothing runs alongside the command. The intent is already on the
+%% anchor's disk, and the NEXT start settles it where the tree decides - no life
+%% there is a delete that landed, the life still there is one that did not.
+%%
+%% While it stands, the intent accepts only its own life at its own generation
+%% (Jupiter J22-1) and refuses any other, so the cost of the window is named in
+%% the release notes rather than papered over with a second opinion racing the
+%% command.
 delete_failed(StoreId, StreamId, Error) ->
-    ok = reckon_db_life_anchor:resolve_when_decided(StoreId, StreamId),
+    logger:warning("delete of stream ~p answered ~p: the outcome is unclear, "
+                   "so nothing is decided here; the intent stands and the next "
+                   "start settles it against the tree", [StreamId, Error]),
+    telemetry:execute([reckon, db, delete, outcome_unclear], #{},
+                      #{store_id => StoreId, stream_id => StreamId,
+                        reason => Error}),
     Error.
 
 %% @private Every node in one command: they go together or none does.

@@ -52,13 +52,13 @@
     an_intent_whose_delete_never_committed_is_dropped/1,
     a_committed_tombstone_survives_a_restart/1,
     an_uncommitted_delete_leaves_an_honest_stream_serving/1,
-    a_failed_delete_transaction_puts_the_life_back/1,
+    a_failed_delete_transaction_leaves_the_intent_for_the_next_start/1,
     a_tombstone_takes_the_seals_generation_not_only_the_counter/1,
-    a_failed_life_read_does_not_tombstone_an_honest_stream/1,
-    a_delete_that_lands_after_the_error_is_not_undone/1,
+    an_unclear_delete_returns_the_error_and_leaves_the_intent/1,
+    a_delete_that_landed_despite_the_error_is_settled_at_the_next_start/1,
+    a_start_pass_that_cannot_read_the_tree_leaves_the_intent/1,
     a_broken_seal_does_not_blind_the_delete_witness/1,
     a_dying_writer_answers_unavailable_instead_of_exiting/1,
-    a_suspended_writer_does_not_block_the_resolve/1,
     the_life_pass_is_quiet_when_it_records_nothing/1,
     a_delete_with_no_anchor_is_refused/1,
     an_intent_stands_for_its_own_life/1,
@@ -98,13 +98,13 @@ all() ->
         an_intent_whose_delete_never_committed_is_dropped,
         a_committed_tombstone_survives_a_restart,
         an_uncommitted_delete_leaves_an_honest_stream_serving,
-        a_failed_delete_transaction_puts_the_life_back,
+        a_failed_delete_transaction_leaves_the_intent_for_the_next_start,
         a_tombstone_takes_the_seals_generation_not_only_the_counter,
-        a_failed_life_read_does_not_tombstone_an_honest_stream,
-        a_delete_that_lands_after_the_error_is_not_undone,
+        an_unclear_delete_returns_the_error_and_leaves_the_intent,
+        a_delete_that_landed_despite_the_error_is_settled_at_the_next_start,
+        a_start_pass_that_cannot_read_the_tree_leaves_the_intent,
         a_broken_seal_does_not_blind_the_delete_witness,
         a_dying_writer_answers_unavailable_instead_of_exiting,
-        a_suspended_writer_does_not_block_the_resolve,
         the_life_pass_is_quiet_when_it_records_nothing,
         a_delete_with_no_anchor_is_refused,
         an_intent_stands_for_its_own_life,
@@ -598,16 +598,18 @@ an_uncommitted_delete_leaves_an_honest_stream_serving(Config) ->
     {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
     ?assertEqual([0], [E#event.version || E <- Events]),
 
-    %% And a failed transaction that did NOT land puts the life back.
-    ok = reckon_db_life_anchor:resolve_when_decided(StoreId, StreamId),
+    %% A failed transaction that did NOT land is undone at the next start, where
+    %% the tree still carries the life: it is dropped, and the stream serves.
+    restart_anchor(StoreId, proplists:get_value(data_dir, Config)),
     await_entry(StoreId, StreamId, {1, Life}),
     ok = reckon_db_life_anchor:check(StoreId, StreamId, 1, Life),
     ok.
 
-%% The caller's half of J21-2: reckon_db_streams:delete must put the life back
-%% when the transaction answers an error, not only when it crashes. Without it
-%% an honest stream refuses `life_gen_deleted` until the next restart.
-a_failed_delete_transaction_puts_the_life_back(Config) ->
+%% The caller's half of J21-2, in the round-24 shape: a transaction that
+%% answers an error decides nothing (Raf's ruling - nothing runs alongside the
+%% delete), and an honest stream keeps serving while the intent stands. The next
+%% start is what puts the life back, because the tree still carries it.
+a_failed_delete_transaction_leaves_the_intent_for_the_next_start(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     StreamId = sid(<<"delete-tx-failed">>),
     start_anchor(Config),
@@ -623,9 +625,12 @@ a_failed_delete_transaction_puts_the_life_back(Config) ->
         meck:unload(khepri)
     end,
 
-    await_entry(StoreId, StreamId, {1, Life}),
+    await_entry(StoreId, StreamId, {1, {delete_intent, Life}}),
     {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
     ?assertEqual([0], [E#event.version || E <- Events]),
+
+    restart_anchor(StoreId, proplists:get_value(data_dir, Config)),
+    await_entry(StoreId, StreamId, {1, Life}),
     ok.
 
 %% The r21 review, item 6. The tombstone's generation takes the SEAL's, not
@@ -723,16 +728,17 @@ a_failed_delete_that_landed_is_resolved_as_deleted(Config) ->
     ok = khepri:delete(StoreId,
                        reckon_db_stream_path:stream_path(StreamId)),
 
-    ok = reckon_db_life_anchor:resolve_when_decided(StoreId, StreamId),
+    restart_anchor(StoreId, proplists:get_value(data_dir, Config)),
     await_entry(StoreId, StreamId, {1, deleted}),
     ok.
 
-%% Jupiter J23-2 / Terra T23-2. Only ABSENCE is {ok, undefined}. The resolve
-%% read a failed khepri:get as "the tree has no life", recorded a TOMBSTONE, and
-%% refused the untouched, honest stream with life_gen_deleted for good - the
-%% start pass resolves intents and never tombstones. A tree that cannot be
-%% asked decides nothing: the intent is left standing (and says so).
-a_failed_life_read_does_not_tombstone_an_honest_stream(Config) ->
+%% Raf's round-24 ruling. A delete whose outcome is unclear - a timeout, an
+%% anchor that is down, an anchor that is slow - answers its error to the
+%% caller and is settled only at the next start, where the tree decides.
+%% NOTHING runs alongside the command. And only ABSENCE is {ok, undefined}: a
+%% tree that cannot be asked says so, which is what tells the start pass that
+%% nothing has been decided (Jupiter J23-2, Terra T23-2).
+an_unclear_delete_returns_the_error_and_leaves_the_intent(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     StreamId = sid(<<"blip">>),
     start_anchor(Config),
@@ -743,8 +749,7 @@ a_failed_life_read_does_not_tombstone_an_honest_stream(Config) ->
     meck:new(khepri, [passthrough, no_link]),
     try
         %% The cluster is having a moment: the delete's transaction answers an
-        %% error, and so does every read of the stream's life the resolution
-        %% makes afterwards.
+        %% error, and so does a read of the stream's life.
         meck:expect(khepri, transaction,
                     fun(_S, _Fun) -> {error, timeout} end),
         meck:expect(khepri, get,
@@ -758,29 +763,27 @@ a_failed_life_read_does_not_tombstone_an_honest_stream(Config) ->
         ?assertEqual({error, timeout},
                      reckon_db_chain_watermark:life(StoreId, StreamId)),
         ?assertEqual({error, timeout},
-                     reckon_db_chain_watermark:binding(StoreId, StreamId)),
-        %% Every resolution this window allows is unknown; the last one leaves
-        %% the intent for the next start.
-        timer:sleep(500)
+                     reckon_db_chain_watermark:binding(StoreId, StreamId))
     after
         meck:unload(khepri)
     end,
 
+    %% Nothing was decided behind the caller's back: the intent stands, carrying
+    %% the life this node recorded, and the honest stream still serves.
     ?assertEqual({1, {delete_intent, Life}},
                  reckon_db_life_anchor:entry(StoreId, StreamId)),
-    %% The tree never changed, so the honest stream still serves.
+    ok = reckon_db_life_anchor:check(StoreId, StreamId, 1, Life),
     {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
     ?assertEqual([0], [E#event.version || E <- Events]),
     ok.
 
-%% Terra T23-3. A transaction can answer an error and still land: a timeout is
-%% ambiguous. The resolution fences first - the fence is the point where the
-%% command the leader already received has been applied - so it cannot read the
-%% life the command is about to remove and write it back. Here the fence is what
-%% lands the delete; without it the resolution restores a life that then goes,
-%% and a restore of the whole old life is served.
-a_delete_that_lands_after_the_error_is_not_undone(Config) ->
+%% The other side of the same ruling: the transaction answered an error and the
+%% command LANDED anyway. Nothing decides that here. The next start asks the
+%% tree, finds no life, and records the tombstone - after which the old life
+%% cannot be put back.
+a_delete_that_landed_despite_the_error_is_settled_at_the_next_start(Config) ->
     StoreId = proplists:get_value(store_id, Config),
+    DataDir = proplists:get_value(data_dir, Config),
     StreamId = sid(<<"late-landing">>),
     start_anchor(Config),
     Life = create(StoreId, StreamId),
@@ -789,22 +792,28 @@ a_delete_that_lands_after_the_error_is_not_undone(Config) ->
 
     meck:new(khepri, [passthrough, no_link]),
     try
+        %% The command the leader received is applied even though the caller is
+        %% told it failed: a timeout it is, a landed delete it is.
         meck:expect(khepri, transaction,
-                    fun(_S, _Fun) -> {error, timeout} end),
-        %% The delete the leader had received before it answered: applied when
-        %% the cluster settles, which is what the fence waits for.
-        meck:expect(khepri, fence,
-                    fun(S) -> land_delete(S, StreamId) end),
+                    fun(S, _Fun) ->
+                            _ = land_delete(S, StreamId),
+                            {error, timeout}
+                    end),
         ?assertEqual({error, timeout},
-                     reckon_db_streams:delete(StoreId, StreamId)),
-        %% The resolution runs in the anchor's own process, after the caller
-        %% has its answer: the mock stays until it has.
-        await_entry(StoreId, StreamId, {1, deleted})
+                     reckon_db_streams:delete(StoreId, StreamId))
     after
         meck:unload(khepri)
     end,
 
-    %% The whole old life goes back into the tree: refused, it was deleted.
+    %% The caller was told the outcome is unclear, and that is what stands.
+    ?assertEqual({1, {delete_intent, Life}},
+                 reckon_db_life_anchor:entry(StoreId, StreamId)),
+
+    %% The next start asks the tree. The life is gone, so the delete landed.
+    restart_anchor(StoreId, DataDir),
+    ?assertEqual({1, deleted}, reckon_db_life_anchor:entry(StoreId, StreamId)),
+
+    %% And the whole old life put back into the tree is refused.
     ok = khepri:put(StoreId, reckon_db_chain_watermark:path(StreamId), Seal),
     ok = khepri:put(StoreId, reckon_db_chain_watermark:life_path(StreamId),
                     Life),
@@ -814,10 +823,42 @@ a_delete_that_lands_after_the_error_is_not_undone(Config) ->
                  reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)),
     ok.
 
+%% The start pass is the only resolution there is now, so it must not decide on
+%% a read that FAILED: it used to read that as "no life", tombstone the honest
+%% stream for good, and let an `unknown` stand in for the anchor's state, which
+%% crashed the very start it was trying to protect.
+a_start_pass_that_cannot_read_the_tree_leaves_the_intent(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    DataDir = proplists:get_value(data_dir, Config),
+    StreamId = sid(<<"start-unreadable">>),
+    LifePath = reckon_db_chain_watermark:life_path(StreamId),
+    start_anchor(Config),
+    Life = create(StoreId, StreamId),
+    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1, Life),
+    await_entry(StoreId, StreamId, {1, {delete_intent, Life}}),
+    reckon_db_life_anchor:stop(StoreId),
+
+    meck:new(khepri, [passthrough, no_link]),
+    try
+        meck:expect(khepri, get,
+                    fun(_S, P) when P =:= LifePath -> {error, timeout};
+                       (S, P) -> meck:passthrough([S, P])
+                    end),
+        {ok, _} = reckon_db_life_anchor:start_link(StoreId, DataDir)
+    after
+        meck:unload(khepri)
+    end,
+
+    %% Nothing decided: the intent stands, and it accepts its own life.
+    ?assertEqual({1, {delete_intent, Life}},
+                 reckon_db_life_anchor:entry(StoreId, StreamId)),
+    ok = reckon_db_life_anchor:check(StoreId, StreamId, 1, Life),
+    ok.
+
 %% Jupiter J23-4. The witness's life is what THIS NODE recorded, not the tree's
 %% binding. A tree writer who breaks the seal's MAC made binding/2 answer
-%% undefined, so the intent carried no life at all; once the seal was put back
-%% any life at that generation passed check/4 - the J22-1 shape a second time.
+%% undefined, so the intent carried no life at all - and an intent with no life
+%% accepts any life at its generation.
 a_broken_seal_does_not_blind_the_delete_witness(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     StreamId = sid(<<"witness-broken-seal">>),
@@ -834,19 +875,21 @@ a_broken_seal_does_not_blind_the_delete_witness(Config) ->
         meck:unload(khepri)
     end,
 
-    %% The life this node recorded is what the intent stood for, so the resolve
-    %% puts it back...
-    await_entry(StoreId, StreamId, {1, Life}),
-    %% ... and a different life at that generation is refused, not adopted.
+    %% The intent carries the life this node recorded...
+    ?assertEqual({1, {delete_intent, Life}},
+                 reckon_db_life_anchor:entry(StoreId, StreamId)),
+    %% ... so a different life at that generation is refused while it stands.
     Other = crypto:strong_rand_bytes(16),
     {refuse, Violation} = reckon_db_life_anchor:check(StoreId, StreamId, 1,
                                                       Other),
     ?assertEqual(life_gen_mismatch, detail(Violation)),
     ok.
 
-%% Terra T23-5. A writer that dies between whereis and the call used to exit
-%% the caller. delete/2's spec is ok | {error, _}, and a gateway worker must not
-%% die for it: the durable write answers unavailable, and the delete refuses.
+%% Terra T23-5, kept under the round-24 ruling. A writer that dies between
+%% whereis and the call used to exit the caller, and the ruling says an unclear
+%% delete ANSWERS the caller: delete/2's spec is ok | {error, _}, and a gateway
+%% worker must not die for it. The durable write answers unavailable, and the
+%% delete refuses loudly.
 a_dying_writer_answers_unavailable_instead_of_exiting(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     StreamId = sid(<<"dying-writer">>),
@@ -862,28 +905,6 @@ a_dying_writer_answers_unavailable_instead_of_exiting(Config) ->
     start_dying_writer(StoreId),
     ?assertEqual({error, {life_anchor_unavailable, StreamId}},
                  reckon_db_streams:delete(StoreId, StreamId)),
-    ok.
-
-%% ... and the failed-delete resolution never waits for the writer: it is a
-%% cast, so a suspended anchor cannot hold the delete's caller for 30 s.
-a_suspended_writer_does_not_block_the_resolve(Config) ->
-    StoreId = proplists:get_value(store_id, Config),
-    StreamId = sid(<<"suspended-writer">>),
-    start_anchor(Config),
-    _Life = create(StoreId, StreamId),
-
-    Pid = whereis(anchor_name(StoreId)),
-    ok = sys:suspend(Pid),
-    try
-        {Micros, ok} =
-            timer:tc(fun() ->
-                             reckon_db_life_anchor:resolve_when_decided(StoreId,
-                                                                        StreamId)
-                     end),
-        ?assert(Micros < 2000000)
-    after
-        sys:resume(Pid)
-    end,
     ok.
 
 %%====================================================================

@@ -1013,13 +1013,25 @@ has a test that fails on `84db8c9` and passes now.
   around both. Each snapshot in a list now passes the same checks `load_at/3`
   applies, and one that fails is dropped with telemetry rather than returned.
 
-### Fixed: the round-23 review, seven bugs in the failed-delete cleanup
+### Fixed: the round-23 review, and the delete's unclear outcome
 
-Jupiter and Terra, on `a329134..1fab932`. Every item was required; each fix
-has a test that fails on `1fab932` and passes now. Four of the seven sat in
-the failed-delete cleanup that the round-22 fix added, and that path changed
-shape rather than being patched four times: nothing in the caller decides what
-an ambiguous delete did any more.
+Jupiter and Terra, on `a329134..1fab932`, found seven things. Four are fixed
+here, each with a test that fails on `1fab932` and passes now. The other three
+sat in the failed-delete cleanup that the round-22 fix added, and that cleanup
+is GONE: a delete whose outcome is unclear answers its error to the caller and
+is settled only at the next start, where the tree decides. Nothing runs
+alongside the delete command.
+
+That last part is the shape of this release, and it is a deliberate cut: three
+review rounds went into a second opinion that read the tree after an ambiguous
+command, and a second opinion racing the command is what kept producing edge
+cases. An error from the delete transaction is answered as it is, loudly
+(`[reckon, db, delete, outcome_unclear]`), and the intent already on the
+anchor's disk is what the next start resolves: no life in the tree is a delete
+that landed (recorded as the tombstone), the life still there is one that did
+not (the life goes back). While the intent stands it accepts only its own life
+at its own generation, so an honest stream keeps serving and a different life
+at that generation is refused.
 
 - **A broken seal turned a forgery into "legacy data"** (Jupiter J23-1, Terra
   T23-1). "Must carry a MAC" was decided by `binding/2`, which answers
@@ -1030,33 +1042,12 @@ an ambiguous delete did any more.
   anchor answers for EVERY snapshot on an integrity store now, and a stream
   this node holds a life for cannot have "no seal": that is a violation, not a
   legacy stream.
-- **A failed read was read as "no life in the tree"** (Jupiter J23-2, Terra
-  T23-2). `life/2` and `binding/2` folded any failed `khepri:get` into
-  `{ok, undefined}`, and the failed-delete resolution took that as "the delete
-  landed": it recorded a TOMBSTONE and refused an untouched, honest stream
-  with `life_gen_deleted` for good, because a restart resolves intents and
-  never tombstones. Only absence is `{ok, undefined}` now (`node_not_found`);
-  every other error is `{error, Reason}`, and a resolution that cannot read
-  the tree decides nothing.
-- **The resolution raced the ambiguous command** (Terra T23-3). A transaction
-  that answered an error can still land AFTER the resolution read the life, so
-  the life was written back and the delete then landed under it. The
-  resolution runs in the anchor's own process now, after `khepri:fence/1` -
-  the barrier that returns once every command the leader received is applied -
-  and where the outcome is still unknown it retries (five attempts, 40 ms
-  apart) before leaving the intent for the next start, loudly.
 - **The witness forgot the life when the seal did not verify** (Jupiter
   J23-4). `delete_witness/2` took the life from a verifying binding, so a seal
-  with a broken MAC made the intent carry no life at all, and once the seal
-  was put back any life at that generation passed `check/4` - the J22-1 shape
-  a second time. The fallback is what THIS NODE recorded for the stream, which
-  a tree writer cannot break.
-- **A slow or dying anchor exited the delete's caller** (Terra T23-5). The
-  durable intent and the resolution were `gen_server:call`s with a 30 s
-  timeout: an anchor that timed out, or died between `whereis` and the call,
-  exited a caller whose spec is `ok | {error, _}`. The write answers
-  `{error, life_anchor_unavailable}` now, and the resolution is a cast, so the
-  caller never waits on the anchor after the transaction.
+  with a broken MAC made the intent carry no life at all, and an intent with no
+  life accepts ANY life at its generation - the J22-1 shape a second time. The
+  fallback is what THIS NODE recorded for the stream, which a tree writer
+  cannot break.
 - **`list/2` answered `{ok, []}` while `load/2` refused** (Jupiter J23-3). An
   anchor outage reached the gateway's `list_snapshots` caller as "this stream
   has no snapshots". The anchor's answer is about the stream, so it refuses
@@ -1067,11 +1058,26 @@ an ambiguous delete did any more.
   whenever the store had streams, even with nothing recorded, which is every
   start of every node. It announces only what it actually recorded now.
 
-One bug in this round's own work, fixed before handoff: `seal_generation/2`
-had no clause for the new `{error, _}` from `binding/2` and would have crashed
-the snapshot load path on an unreadable tree. A stream whose life the tree
-will not name is refused (`life_unreadable`), and `load/2` and `load_at/3` say
-so in their specs (`load_error()`).
+Two things came with them, and both are needed by the item above rather than
+being review findings of their own:
+
+- **Only ABSENCE is `{ok, undefined}`.** `life/2` and `binding/2` folded any
+  failed `khepri:get` into "this stream has no life", so a tree that could not
+  be asked decided a delete and decided a snapshot. Every real error is
+  `{error, Reason}` now, `node_not_found` is the one absence, and the start
+  pass leaves an intent it cannot read the tree for instead of tombstoning it.
+- **A slow or dying anchor no longer exits the delete's caller.** The durable
+  intent's write was a `gen_server:call` with a 30 s timeout against a caller
+  whose spec is `ok | {error, _}`: a timeout, or an anchor that died between
+  `whereis` and the call, exited a gateway worker. It answers
+  `{error, life_anchor_unavailable}` now, and the delete refuses loudly, which
+  is what "the caller is told" means for an anchor that is not there.
+
+One bug in this round's own work, found and fixed before handoff:
+`seal_generation/2` had no clause for the `{error, _}` from `binding/2` and
+would have crashed the snapshot load path on an unreadable tree. A stream whose
+life the tree will not name is refused (`life_unreadable`), and `load/2` and
+`load_at/3` say so in their specs (`load_error()`).
 
 ### Known residual in this release, named
 
@@ -1116,12 +1122,14 @@ every targeted read of such a stream, in one ETS lookup.
    longer a window is the two that were bugs: a committed tombstone is never
    resolved as an intent, and a delete whose transaction failed puts the life
    back before it answers.
-6. An intent still standing after the resolution's five fenced attempts. The
-   delete may or may not have landed, and until the next start resolves it
-   against a tree that has had all the time it needs, the intent accepts its
-   own life at its own generation and refuses anything else - the honest
-   in-flight answer, and a loud one (a warning and
-   `[reckon, db, life_anchor, intent_unresolved]`).
+6. An intent left standing by a delete whose transaction answered an error.
+   The caller was told, and nothing else runs. Until the next store start
+   decides it, the intent accepts its own life at its own generation and
+   refuses any other - so if the command DID land, the stream it deleted is
+   still served on this node until that start records the tombstone, and a
+   restore of that same life's data is not refused before it. The same window
+   is why a delete that did NOT land keeps looking in flight: it is undone at
+   that start and not before.
 
 Reckon-db's `read_all_global/3`, `read_by_event_types/3`, `read_by_tags/3` and
 `read_by_metadata/3` verify no MAC at all; that predates this range and is

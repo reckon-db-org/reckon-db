@@ -35,7 +35,6 @@
          check/4,
          record_mint/4,
          record_delete_intent/4,
-         resolve_when_decided/2,
          record_deleted/3,
          life_pass/1,
          log_path/1,
@@ -51,12 +50,6 @@
 -define(COMPACT_FACTOR, 2).
 -define(FSYNC_INTERVAL_MS, 5).
 -define(WRITER_CALL_TIMEOUT, 30000).
-
-%% A delete whose transaction answered an error is resolved by the writer,
-%% after a fence, on this cadence: five attempts 40 ms apart covers a leader
-%% change; past that the intent is left for the next start.
--define(RESOLVE_ATTEMPTS, 5).
--define(RESOLVE_RETRY_MS, 40).
 
 -record(state, {
     store_id :: atom(),
@@ -197,36 +190,18 @@ record_mint(StoreId, StreamId, Gen, Life) ->
 %% Named and not covered: a delete that commits before the intent reached the
 %% disk, and an intent resolved after a tree writer restored the life - both
 %% drop the intent and leave the stream readable.
+%%
+%% A delete whose transaction answers an error is answered to the caller as it
+%% is, and settled HERE, at the next start, where the tree decides (Raf's
+%% ruling for 5.12.0, round 24). Nothing runs alongside the delete command: a
+%% second opinion racing an ambiguous command is what put three review rounds
+%% into this one path.
 -spec record_delete_intent(atom(), binary(), non_neg_integer(),
                            binary() | undefined) ->
         ok | {error, life_anchor_unavailable}.
 record_delete_intent(StoreId, StreamId, Gen, Life) ->
     sync_write(StoreId, StreamId, tombstone_gen(StoreId, StreamId, Gen),
                {delete_intent, Life}).
-
-%% @doc Ask the anchor to resolve an intent whose delete transaction answered
-%% an error.
-%%
-%% A transaction can fail for honest reasons - a Ra timeout, a leader change -
-%% and the intent is already on the disk by then. An error does NOT mean the
-%% delete did not commit: a timeout is ambiguous and the command can still
-%% land, so writing the life back unconditionally left a deleted stream with a
-%% life in the anchor and its restoration accepted (Terra T22-4).
-%%
-%% It is a CAST, and the waiting happens HERE: the caller never blocks on the
-%% anchor after the transaction, so a slow or dying anchor cannot take the
-%% delete's caller down (Terra T23-5), and nothing in the caller races the
-%% ambiguous command. The writer fences first - khepri's barrier, which returns
-%% once every command the leader has received is applied - and only then reads
-%% the tree, so the command has been decided before the answer is taken (Terra
-%% T23-3). Where the outcome is still unknown it retries, and after the last
-%% attempt the intent is left standing for the next start.
--spec resolve_when_decided(atom(), binary()) -> ok.
-resolve_when_decided(StoreId, StreamId) ->
-    case whereis(name(StoreId)) of
-        undefined -> ok;
-        _Pid -> gen_server:cast(name(StoreId), {resolve_delete, StreamId})
-    end.
 
 %% @doc The tombstone, written AFTER the delete commits.
 -spec record_deleted(atom(), binary(), non_neg_integer()) -> ok.
@@ -311,8 +286,6 @@ handle_call(rebuild, _From, State) ->
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_call}, State}.
 
-handle_cast({resolve_delete, StreamId}, State) ->
-    {noreply, resolve_after_fence(State, StreamId, ?RESOLVE_ATTEMPTS)};
 handle_cast({adopt, StreamId, Gen, Value}, State) ->
     case insert(State#state.store_id, StreamId, Gen, Value) of
         true ->
@@ -326,8 +299,6 @@ handle_cast(_Msg, State) ->
 
 handle_info(flush, State) ->
     {noreply, maybe_compact(flush(State#state{timer = undefined}))};
-handle_info({resolve_delete, StreamId, Attempts}, State) ->
-    {noreply, resolve_after_fence(State, StreamId, Attempts)};
 handle_info(_Info, State) ->
     {noreply, State}.
 
@@ -642,9 +613,15 @@ resolve_intents(#state{store_id = StoreId} = State) ->
     lists:foldl(fun(Entry, Acc) -> resolve_intent(StoreId, Acc, Entry) end,
                 State, Intents).
 
-%% @private
+%% @private An intent whose tree cannot be read is left where it is and the
+%% pass carries on with the state it had: reading the failure as "no life"
+%% tombstoned an honest stream for good, and letting an `unknown` stand in for
+%% the state crashed the start (Jupiter J23-2, Terra T23-2).
 resolve_intent(StoreId, Acc, {StreamId, Gen, {delete_intent, Life}}) ->
-    resolve_entry(StreamId, Gen, Life, Acc, StoreId);
+    case resolve_entry(StreamId, Gen, Life, Acc, StoreId) of
+        unknown -> Acc;
+        Resolved -> Resolved
+    end;
 resolve_intent(_StoreId, Acc, _Entry) ->
     Acc.
 
@@ -672,61 +649,6 @@ resolve_entry(StreamId, Gen, Life, Acc, StoreId) ->
             Acc;
         {error, _Reason} ->
             unknown
-    end.
-
-%% @private Resolve one stream, but only once the cluster has nothing in
-%% flight: `khepri:fence/1' returns when every command the leader received is
-%% applied, so a delete whose reply became an error has been decided by the
-%% time the tree is read. Without it the read could see the life that the
-%% command was about to remove, write it back, and serve the restored life
-%% after the command landed (Terra T23-3).
-resolve_after_fence(#state{store_id = StoreId} = State, StreamId, Attempts) ->
-    case fenced(StoreId) of
-        true -> resolve_or_retry(State, StreamId, Attempts);
-        false -> retry_resolution(State, StreamId, Attempts)
-    end.
-
-%% @private
-fenced(StoreId) ->
-    try khepri:fence(StoreId) of
-        ok -> true;
-        _ -> false
-    catch
-        _:_ -> false
-    end.
-
-%% @private
-resolve_or_retry(State, StreamId, Attempts) ->
-    case resolve_one(State, StreamId) of
-        unknown -> retry_resolution(State, StreamId, Attempts);
-        Resolved -> Resolved
-    end.
-
-%% @private A resolution that is still unknown is retried a bounded number of
-%% times. After that the intent stands: it accepts its own life at its own
-%% generation, which is the honest in-flight answer, and the next start
-%% resolves it against a tree that has had all the time it needs. Leaving it is
-%% loud, because the window it leaves open is a restored life being served.
-retry_resolution(#state{path = Path} = State, StreamId, 0) ->
-    logger:warning("life anchor ~ts: the delete intent for stream ~p could not "
-                   "be resolved against the tree, and is left for the next "
-                   "start to resolve", [Path, StreamId]),
-    telemetry:execute([reckon, db, life_anchor, intent_unresolved], #{},
-                      #{path => Path, stream_id => StreamId}),
-    State;
-retry_resolution(State, StreamId, Attempts) ->
-    _ = erlang:send_after(?RESOLVE_RETRY_MS, self(),
-                          {resolve_delete, StreamId, Attempts - 1}),
-    State.
-
-%% @private One stream, resolved on demand - the same decision the start pass
-%% makes for every intent it finds.
-resolve_one(#state{store_id = StoreId} = State, StreamId) ->
-    case lookup(StoreId, StreamId) of
-        {Gen, {delete_intent, Life}} ->
-            resolve_entry(StreamId, Gen, Life, State, StoreId);
-        _ ->
-            State
     end.
 
 %% @private
