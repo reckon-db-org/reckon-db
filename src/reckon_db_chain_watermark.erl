@@ -226,6 +226,15 @@ mint_watermark(StoreId, StreamId) ->
 %% into an empty path. A map or a bare integer somebody else put there is a
 %% watermark this append may not use, and it is answered with the same refusal
 %% a later append would get.
+%%
+%% The version answered for an EXISTING map is the version field of whatever
+%% sits at the path, and nothing here verifies that map first: the seal may be
+%% junk, and the answer is the version it claims. That is safe because the
+%% caller only uses it to place its own events, and every read and every later
+%% append refuses an unverified seal by name (`unauthenticated_watermark`,
+%% `watermark_mac_invalid`); the garbage never becomes a claim the store
+%% makes. Verifying here instead would mean reading the key and running a MAC
+%% inside the transaction, which crypto cannot do (see below).
 mint_tx(StreamId, Life, Seal) ->
     case khepri_tx:get(path(StreamId)) of
         {error, ?khepri_error(node_not_found, _)} ->
@@ -444,14 +453,29 @@ start_authenticated(_Scan, _ChainStart) -> false.
 
 %% @private The watermark names the start rather than trailing it. An
 %% authenticated start with no watermark behind it, or one claiming a version
-%% above the start, is still evidence: a seal at or below the start is what the
-%% migration itself writes, and an old-line bare value is the original chain
-%% start, which is at or below it.
-watermark_honours(#{watermark := Watermark}, ChainStart) ->
+%% above the start, is still evidence.
+%%
+%% How far BELOW the start a value may sit depends on how the start was
+%% proven, and the difference is not cosmetic:
+%%
+%% - Genesis-proven: `setup_integrity/3' mints the watermark at newest + 1 and
+%%   the stamped event is written at that same version, so the old line's bare
+%%   value EQUALS the start. Nothing honest writes one below it, and honouring
+%%   one lets a writer who deleted a watermark suppress the store's deletion
+%%   evidence by putting a smaller number in its place (Terra r16).
+%% - Cut: a scavenge leaves the watermark where it was while the surviving
+%%   start moves up, so below the start is the honest shape there.
+watermark_honours(#{watermark := Watermark} = Scan, ChainStart) ->
     case watermark_version(Watermark) of
-        {ok, Version} -> Version =< ChainStart;
+        {ok, Version} -> honours_start(Scan, Version, ChainStart);
         error -> false
     end.
+
+%% @private Equality on the genesis path, at-or-below on the cut path.
+honours_start(#{genesis := {ok, ChainStart}}, Version, ChainStart) ->
+    Version =:= ChainStart;
+honours_start(_Scan, Version, ChainStart) ->
+    Version =< ChainStart.
 
 %% @private
 watermark_version({sealed, Version}) when is_integer(Version) -> {ok, Version};
@@ -536,7 +560,7 @@ seal_at(Scan, Version) ->
     Life = plan_life(Scan),
     V2From = maps:get(newest, Scan) + 1,
     Seal = sealed_record(StoreId, StreamId, Life, Version, V2From),
-    Writes = [{life_path(StreamId), Life} | boundary_writes(StoreId, Scan)],
+    Writes = [{life_path(StreamId), Life} | boundary_writes(StoreId, Scan, Life)],
     #{kind => seal, stream_id => StreamId, version => Version,
       expected => maps:get(raw, Scan),
       writes => Writes ++ [{path(StreamId), Seal}]}.
@@ -547,25 +571,28 @@ plan_life(_Scan) -> new_life().
 
 %% @private Where a cut was authenticated by something other than a boundary
 %% the store already holds, the migration mints the boundary in the same
-%% transaction, so later reads anchor at the cut.
+%% transaction, so later reads anchor at the cut. The boundary names the life
+%% this plan writes, not the one the stream holds now: both land in one
+%% transaction, and a boundary minted under the old life would stop verifying
+%% the instant the new one did.
 boundary_writes(StoreId, #{stream_id := StreamId, cut := {ok, ChainStart},
-                           chain_start := {ok, ChainStart}}) ->
+                           chain_start := {ok, ChainStart}}, Life) ->
     case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
         {ok, Boundary} when is_map(Boundary) -> [];
-        _ -> boundary_write(StoreId, StreamId, ChainStart)
+        _ -> boundary_write(StoreId, StreamId, ChainStart, Life)
     end;
-boundary_writes(_StoreId, _Scan) ->
+boundary_writes(_StoreId, _Scan, _Life) ->
     [].
 
 %% @private
-boundary_write(StoreId, StreamId, ChainStart) ->
+boundary_write(StoreId, StreamId, ChainStart, Life) ->
     case carried_hash(StoreId, StreamId, ChainStart) of
         undefined ->
             [];
         Carried ->
             [{reckon_db_scavenge_boundary:boundary_path(StreamId),
               reckon_db_scavenge_boundary:boundary_record(
-                StoreId, StreamId, ChainStart, Carried)}]
+                StoreId, StreamId, Life, ChainStart, Carried)}]
     end.
 
 %% @private The hash the event at `Version' carries in its predecessor field.

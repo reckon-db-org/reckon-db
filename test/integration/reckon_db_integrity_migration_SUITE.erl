@@ -43,7 +43,8 @@
     a_cut_does_not_cover_events_that_still_survive/1,
     a_cut_with_a_watermark_above_the_survivors_is_refused/1,
     an_honest_old_line_upgrade_seals_its_legacy_streams/1,
-    a_junk_watermark_is_refused_by_name/1
+    a_junk_watermark_is_refused_by_name/1,
+    a_bare_watermark_below_a_genesis_start_is_evidence/1
 ]).
 
 -define(KEY_ENV, "RECKON_DB_MIGRATION_TEST_KEY").
@@ -71,7 +72,8 @@ all() ->
         a_cut_does_not_cover_events_that_still_survive,
         a_cut_with_a_watermark_above_the_survivors_is_refused,
         an_honest_old_line_upgrade_seals_its_legacy_streams,
-        a_junk_watermark_is_refused_by_name
+        a_junk_watermark_is_refused_by_name,
+        a_bare_watermark_below_a_genesis_start_is_evidence
     ].
 
 suite() ->
@@ -829,6 +831,43 @@ an_honest_old_line_upgrade_seals_its_legacy_streams(Config) ->
     ?assertEqual(3, length(events(StoreId, LegacyId))),
     ?assertEqual(3, length(events(StoreId, WateredId))).
 
+%% @doc GIVEN an old-line stream whose bare watermark sits BELOW a
+%%           genesis-proven chain start, and a chain-less stream with no
+%%           watermark
+%%      WHEN the store starts and the migration scans
+%%      THEN the chain-bearing stream is sealed from its own proof, and the
+%%           chain-less stream is NOT sealed: the value below the start is
+%%           evidence, because the old line cannot write one
+%%
+%% Terra r16, observation. `setup_integrity/3' mints the watermark at
+%% newest + 1 and stamps the first event at that same version, so on the
+%% genesis path the old line's bare value EQUALS the start. Honouring a
+%% smaller number lets a writer who deleted a watermark suppress the store's
+%% deletion evidence by putting a lower one in its place, and the streams that
+%% evidence exists to protect are sealed over. On the cut path a scavenge
+%% leaves the watermark where it was, so below the start stays honest there.
+a_bare_watermark_below_a_genesis_start_is_evidence(Config) ->
+    {StoreId, DataDir} = store(Config),
+    ChainId = stream(<<"below-start-chain">>),
+    ChainlessId = stream(<<"below-start-chainless">>),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, 5} = append_events(StoreId, ChainId, 6),
+    ok = write_legacy(StoreId, ChainlessId, 3),
+    ok = make_old_line_chain_from(StoreId, ChainId, 3, 6, 2),
+    ok = make_pre_integrity(StoreId, ChainlessId, 3, undefined),
+    ok = forget_migration(StoreId),
+    ok = forget_anchor(DataDir),
+    ok = stop_store(StoreId),
+
+    ok = start_store(StoreId, DataDir, enabled),
+    ?assertMatch({ok, {sealed, 3}},
+                 reckon_db_chain_watermark:lookup(StoreId, ChainId)),
+    ?assertMatch({ok, undefined},
+                 reckon_db_chain_watermark:lookup(StoreId, ChainlessId)),
+    ?assertMatch({error, {integrity_violation, #{kind := missing_integrity}}},
+                 read_raw(StoreId, ChainlessId)).
+
 %% @doc GIVEN a junk MAC map at the watermark path
 %%      WHEN the store starts
 %%      THEN that stream alone is refused, by a reason that names the junk
@@ -884,6 +923,30 @@ make_old_line_chain(StoreId, StreamId, N) ->
     ok = khepri:delete(StoreId, life_path(StreamId)),
     ok = khepri:put(StoreId, watermark_path(StreamId), 0),
     ok.
+
+%% @private A stream whose events below `Start' predate integrity and whose
+%% events from `Start' carry a scheme-1 chain beginning at the genesis
+%% predecessor - the shape the 5.11 line leaves when integrity was enabled
+%% part-way through a stream's life.
+make_old_line_chain_from(StoreId, StreamId, Start, N, Watermark) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    ?assert(is_binary(Key)),
+    _Tip = lists:foldl(
+             fun(Version, PrevTip) ->
+                     {ok, Event0} = khepri:get(StoreId,
+                                               event_path(StreamId, Version)),
+                     Bare = Event0#event{prev_event_hash = PrevTip,
+                                         mac = undefined, signature = undefined},
+                     Mac = reckon_gater_integrity:compute_event_mac(Bare, Key),
+                     Event = Bare#event{mac = Mac},
+                     ok = khepri:put(StoreId, event_path(StreamId, Version), Event),
+                     reckon_gater_integrity:compute_chain_hash(Event, PrevTip)
+             end, reckon_gater_integrity:genesis_prev_hash(),
+             lists:seq(Start, N - 1)),
+    lists:foreach(fun(V) -> ok = clear_integrity_fields(StoreId, StreamId, V) end,
+                  lists:seq(0, Start - 1)),
+    ok = khepri:delete(StoreId, life_path(StreamId)),
+    ok = khepri:put(StoreId, watermark_path(StreamId), Watermark).
 
 %% @private A stream as it looked before integrity existed: no chain fields on
 %% any event, no life token, and either no watermark at all or the old bare

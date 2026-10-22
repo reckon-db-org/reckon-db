@@ -758,6 +758,37 @@ Jupiter and Terra, on `a329134..c382e8b`. No API changes.
   chain-bearing stream as well as a chain-less one, and every MAC compared
   against a value read out of the tree is length-checked first.
 
+### Fixed: the round-16 review, two forged anchors and one suppressed evidence
+
+Jupiter and Terra, on `a329134..d30a867`. No API changes.
+
+- **The event at the seal was checked by its predecessor FIELD, not its
+  MAC.** The field is a tree node, so a writer with no key could put the
+  genesis value into a mid-chain event and have the store honour the whole
+  region below it, serving stripped and tampered events back as `ok`
+  (Jupiter JR5, confirmed on Terra's probes). The event at the seal is
+  verified by its MAC now, exactly as the read loop verifies an event sitting
+  on the genesis tip: one MAC, O(1), with the context its own scheme needs.
+- **A scavenge boundary was not bound to its store or its life.** The MAC
+  covered the stream, the version and the hash, so a boundary saved from an
+  earlier life of the same stream - delete the stream, re-create it, paste the
+  old boundary and the old seal back over a stripped prefix - verified again
+  and anchored a region nothing could vouch for (Jupiter JR6). The same gap
+  let a boundary be copied between two stores that share an integrity key. The
+  MAC binds the store id and the life token now, and the boundary is deleted
+  inside the same transaction as the stream, so a crash between the two can no
+  longer leave one behind for a re-created stream.
+- **A bare watermark BELOW a genesis-proven chain start was honoured.** A
+  genesis-proven start is minted at exactly its own version (`setup_integrity/3`
+  writes the watermark at newest + 1, and the stamped event lands at that
+  version), so the old line cannot produce a smaller value. Honouring one let a
+  writer who deleted a watermark suppress the store's deletion evidence by
+  putting a lower number in its place, and the streams that evidence exists to
+  protect were then sealed over (Terra). Equality is required on the genesis
+  path now; at-or-below stays the rule on the cut path, where a scavenge
+  legitimately leaves the watermark where it was while the surviving start
+  moves up.
+
 ### Known residual in this release, named
 
 An attacker who saves an earlier life's sealed watermark and life token

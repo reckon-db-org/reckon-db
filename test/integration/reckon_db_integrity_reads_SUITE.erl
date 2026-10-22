@@ -52,7 +52,11 @@
     swapped_two_adjacent_events_caught/1,
     a_replayed_life_with_a_stripped_tail_refuses_a_targeted_read/1,
     a_replayed_watermark_on_a_mid_chain_event_refuses_its_legacy_region/1,
-    a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region/1
+    a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region/1,
+    a_forced_genesis_field_does_not_excuse_a_stripped_prefix/1,
+    a_replayed_boundary_does_not_anchor_a_new_life/1,
+    a_boundary_copied_from_another_store_does_not_anchor/1,
+    a_delete_takes_the_scavenge_boundary_with_it/1
 ]).
 
 %% Verify mode matrix
@@ -119,7 +123,11 @@ groups() ->
             swapped_two_adjacent_events_caught,
             a_replayed_life_with_a_stripped_tail_refuses_a_targeted_read,
             a_replayed_watermark_on_a_mid_chain_event_refuses_its_legacy_region,
-            a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region
+            a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region,
+            a_forced_genesis_field_does_not_excuse_a_stripped_prefix,
+            a_replayed_boundary_does_not_anchor_a_new_life,
+            a_boundary_copied_from_another_store_does_not_anchor,
+            a_delete_takes_the_scavenge_boundary_with_it
         ]},
         {verify_modes, [sequence], [
             skip_legacy_passes_legacy_events_through,
@@ -819,6 +827,17 @@ clear_integrity_fields(StoreId, StreamId, Version) ->
 event_path(StreamId, Version) ->
     reckon_db_stream_path:event_path(StreamId, pad_version(Version, ?VERSION_PADDING)).
 
+%% @private
+boundary_path(StreamId) ->
+    reckon_db_scavenge_boundary:boundary_path(StreamId).
+
+%% @private The chain hash the event at `Version' carries in its predecessor
+%% field - what a scavenge at that version records.
+carried_hash(StoreId, StreamId, Version) ->
+    {ok, #event{prev_event_hash = Carried}} =
+        khepri:get(StoreId, event_path(StreamId, Version)),
+    Carried.
+
 %% A store with integrity disabled bypasses verification entirely,
 %% regardless of opts.
 integrity_disabled_store_bypasses_verification(Config) ->
@@ -919,10 +938,143 @@ a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region(Config) ->
                           #{context := #{detail := legacy_region_unexplained}}}},
                  reckon_db_streams:read(StoreId, StreamId, 1, 1, forward)).
 
+%% @doc GIVEN a replayed sealed watermark over a stripped and tampered prefix,
+%%           with the event AT the limit made to CARRY the genesis predecessor
+%%           in its field while its MAC still covers the real one
+%%      WHEN a read covers the stripped prefix
+%%      THEN it refuses: the predecessor field is tree data, and the MAC over
+%%           that event is what a writer without the key cannot produce
+%%
+%% Jupiter r16 JR5. The check at the limit compared the prev FIELD and nothing
+%% else, so writing the genesis value into a mid-chain event's prev field made
+%% the store honour the region below it and hand a tampered event back as ok.
+a_forced_genesis_field_does_not_excuse_a_stripped_prefix(Config) ->
+    {StoreId, Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"forced-genesis-field">>),
+    write_n_events(StoreId, StreamId, 10),
+
+    OldLife = crypto:strong_rand_bytes(16),
+    ok = khepri:put(StoreId, life_path(StreamId), OldLife),
+    ok = khepri:put(StoreId, watermark_path(StreamId),
+                    sealed_watermark(Key, StoreId, StreamId, OldLife, 3)),
+    ok = clear_integrity_fields(StoreId, StreamId, 0),
+    ok = clear_integrity_fields(StoreId, StreamId, 1),
+    ok = clear_integrity_fields(StoreId, StreamId, 2),
+    ok = rewrite_event(StoreId, StreamId, 1, #{tampered => 1}),
+    Genesis = reckon_gater_integrity:genesis_prev_hash(),
+    ok = tamper_event(StoreId, StreamId, 3,
+                      fun(E) -> E#event{prev_event_hash = Genesis} end),
+
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := legacy_region_unexplained}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
+
+%% @doc GIVEN a scavenge boundary the store wrote in an EARLIER life of this
+%%           stream, replayed after the stream was deleted and re-created,
+%%           over a stripped prefix below it
+%%      WHEN a read covers that prefix
+%%      THEN it refuses: the boundary MAC binds the life it was written under
+%%
+%% Jupiter r16 JR6. mac(Key, StreamId, Version, PrevHash) bound neither the
+%% store nor the life, so a boundary from an older life of the same stream
+%% verified for the new one and anchored a region nothing could vouch for.
+a_replayed_boundary_does_not_anchor_a_new_life(Config) ->
+    {StoreId, Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"replayed-boundary">>),
+    write_n_events(StoreId, StreamId, 10),
+    {ok, OldLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
+
+    ok = khepri:put(StoreId, watermark_path(StreamId),
+                    sealed_watermark(Key, StoreId, StreamId, OldLife, 3)),
+    ok = reckon_db_scavenge_boundary:record(
+           StoreId, StreamId, 3, carried_hash(StoreId, StreamId, 3)),
+    {ok, OldBoundary} = reckon_db_scavenge_boundary:lookup(StoreId, StreamId),
+    {ok, OldWatermark} = khepri:get(StoreId, watermark_path(StreamId)),
+
+    %% A new life under the same stream id, then the old life's anchors
+    %% pasted back over a stripped prefix.
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    write_n_events(StoreId, StreamId, 10),
+    ok = khepri:put(StoreId, watermark_path(StreamId), OldWatermark),
+    ok = khepri:put(StoreId, boundary_path(StreamId), OldBoundary),
+    ok = clear_integrity_fields(StoreId, StreamId, 0),
+    ok = clear_integrity_fields(StoreId, StreamId, 1),
+    ok = clear_integrity_fields(StoreId, StreamId, 2),
+    ok = rewrite_event(StoreId, StreamId, 1, #{tampered => 1}),
+
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := legacy_region_unexplained}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
+
+%% @doc GIVEN a boundary copied from ANOTHER STORE that shares this store's
+%%           integrity key, over a stripped prefix below it
+%%      WHEN a read covers that prefix
+%%      THEN it refuses: the boundary MAC binds the store it was written in
+%%
+%% Jupiter r16 JR6, the second half of the same gap. A MAC over the stream,
+%% version and hash alone makes every boundary written in one store a valid
+%% anchor in any other store under the same key (the r14 req-4 class).
+a_boundary_copied_from_another_store_does_not_anchor(Config) ->
+    {StoreA, Key} = setup_integrity_store(Config),
+    OtherDir = filename:join(proplists:get_value(data_dir, Config), "other"),
+    ok = filelib:ensure_dir(filename:join(OtherDir, "dummy")),
+    StoreB = list_to_atom(atom_to_list(StoreA) ++ "_other"),
+    {ok, _} = khepri:start(OtherDir, StoreB),
+    persistent_term:put({reckon_db, integrity_key, StoreB}, Key),
+    persistent_term:put({reckon_db, integrity_enabled, StoreB}, true),
+    StreamId = reckon_db_test_helpers:sid(<<"copied-boundary">>),
+    try
+        write_n_events(StoreA, StreamId, 10),
+        write_n_events(StoreB, StreamId, 10),
+        ok = reckon_db_scavenge_boundary:record(
+               StoreB, StreamId, 3, carried_hash(StoreB, StreamId, 3)),
+        {ok, Foreign} = reckon_db_scavenge_boundary:lookup(StoreB, StreamId),
+        {ok, LifeA} = reckon_db_chain_watermark:life(StoreA, StreamId),
+
+        ok = khepri:put(StoreA, watermark_path(StreamId),
+                        sealed_watermark(Key, StoreA, StreamId, LifeA, 3)),
+        ok = khepri:put(StoreA, boundary_path(StreamId), Foreign),
+        ok = clear_integrity_fields(StoreA, StreamId, 0),
+        ok = clear_integrity_fields(StoreA, StreamId, 1),
+        ok = clear_integrity_fields(StoreA, StreamId, 2),
+        ok = rewrite_event(StoreA, StreamId, 1, #{tampered => 1}),
+
+        ?assertMatch(
+           {error, {integrity_violation,
+                    #{context := #{detail := legacy_region_unexplained}}}},
+           reckon_db_streams:read(StoreA, StreamId, 0, 3, forward))
+    after
+        catch khepri:stop(StoreB)
+    end.
+
+%% @doc GIVEN a stream deleted while it holds a scavenge boundary
+%%      WHEN the delete completes
+%%      THEN the boundary is gone with it, in the same transaction
+%%
+%% Jupiter r16 JR6, second half. The boundary used to be deleted AFTER the
+%% transaction: a crash between the two left a stale one behind, and a
+%% re-created stream under the same id then had an anchor its own life never
+%% wrote. This case pins the observable (no boundary survives the delete); the
+%% placement inside the transaction is what closes the crash window, and no
+%% test can kill a node between two halves of a transaction.
+a_delete_takes_the_scavenge_boundary_with_it(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"delete-takes-boundary">>),
+    write_n_events(StoreId, StreamId, 6),
+    ok = reckon_db_scavenge_boundary:record(
+           StoreId, StreamId, 2, carried_hash(StoreId, StreamId, 2)),
+    {ok, #{} = _Recorded} = reckon_db_scavenge_boundary:lookup(StoreId, StreamId),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+
+    ?assertEqual({ok, undefined},
+                 reckon_db_scavenge_boundary:lookup(StoreId, StreamId)),
+    ?assertMatch({error, _},
+                 khepri:get(StoreId, boundary_path(StreamId))).
+
 %%====================================================================
 %% Helpers
 %%====================================================================
-
 setup_integrity_store(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     Key = crypto:strong_rand_bytes(32),

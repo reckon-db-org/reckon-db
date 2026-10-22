@@ -21,11 +21,20 @@
 %% `version' is the oldest surviving version and `prev_hash' is the chain
 %% hash of the last removed event.
 %%
-%% The MAC is an HMAC-SHA256 under the store's integrity key over the stream,
-%% the version and the hash. Without it, an attacker who can delete events
-%% could simply write the boundary record too, and the anchor would prove
-%% nothing. A store with integrity disabled records no boundary at all: there
-%% is no key to bind it with and no chain being verified.
+%% The MAC is an HMAC-SHA256 under the store's integrity key over the STORE,
+%% the stream, the stream's LIFE TOKEN, the version and the hash. Without it,
+%% an attacker who can delete events could simply write the boundary record
+%% too, and the anchor would prove nothing. A store with integrity disabled
+%% records no boundary at all: there is no key to bind it with and no chain
+%% being verified.
+%%
+%% The store id and the life token are what stop a boundary being used where
+%% it was never written. Without them a boundary verifies in any store under
+%% the same key, and in any later life of the same stream: delete the stream,
+%% re-create it, paste the old boundary back over a stripped prefix, and the
+%% anchor that is supposed to explain the region below it explains a region
+%% nothing can vouch for (Jupiter r16 JR6). The life token is minted fresh for
+%% every new life, so a re-created stream cannot inherit one.
 %%
 %% == One boundary per stream ==
 %%
@@ -41,11 +50,11 @@
 
 -export([
     record/4,
-    boundary_record/4,
+    boundary_record/5,
     boundary_path/1,
     lookup/2,
     verify/3,
-    delete/2
+    life/2
 ]).
 
 -export_type([boundary/0]).
@@ -89,16 +98,18 @@ lookup(StoreId, StreamId) ->
 
 %% @doc Is this recorded boundary the authentic one for this store?
 %%
-%% Checks the MAC under the store's current integrity key. A boundary whose
-%% MAC does not verify is treated as absent: an anchor an attacker wrote is
-%% not an anchor.
+%% Checks the MAC under the store's current integrity key and this stream's
+%% current life. A boundary whose MAC does not verify is treated as absent: an
+%% anchor an attacker wrote, or one lifted from another store or from an
+%% earlier life of this stream, is not an anchor.
 -spec verify(atom(), binary(), boundary()) -> boolean().
 verify(StoreId, StreamId, #{version := Version, prev_hash := PrevHash,
                             mac := Mac})
         when is_integer(Version), is_binary(PrevHash), is_binary(Mac) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) ->
-            Expected = mac(Key, StreamId, Version, PrevHash),
+            Expected = mac(Key, StoreId, StreamId, life(StoreId, StreamId),
+                           Version, PrevHash),
             %% A malformed MAC in the tree is not a verified boundary, and
             %% must not raise: crypto:hash_equals refuses differing lengths.
             byte_size(Mac) =:= byte_size(Expected) andalso
@@ -109,11 +120,15 @@ verify(StoreId, StreamId, #{version := Version, prev_hash := PrevHash,
 verify(_StoreId, _StreamId, _Boundary) ->
     false.
 
-%% @doc Forget a stream's boundary, when the stream itself is deleted.
--spec delete(atom(), binary()) -> ok.
-delete(StoreId, StreamId) ->
-    _ = khepri:delete(StoreId, ?BOUNDARY_PATH ++ [StreamId]),
-    ok.
+%% @doc The stream's current life token, which the MAC binds.
+%%
+%% Read at verify time, so a boundary recorded in an earlier life stops
+%% verifying the moment the stream is re-created, whatever an attacker pastes
+%% back afterwards.
+-spec life(atom(), binary()) -> binary() | undefined.
+life(StoreId, StreamId) ->
+    {ok, Life} = reckon_db_chain_watermark:life(StoreId, StreamId),
+    Life.
 
 %%====================================================================
 %% Internal
@@ -135,15 +150,22 @@ record_if_deepest(StoreId, StreamId, Version, PrevHash) ->
 %% @doc The record a boundary write stores, MAC'd and ready to be put inside
 %% a caller's transaction (the migration mints a boundary where a snapshot
 %% authenticated a cut that no scavenge recorded).
--spec boundary_record(atom(), binary(), non_neg_integer(), binary()) ->
+%%
+%% The life is the life the caller's transaction will LEAVE on the stream, not
+%% necessarily the one it holds now: the migration seals a stream and writes
+%% its life token in the same transaction, so a boundary minted beside that
+%% seal has to name the new life or it stops verifying the moment the seal
+%% lands.
+-spec boundary_record(atom(), binary(), binary() | undefined,
+                      non_neg_integer(), binary()) ->
         #{version := non_neg_integer(), prev_hash := binary(),
           mac := binary()}.
-boundary_record(StoreId, StreamId, Version, PrevHash) ->
+boundary_record(StoreId, StreamId, Life, Version, PrevHash) ->
     Key = reckon_db_integrity_key:get(StoreId),
     true = is_binary(Key),
     #{version => Version,
       prev_hash => PrevHash,
-      mac => mac(Key, StreamId, Version, PrevHash)}.
+      mac => mac(Key, StoreId, StreamId, Life, Version, PrevHash)}.
 
 %% @doc The tree path a stream's boundary lives at.
 -spec boundary_path(binary()) -> [atom() | binary()].
@@ -156,7 +178,8 @@ boundary_path(StreamId) ->
 write(StoreId, StreamId, Version, PrevHash) ->
     case reckon_db_integrity_key:get(StoreId) of
         Key when is_binary(Key) ->
-            put_boundary(StoreId, StreamId, Version, PrevHash, Key);
+            put_boundary(StoreId, StreamId, life(StoreId, StreamId), Version,
+                         PrevHash, Key);
         _ ->
             ok
     end.
@@ -165,12 +188,12 @@ write(StoreId, StreamId, Version, PrevHash) ->
 %% and the caller must not delete anything: a stream whose predecessors are
 %% gone and whose boundary is not recorded refuses every integrity read until
 %% somebody scavenges it again.
--spec put_boundary(atom(), binary(), non_neg_integer(), binary(), binary())
-        -> ok | {error, term()}.
-put_boundary(StoreId, StreamId, Version, PrevHash, Key) ->
+-spec put_boundary(atom(), binary(), binary() | undefined, non_neg_integer(),
+                   binary(), binary()) -> ok | {error, term()}.
+put_boundary(StoreId, StreamId, Life, Version, PrevHash, Key) ->
     Boundary = #{version => Version,
                  prev_hash => PrevHash,
-                 mac => mac(Key, StreamId, Version, PrevHash)},
+                 mac => mac(Key, StoreId, StreamId, Life, Version, PrevHash)},
     %% A transaction, not a bare put: it is the one write a scavenge must not
     %% get past unnoticed, and a transaction answers an error instead of
     %% taking the calling worker down with a badmatch (reckon-db#4).
@@ -181,10 +204,12 @@ put_boundary(StoreId, StreamId, Version, PrevHash, Key) ->
         {error, Reason} -> {error, Reason}
     end.
 
-%% @private A MAC over exactly what the anchor claims: this stream, this
-%% version, this hash.
--spec mac(binary(), binary(), non_neg_integer(), binary()) -> binary().
-mac(Key, StreamId, Version, PrevHash) ->
+%% @private A MAC over exactly what the anchor claims: WHICH STORE wrote it,
+%% for WHICH stream, under WHICH life, at which version, naming which hash.
+-spec mac(binary(), atom(), binary(), binary() | undefined, non_neg_integer(),
+          binary()) -> binary().
+mac(Key, StoreId, StreamId, Life, Version, PrevHash) ->
     crypto:mac(hmac, sha256, Key,
-               term_to_binary({?MODULE, StreamId, Version, PrevHash},
+               term_to_binary({?MODULE, StoreId, StreamId, Life, Version,
+                               PrevHash},
                               [deterministic])).

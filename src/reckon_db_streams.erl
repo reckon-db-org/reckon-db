@@ -1291,15 +1291,16 @@ delete(StoreId, StreamId) ->
 delete_validated(StoreId, StreamId) ->
     Path = reckon_db_stream_path:stream_path(StreamId),
     CounterPath = reckon_db_stream_path:version_counter_path(StreamId),
+    %% The scavenge boundary goes with them, INSIDE the same transaction: a
+    %% crash between a delete and a boundary delete afterwards left a boundary
+    %% that still verified, and a stream re-created under the same id then had
+    %% an anchor its own life never wrote (Jupiter r16 JR6).
     IntegrityPaths = [reckon_db_chain_watermark:path(StreamId),
-                      reckon_db_chain_watermark:life_path(StreamId)],
+                      reckon_db_chain_watermark:life_path(StreamId),
+                      reckon_db_scavenge_boundary:boundary_path(StreamId)],
     Fun = fun() -> delete_stream_tx([Path, CounterPath | IntegrityPaths]) end,
     case khepri:transaction(StoreId, Fun) of
-        {ok, ok} ->
-            %% The scavenge boundary goes with it, outside the transaction:
-            %% a stale one would otherwise anchor a read of a stream
-            %% re-created under the same id.
-            ok = reckon_db_scavenge_boundary:delete(StoreId, StreamId);
+        {ok, ok} -> ok;
         {ok, {error, E}}   -> {error, E};
         {error, _} = Error -> Error
     end.
@@ -2420,9 +2421,37 @@ legacy_region_ok(StoreId, StreamId, Limit) ->
 
 %% @private
 at_limit_verdict(StoreId, StreamId, Event, Limit) ->
-    case is_genesis_event(Event) orelse boundary_at(StoreId, StreamId, Limit) of
+    case verified_genesis_event(StoreId, StreamId, Event) orelse
+         boundary_at(StoreId, StreamId, Limit) of
         true -> ok;
         false -> {violation, legacy_region_unexplained(StreamId, Limit)}
+    end.
+
+%% @private A genesis predecessor in the FIELD proves nothing on its own.
+%%
+%% The field is a tree node, so a writer with no key can put the genesis value
+%% into a mid-chain event and have the store honour the whole region below it,
+%% handing back stripped and tampered events as ok (Jupiter r16 JR5). The MAC
+%% over that event is what such a writer cannot produce, and one MAC is the
+%% whole cost: verified exactly as the read loop verifies an event sitting on
+%% the genesis tip, with the context its own scheme needs.
+-spec verified_genesis_event(atom(), binary(), event()) -> boolean().
+verified_genesis_event(StoreId, StreamId, Event) ->
+    case is_genesis_event(Event) of
+        false ->
+            false;
+        true ->
+            genesis_mac_verifies(StoreId, StreamId, Event)
+    end.
+
+%% @private
+genesis_mac_verifies(StoreId, StreamId, Event) ->
+    case mac_context(StoreId, StreamId) of
+        {ok, Key, Ctx} ->
+            Genesis = reckon_gater_integrity:genesis_prev_hash(),
+            reckon_gater_integrity:verify_event(Event, Genesis, Key, Ctx) =:= ok;
+        error ->
+            false
     end.
 
 %% @private
