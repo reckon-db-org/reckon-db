@@ -777,15 +777,30 @@ Jupiter and Terra, on `a329134..d30a867`. No API changes.
 
   Three review rounds produced three costumes of one mistake, so the rule is
   stated once: **an anchor is believed only where the MAC'd event at its
-  version agrees with it.** The event is what a tree writer cannot re-write,
-  because its MAC needs the key. The seal and the scavenge boundary both
-  vouch for data and are held to the rule; the migration marker and the
-  node-local anchor only decide whether the migration runs, and replaying
-  either leaves streams unsealed, which reads as refused - they fail closed
-  and have no event to agree with. An attacker who rolls back the records
-  *and* strips or deletes every newer event is R-2, R-4 and R-6, named
-  unchanged: where no surviving MAC'd event contradicts the old record,
-  nothing in the tree can tell old from new.
+  version agrees with it.** The event's MAC cannot be forged, but the event
+  itself can be RESTORED together with the seal that sets its life, so the
+  rule reaches only as far as a MAC'd event from the current life survives
+  above the seal to contradict the restored one - and a read only meets that
+  contradiction if it looks. From round 19 it always does: **a targeted read
+  that touches a legacy or migrated region verifies the suffix through to the
+  newest MAC'd event, the same guarantee as a full read**, at O(suffix) cost,
+  and a verified scavenge boundary at the seal is a refusal rather than an
+  explanation, because a boundary records a prefix that was removed and
+  nothing honest survives below it.
+- **What the rule does not buy, by name.** *R-1*: deleting the marker and
+  every seal with no node-local anchor re-runs the migration, which MINTS
+  vouching anchors from the tree - replaying the marker fails closed,
+  deleting it does not. *R-2*: a strip or tamper of a genuinely pre-integrity
+  region below a seal that is really there; nothing is rolled back. *R-4*: an
+  entirely older life restored, consistent with itself - a clean shorter
+  stream; freshness is out of scope. *R-6 and JR7's remainder*: an old life
+  restored under a surviving newer one - the newer MAC'd events do contradict
+  it, and a full read refuses; what used to miss them was a targeted read, and
+  round 19 closes that, leaving only the case where the attacker also strips
+  or restores the whole suffix, which is R-2 or R-4. *Scheme 1*: events below
+  `v2_from` are MAC'd over the event and the key only, so a restored old-life
+  scheme-1 tail is indistinguishable by MAC; only newer scheme-2 events
+  contradict it.
 - **`reckon_db_chain_watermark:delete/2` is gone.** It had no callers and
   deleted the watermark and the life token but not the scavenge boundary, so
   anything reaching for it later would have left a boundary behind for a
