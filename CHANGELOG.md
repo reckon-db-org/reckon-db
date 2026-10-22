@@ -769,6 +769,11 @@ Jupiter and Terra, on `a329134..d30a867`. No API changes.
   (Jupiter JR5, confirmed on Terra's probes). The event at the seal is
   verified by its MAC now, exactly as the read loop verifies an event sitting
   on the genesis tip: one MAC, O(1), with the context its own scheme needs.
+  The same check covers the boundary anchor: a boundary that vouches must
+  also match the event sitting at its version, verified under the stream's
+  current life, because a boundary, a seal and the life token of an older life
+  verify as a set once all three are put back - what cannot be restored is the
+  new-life event underneath them (Jupiter r17 JR6b).
 - **A scavenge boundary was not bound to its store or its life.** The MAC
   covered the stream, the version and the hash, so a boundary saved from an
   earlier life of the same stream - delete the stream, re-create it, paste the

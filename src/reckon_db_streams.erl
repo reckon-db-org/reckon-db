@@ -2421,37 +2421,59 @@ legacy_region_ok(StoreId, StreamId, Limit) ->
 
 %% @private
 at_limit_verdict(StoreId, StreamId, Event, Limit) ->
-    case verified_genesis_event(StoreId, StreamId, Event) orelse
-         boundary_at(StoreId, StreamId, Limit) of
+    case seal_explains(StoreId, StreamId, Event, Limit) of
         true -> ok;
         false -> {violation, legacy_region_unexplained(StreamId, Limit)}
     end.
 
-%% @private A genesis predecessor in the FIELD proves nothing on its own.
+%% @private Is the event at the seal the one the store's own anchor says sits
+%% there?
 %%
-%% The field is a tree node, so a writer with no key can put the genesis value
-%% into a mid-chain event and have the store honour the whole region below it,
-%% handing back stripped and tampered events as ok (Jupiter r16 JR5). The MAC
-%% over that event is what such a writer cannot produce, and one MAC is the
-%% whole cost: verified exactly as the read loop verifies an event sitting on
-%% the genesis tip, with the context its own scheme needs.
--spec verified_genesis_event(atom(), binary(), event()) -> boolean().
-verified_genesis_event(StoreId, StreamId, Event) ->
-    case is_genesis_event(Event) of
-        false ->
-            false;
-        true ->
-            genesis_mac_verifies(StoreId, StreamId, Event)
+%% A scavenge boundary names the chain hash its survivor carries; a genesis
+%% proof names the genesis value. Either way the event's MAC has to hold under
+%% the stream's CURRENT context, because the anchor itself can be saved and
+%% restored: a boundary, a seal and the life token of an older life, put back
+%% together over a stripped prefix, verify as a set - what cannot be restored
+%% is the new-life event underneath them, MAC'd under the life that is gone
+%% (Jupiter r17 JR6b, JR5).
+seal_explains(StoreId, StreamId, Event, Limit) ->
+    case boundary_prev(StoreId, StreamId, Limit) of
+        {ok, PrevHash} -> event_verifies_at(StoreId, StreamId, Event, PrevHash);
+        none -> genesis_explains(StoreId, StreamId, Event)
     end.
 
 %% @private
-genesis_mac_verifies(StoreId, StreamId, Event) ->
+genesis_explains(StoreId, StreamId, Event) ->
+    is_genesis_event(Event) andalso
+        event_verifies_at(StoreId, StreamId, Event,
+                          reckon_gater_integrity:genesis_prev_hash()).
+
+%% @private One MAC, with the context the event's own scheme needs.
+event_verifies_at(StoreId, StreamId, Event, ExpectedPrev) ->
     case mac_context(StoreId, StreamId) of
         {ok, Key, Ctx} ->
-            Genesis = reckon_gater_integrity:genesis_prev_hash(),
-            reckon_gater_integrity:verify_event(Event, Genesis, Key, Ctx) =:= ok;
+            reckon_gater_integrity:verify_event(Event, ExpectedPrev, Key, Ctx)
+                =:= ok;
         error ->
             false
+    end.
+
+%% @private The hash a verified scavenge boundary at `Limit' names, or none.
+-spec boundary_prev(atom(), binary(), non_neg_integer())
+        -> {ok, binary()} | none.
+boundary_prev(StoreId, StreamId, Limit) ->
+    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
+        {ok, #{version := Limit, prev_hash := PrevHash} = Boundary} ->
+            boundary_prev_verified(StoreId, StreamId, Boundary, PrevHash);
+        _ ->
+            none
+    end.
+
+%% @private
+boundary_prev_verified(StoreId, StreamId, Boundary, PrevHash) ->
+    case reckon_db_scavenge_boundary:verify(StoreId, StreamId, Boundary) of
+        true -> {ok, PrevHash};
+        false -> none
     end.
 
 %% @private
@@ -2472,16 +2494,6 @@ is_genesis_event(#event{prev_event_hash = PrevHash}) ->
 -spec event_at_version(atom(), binary(), non_neg_integer()) -> {ok, event()} | missing.
 event_at_version(StoreId, StreamId, Version) ->
     predecessor_event(StoreId, StreamId, Version).
-
-%% @private
--spec boundary_at(atom(), binary(), non_neg_integer()) -> boolean().
-boundary_at(StoreId, StreamId, Version) ->
-    case reckon_db_scavenge_boundary:lookup(StoreId, StreamId) of
-        {ok, #{version := Version} = Boundary} ->
-            reckon_db_scavenge_boundary:verify(StoreId, StreamId, Boundary);
-        _ ->
-            false
-    end.
 
 %% @private
 -spec newest_event(atom(), binary()) -> {ok, event()} | missing.

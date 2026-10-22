@@ -55,6 +55,7 @@
     a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region/1,
     a_forced_genesis_field_does_not_excuse_a_stripped_prefix/1,
     a_replayed_boundary_does_not_anchor_a_new_life/1,
+    a_restored_life_token_does_not_anchor_a_new_life/1,
     a_boundary_copied_from_another_store_does_not_anchor/1,
     a_delete_takes_the_scavenge_boundary_with_it/1
 ]).
@@ -126,6 +127,7 @@ groups() ->
             a_replayed_watermark_past_the_newest_event_refuses_its_legacy_region,
             a_forced_genesis_field_does_not_excuse_a_stripped_prefix,
             a_replayed_boundary_does_not_anchor_a_new_life,
+            a_restored_life_token_does_not_anchor_a_new_life,
             a_boundary_copied_from_another_store_does_not_anchor,
             a_delete_takes_the_scavenge_boundary_with_it
         ]},
@@ -1046,6 +1048,43 @@ a_boundary_copied_from_another_store_does_not_anchor(Config) ->
     after
         catch khepri:stop(StoreB)
     end.
+
+%% @doc GIVEN a boundary, a seal and the LIFE TOKEN of an earlier life, all
+%%           three replayed after the stream was deleted and re-created, over
+%%           a stripped prefix below them
+%%      WHEN a read covers that prefix
+%%      THEN it refuses: the event AT the boundary is verified against what
+%%           the boundary names, and a new-life event does not carry it
+%%
+%% Jupiter r17 JR6b. Binding the boundary to the life token read at verify
+%% time is not enough once the token itself is restored with it: the three
+%% verify as a set. What cannot be restored is the new-life event that sits at
+%% the boundary, whose MAC was written under the new life.
+a_restored_life_token_does_not_anchor_a_new_life(Config) ->
+    {StoreId, Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"restored-token">>),
+    write_n_events(StoreId, StreamId, 10),
+    {ok, OldLife} = reckon_db_chain_watermark:life(StoreId, StreamId),
+    ok = khepri:put(StoreId, watermark_path(StreamId),
+                    sealed_watermark(Key, StoreId, StreamId, OldLife, 3)),
+    ok = reckon_db_scavenge_boundary:record(
+           StoreId, StreamId, 3, carried_hash(StoreId, StreamId, 3)),
+    {ok, OldBoundary} = reckon_db_scavenge_boundary:lookup(StoreId, StreamId),
+    {ok, OldWatermark} = khepri:get(StoreId, watermark_path(StreamId)),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    write_n_events(StoreId, StreamId, 10),
+    ok = khepri:put(StoreId, watermark_path(StreamId), OldWatermark),
+    ok = khepri:put(StoreId, life_path(StreamId), OldLife),
+    ok = khepri:put(StoreId, boundary_path(StreamId), OldBoundary),
+    ok = clear_integrity_fields(StoreId, StreamId, 0),
+    ok = clear_integrity_fields(StoreId, StreamId, 1),
+    ok = clear_integrity_fields(StoreId, StreamId, 2),
+    ok = rewrite_event(StoreId, StreamId, 1, #{tampered => 1}),
+
+    ?assertMatch({error, {integrity_violation,
+                          #{context := #{detail := legacy_region_unexplained}}}},
+                 reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
 
 %% @doc GIVEN a stream deleted while it holds a scavenge boundary
 %%      WHEN the delete completes
