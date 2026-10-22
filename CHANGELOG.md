@@ -692,7 +692,12 @@ every member reads.
 
 Rolling forward is still what to do. A store that has been written by
 5.12.0 should not be handed to 5.11.x if it can be avoided; if it happens,
-the reconcile above is what keeps the streams usable.
+the reconcile above is what keeps the streams usable. One thing it does not
+cover: a stream 5.11.x deletes and re-creates carries a scheme-2 seal and
+therefore generation 0, which is below the generation this release recorded
+for it, so the stream is refused (`life_gen_rolled_back`) when 5.12.0 opens
+the store again. `reckon_db_life_anchor:rebuild/1` is what takes the tree's
+word for it and records the current life again.
 
 Downstream: every two-part constraint (`~> 5.2`, `~> 5.4`, `~> 5.5`,
 `~> 5.9`, `~> 5.11`) floats to 5.12.0, so those consumers pick this up on
@@ -776,7 +781,10 @@ Jupiter and Terra, on `a329134..d30a867`. No API changes.
   new-life event underneath them (Jupiter r17 JR6b).
 
   Three review rounds produced three costumes of one mistake, so the rule is
-  stated once: **an anchor is believed only where the MAC'd event at its
+  stated once - and note that both of the read-path rules this paragraph goes
+  on to describe were WITHDRAWN in round 21, because neither can see a
+  restored life; what answers it now is the node-local life anchor, described
+  below: **an anchor is believed only where the MAC'd event at its
   version agrees with it.** The event's MAC cannot be forged, but the event
   itself can be RESTORED together with the seal that sets its life, so the
   rule reaches only as far as a MAC'd event from the current life survives
@@ -836,25 +844,99 @@ Jupiter and Terra, on `a329134..d30a867`. No API changes.
   legitimately leaves the watermark where it was while the surviving start
   moves up.
 
+### Security: a node-local life anchor replaces the newest-event check (r21)
+
+Jupiter and Terra: design rev 3 plus their OK to code, then three bugs the
+first green suite found in it.
+
+Both read-path rules of the two rounds before this one are withdrawn, for one
+reason: they asked the tree to contradict a rollback, and the tree cannot. An
+attacker who restores an earlier life's seal, its life token and the events
+under them holds a set that verifies against itself. Walking the suffix cost
+128-154 ms per targeted read on a 50 000-event stream (Terra's measurement; a
+figure of 40 us in an earlier draft of this entry was my own benchmark
+comparing the check against itself), and checking only the stream's newest
+event was answered by restoring that event's own old copy.
+
+What closes it is a witness the tree cannot reach: **`reckon_db_life_anchor`**,
+a MAC'd, MAC-chained, append-only log (`reckon_db_lives.log`) beside the
+store's data directory, folded into an ETS table at start. It records each
+stream's current life GENERATION - a per-stream monotonic counter, allocated
+inside the mint transaction and bound into the seal's MAC (scheme 3; a
+scheme-2 record carries no generation and reads as 0, which is the generation
+of a life minted by 5.11.x). A targeted read asks it one question, in O(1):
+
+- generation below the recorded one: refused, `life_gen_rolled_back`;
+- the same generation with a different life token: refused, `life_gen_mismatch`;
+- a recorded life the tree no longer has: refused, `life_absent_in_tree`;
+- a tombstone at or above the tree's generation: refused, `life_gen_deleted`;
+- a higher generation: adopted - a life was minted after this node last looked;
+- an anchor that is not running: refused, `life_anchor_unavailable`, never
+  served unguarded.
+
+What else that buys, and what it costs:
+
+- **A deleted stream cannot be resurrected.** The delete's intent is fsynced
+  before the delete commits and its tombstone is written after it, and the
+  generation counter survives the delete, so a re-create rises above the
+  deleted life instead of landing on it.
+- **A lowered counter cannot push an honest re-create down.** The generation
+  is `max(the stream's counter, this node's floor) + 1`, and the mint is a
+  compare-and-set against the counter it read outside the transaction. A lost
+  race retries five times and then refuses by name:
+  `{error, {life_gen_contended, StreamId}}`.
+- **The upgrade is trust on first use, once.** Every stream the migration
+  seals is recorded in the anchor with the generation its seal carries;
+  without that pass every pre-5.12 stream would be unknown, and a rollback of
+  one would be adopted as a first sight.
+- **`reckon_db_life_anchor:rebuild/1` is the operator recovery** for an honest
+  restore from backup or a log whose chain broke: it keeps the old log beside
+  the new one, takes the tree's word for every stream exactly once, and writes
+  a fresh log. It must run on EVERY member - a rebuild on one leaves the
+  others refusing honest streams.
+- **A read costs one ETS lookup; a stream create costs one log record and one
+  fsync.** Nothing is written per append.
+
+Three shapes that used to be served are refused now, and their tests were
+renamed to say so: `a_restored_old_life_with_the_top_two_versions_does_not_survive`
+(was `residual_a_restored_batch_and_the_top_two_versions_are_served`),
+`a_planted_old_life_above_a_hole_does_not_survive` (was
+`residual_planted_top_two_versions_above_a_hole_are_served`) and
+`a_truncated_new_life_does_not_serve_a_restored_run_backward` (was
+`residual_a_truncated_new_life_serves_a_restored_run_backward`).
+
 ### Known residual in this release, named
 
 An attacker who saves an earlier life's sealed watermark and life token
 before a stream is deleted, then restores both afterwards and strips new-life
-events to chain-less, is refused wherever a read includes a chain-bearing
-event followed by a chain-less one, wherever the store cannot explain a region
-below a seal, and - from round 20 - wherever the newest event of the life that
-is really current is still there to contradict the restored one, which is every
-targeted read of such a stream.
+events to chain-less, is refused: the restored life carries a generation below
+the one this node recorded, and no tree write can raise a generation. That is
+every targeted read of such a stream, in one ETS lookup.
 
 **What is left, exactly:**
 
-1. A whole-suffix rollback: the attacker also restores the OLD NEWEST event's
-   copy, so the one event a targeted read checks is itself an old-life one.
-   The stream is then consistent with itself from the seal up; only a
-   monotonic counter held outside the store could tell the difference.
+1. A rollback WITHIN one life: the stream's own current seal and life token
+   restored at an older version, with the events under them. The generation
+   agrees with itself, so the anchor has nothing to say - this is R-4's
+   truncation, and it is visible only where a MAC'd event of the SAME life
+   survives above the restored seal to contradict it. A whole stream restored
+   down to chain-less under its own current life reads as a shorter honest
+   stream.
 2. Payload tampering strictly above the read's batch. A targeted read verifies
-   the batch and the newest event, not every event between them; a full read,
-   or a read that touches a legacy or migrated region, verifies the range.
+   its batch, not every event between that batch and the newest one; a full
+   read, or a read that touches a legacy or migrated region, verifies the
+   range.
+3. The anchor itself, which lives in the data directory. An attacker who can
+   write there can restore an older `reckon_db_lives.log` - which refuses
+   honest streams until `rebuild/1` runs - or delete it. A node that has never
+   seen a stream adopts what the tree says on its first read, which includes
+   every pre-upgrade stream after the upgrade pass and every member of a
+   cluster that has not read the stream yet.
+4. A tombstone exists only on the node that ran the delete. A stream deleted
+   through one member and restored wholesale is not refused by another.
+5. Crash windows: a delete that committed before its intent reached the disk,
+   and an intent resolved at start after a tree writer restored the life, both
+   leave the stream readable - the intent is dropped in each case.
 
 Reckon-db's `read_all_global/3`, `read_by_event_types/3`, `read_by_tags/3` and
 `read_by_metadata/3` verify no MAC at all; that predates this range and is
