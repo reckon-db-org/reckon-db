@@ -132,6 +132,11 @@ check_recorded(StoreId, StreamId, TreeGen, TreeLife) ->
 
 %% @doc Record a life this node has just committed, read back from the tree
 %% after the transaction - never the caller's own candidate.
+%%
+%% Recording at the SAME generation as the entry already there is how a life
+%% becomes a tombstone (a delete names the generation the stream has now, not
+%% the next one) and how a dropped intent becomes a life again. The table never
+%% moves DOWN; at one generation, the most recent record is the one that holds.
 -spec record_mint(atom(), binary(), non_neg_integer(), binary()) -> ok.
 record_mint(StoreId, StreamId, Gen, Life) ->
     write(StoreId, StreamId, Gen, Life).
@@ -244,17 +249,18 @@ refusal(StreamId, TreeGen, Detail, RecordedGen) ->
 
 %% @private Coalesced: the table carries the answer for the next read at once,
 %% the record is made durable by the writer within one fsync window.
+%%
+%% The cast goes out even when this process believes the entry already says the
+%% same thing: the writer is the one place that decides, and a second writer
+%% racing this one must not be able to leave the table and the log disagreeing
+%% about which record came last.
 write(StoreId, StreamId, Gen, Value) ->
     case whereis(name(StoreId)) of
         undefined ->
             _ = insert(StoreId, StreamId, Gen, Value),
             ok;
         _Pid ->
-            case lookup(StoreId, StreamId) of
-                {Existing, _} when Gen =< Existing -> ok;
-                _ -> gen_server:cast(name(StoreId),
-                                     {adopt, StreamId, Gen, Value})
-            end
+            gen_server:cast(name(StoreId), {adopt, StreamId, Gen, Value})
     end.
 
 %% @private The delete intent: durable BEFORE it answers.
@@ -265,7 +271,14 @@ sync_write(StoreId, StreamId, Gen, Value) ->
                                 30000)
     end.
 
-%% @private The table only ever moves up.
+%% @private The table only ever moves up, and at one generation the LAST record
+%% is the one that holds - which is what makes a tombstone, and a dropped
+%% intent, expressible at all. A delete names the generation the stream has
+%% now, so its tombstone lands on top of that generation's life; and a delete
+%% that never committed is undone by writing the life back at the same one.
+%%
+%% Answers whether anything changed, which is what decides whether a record is
+%% appended: an entry that already says this writes nothing.
 insert(StoreId, StreamId, Gen, Value) ->
     Tab = table(StoreId),
     case ets:info(Tab, size) of
@@ -273,7 +286,9 @@ insert(StoreId, StreamId, Gen, Value) ->
             false;
         _ ->
             case ets:lookup(Tab, StreamId) of
-                [{_, Existing, _}] when Existing >= Gen ->
+                [{_, Existing, Value}] when Existing >= Gen ->
+                    false;
+                [{_, Existing, _}] when Existing > Gen ->
                     false;
                 _ ->
                     ets:insert(Tab, {StreamId, Gen, Value}),
@@ -422,9 +437,13 @@ flush(#state{fd = Fd} = State) ->
     State.
 
 %% @private
+%% @private The log is created here when it is not there yet - a fresh store,
+%% or the first start after a rebuild set the old one aside. Without `create'
+%% the open failed on a fresh store and every record went to the table only,
+%% so nothing the anchor learned survived a restart.
 open_at_end(Path, Good) ->
     ok = filelib:ensure_dir(Path),
-    case file:open(Path, [read, write, raw, binary]) of
+    case file:open(Path, [read, write, raw, binary, create]) of
         {ok, Fd} ->
             {ok, _} = file:position(Fd, Good),
             ok = file:truncate(Fd),
@@ -456,20 +475,36 @@ mac_matches(Mac, Expected) ->
 %% @private A tombstone intent whose life is still in the tree is a delete that
 %% never committed - or a delete whose life a tree writer put back. Both drop
 %% the intent; the second is named in #18 beside the delete crash window.
+%%
+%% Dropping it has to be a WRITE, not the absence of one: the tombstone is in
+%% the table and in the log, so a restart that only declined to act would keep
+%% refusing a stream that is still there. The life goes back at the generation
+%% the tombstone carries, and a superseding record goes into the log, so the
+%% next replay reaches the same answer.
 resolve_intents(#state{store_id = StoreId} = State) ->
-    Tab = table(StoreId),
-    _ = ets:foldl(
-          fun({StreamId, Gen, deleted}, Acc) ->
-                  case reckon_db_chain_watermark:life(StoreId, StreamId) of
-                      {ok, undefined} -> Acc;
-                      {ok, _Life} ->
-                          _ = insert(StoreId, StreamId, Gen, <<>>),
-                          Acc
-                  end;
-             ({_StreamId, _Gen, _Life}, Acc) ->
-                  Acc
-          end, ok, Tab),
-    State.
+    Intents = ets:tab2list(table(StoreId)),
+    lists:foldl(
+      fun({StreamId, Gen, deleted}, Acc) ->
+              case reckon_db_chain_watermark:life(StoreId, StreamId) of
+                  {ok, undefined} ->
+                      Acc;
+                  {ok, Life} when is_binary(Life) ->
+                      drop_intent(Acc, StreamId, Gen, Life)
+              end;
+         ({_StreamId, _Gen, _Life}, Acc) ->
+              Acc
+      end, State, Intents).
+
+%% @private
+drop_intent(#state{store_id = StoreId, path = Path} = State, StreamId, Gen,
+            Life) ->
+    _ = insert(StoreId, StreamId, Gen, Life),
+    logger:warning("life anchor ~ts: the delete of stream ~p never committed "
+                   "(its life is still in the tree); the intent is dropped",
+                   [Path, StreamId]),
+    telemetry:execute([reckon, db, life_anchor, intent_dropped], #{},
+                      #{path => Path, stream_id => StreamId}),
+    append(State, StreamId, Gen, Life).
 
 %% @private Compaction: more than twice as many records as lives means the log
 %% carries history nobody will read again. The writer writes a fresh log
@@ -502,27 +537,43 @@ compact(#state{store_id = StoreId, path = Path, fd = OldFd} = State) ->
     end.
 
 %% @private
-do_rebuild(#state{store_id = StoreId, path = Path} = State) ->
+%% @private Discard the log and take the tree's word for every stream.
+%%
+%% The file has to be REOPENED, not just renamed: the old descriptor points at
+%% the inode that is now called `.discarded.<ts>', so leaving it open made every
+%% later record land in the file the rebuild set aside, and the next start read
+%% an empty log - which is every stream adopting on first sight, silently.
+do_rebuild(#state{store_id = StoreId, path = Path, fd = OldFd} = State) ->
     Aside = Path ++ ".discarded." ++ integer_to_list(erlang:system_time(second)),
     _ = file:rename(Path, Aside),
+    _ = file:close(OldFd),
     ets:delete_all_objects(table(StoreId)),
+    Fd = open_at_end(Path, 0),
     logger:warning("life anchor rebuilt: old log kept at ~ts; taking the tree's "
                    "word for every stream (trust on first use)", [Aside]),
     telemetry:execute([reckon, db, life_anchor, rebuilt], #{},
                       #{path => Path, aside => Aside}),
-    Streams = reckon_db_streams:list_streams(StoreId),
-    Count = lists:foldl(fun(StreamId, Acc) -> rebuild_stream(StoreId, StreamId, Acc) end,
-                        0, Streams),
-    {Count, State#state{entries = Count, records = Count, last_mac = <<>>}}.
+    State1 = State#state{fd = Fd, entries = 0, records = 0, last_mac = <<>>},
+    {ok, Streams} = reckon_db_streams:list_streams(StoreId),
+    {Count, State2} =
+        lists:foldl(fun(StreamId, {N, Acc}) ->
+                            case rebuild_stream(Acc, StreamId) of
+                                {ok, Acc1} -> {N + 1, Acc1};
+                                none -> {N, Acc}
+                            end
+                    end, {0, State1}, Streams),
+    {Count, State2#state{entries = Count, records = Count}}.
 
 %% @private
-rebuild_stream(StoreId, StreamId, Acc) ->
+%% @private `rebuild' has to leave a log behind, not only a table: the whole
+%% point of the act is that the NEXT start agrees with this one.
+rebuild_stream(#state{store_id = StoreId} = State, StreamId) ->
     case reckon_db_chain_watermark:binding(StoreId, StreamId) of
         {ok, #{life := Life, gen := Gen}} when is_binary(Life) ->
             _ = insert(StoreId, StreamId, Gen, Life),
-            Acc + 1;
+            {ok, append(State, StreamId, Gen, Life)};
         _ ->
-            Acc
+            none
     end.
 
 %% @private
