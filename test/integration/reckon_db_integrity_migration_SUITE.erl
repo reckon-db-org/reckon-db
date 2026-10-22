@@ -46,7 +46,8 @@
     a_junk_watermark_is_refused_by_name/1,
     a_bare_watermark_below_a_genesis_start_is_evidence/1,
     a_forged_prefix_below_a_sealed_cut_is_refused/1,
-    a_lost_anchor_log_is_refilled_from_the_tree_at_start/1
+    a_lost_anchor_log_is_refilled_from_the_tree_at_start/1,
+    a_log_that_lost_its_tail_is_refilled_at_start/1
 ]).
 
 -define(KEY_ENV, "RECKON_DB_MIGRATION_TEST_KEY").
@@ -77,7 +78,8 @@ all() ->
         a_junk_watermark_is_refused_by_name,
         a_bare_watermark_below_a_genesis_start_is_evidence,
         a_forged_prefix_below_a_sealed_cut_is_refused,
-        a_lost_anchor_log_is_refilled_from_the_tree_at_start
+        a_lost_anchor_log_is_refilled_from_the_tree_at_start,
+        a_log_that_lost_its_tail_is_refilled_at_start
     ].
 
 suite() ->
@@ -435,6 +437,65 @@ a_lost_anchor_log_is_refilled_from_the_tree_at_start(Config) ->
     %% Nobody has read the stream since the restart: the entry is the pass's.
     ?assertEqual({1, Life}, reckon_db_life_anchor:entry(StoreId, StreamId)),
     ok = stop_store(StoreId).
+
+%% @doc GIVEN a store whose anchor log lost its TAIL - the mints and adoptions
+%%          an honest crash can drop, because they are coalesced into an fsync
+%%          window - and whose tree still carries every stream
+%%      WHEN it starts
+%%      THEN the life pass records the streams the log lost, so a restored
+%%           older life for one of them is refused rather than adopted
+%%
+%% Terra T22-3. The pass used to run only when the anchor was EMPTY, so a
+%% partial log was trusted as complete and the lost stream was a first sight.
+a_log_that_lost_its_tail_is_refilled_at_start(Config) ->
+    {StoreId, DataDir} = store(Config),
+    First = stream(<<"life-pass-head">>),
+    Lost = stream(<<"life-pass-tail">>),
+    ok = start_store(StoreId, DataDir, enabled),
+    {ok, _} = append_events(StoreId, First, 2),
+    {ok, FirstLife} = reckon_db_chain_watermark:life(StoreId, First),
+    ?assertEqual({1, FirstLife}, await_entry(StoreId, First)),
+    {ok, _} = append_events(StoreId, Lost, 2),
+    {ok, LostLife} = reckon_db_chain_watermark:life(StoreId, Lost),
+    ?assertEqual({1, LostLife}, await_entry(StoreId, Lost)),
+
+    ok = stop_store(StoreId),
+    %% The crash lost the tail: everything the log holds for `Lost` goes with
+    %% it, which is a valid prefix of the log and a chain the loader still
+    %% accepts.
+    ok = cut_log_from(reckon_db_life_anchor:log_path(DataDir), Lost),
+    ok = start_store(StoreId, DataDir, enabled),
+
+    ?assertEqual({1, FirstLife}, reckon_db_life_anchor:entry(StoreId, First)),
+    ?assertEqual({1, LostLife}, reckon_db_life_anchor:entry(StoreId, Lost)),
+    ok = stop_store(StoreId).
+
+%% @private Keep the frames before the first record naming StreamId.
+cut_log_from(Path, StreamId) ->
+    {ok, Bin} = file:read_file(Path),
+    Prefix = frames_before(Bin, StreamId, 0),
+    <<Kept:Prefix/binary, _Rest/binary>> = Bin,
+    ok = file:write_file(Path, Kept).
+
+%% @private
+frames_before(<<Size:32, Rest/binary>>, StreamId, Offset)
+        when byte_size(Rest) >= Size ->
+    <<Bin:Size/binary, Tail/binary>> = Rest,
+    case stream_of(Bin) of
+        StreamId -> Offset;
+        _ -> frames_before(Tail, StreamId, Offset + 32 + Size)
+    end;
+frames_before(_Torn, _StreamId, Offset) ->
+    Offset.
+
+%% @private
+stream_of(Bin) ->
+    try binary_to_term(Bin, [safe]) of
+        #{stream := StreamId} -> StreamId;
+        _ -> undefined
+    catch
+        _:_ -> undefined
+    end.
 
 %% @private The anchor writer coalesces; wait for the table to say it.
 await_entry(StoreId, StreamId) ->

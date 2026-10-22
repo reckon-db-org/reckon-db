@@ -141,10 +141,35 @@ load_at(StoreId, StreamId, Version) ->
             maybe_verify_snapshot_on_load(StoreId, StreamId, Snapshot)
     end.
 
-%% @doc List all snapshots for a stream
+%% @doc List all snapshots for a stream.
+%%
+%% Each one passes the checks `load_at/3' applies - the node-local life anchor,
+%% then the snapshot MAC - and one that fails is DROPPED, not returned, with
+%% telemetry: a list is how a caller finds out what it may load, and handing
+%% back what load refuses made the list a way around the check (reckon-db#22,
+%% Terra T22-1).
 -spec list(atom(), binary()) -> {ok, [snapshot()]} | {error, term()}.
 list(StoreId, StreamId) ->
-    reckon_db_snapshots_store:list(StoreId, StreamId).
+    case reckon_db_snapshots_store:list(StoreId, StreamId) of
+        {ok, Snapshots} ->
+            {ok, [S || S <- Snapshots,
+                       verified_on_list(StoreId, StreamId, S)]};
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private
+verified_on_list(StoreId, StreamId, Snapshot) ->
+    case maybe_verify_snapshot_on_load(StoreId, StreamId, Snapshot) of
+        {ok, _} ->
+            true;
+        {error, Reason} ->
+            telemetry:execute([reckon, db, snapshot, list, dropped],
+                              #{system_time => erlang:system_time(millisecond)},
+                              #{store_id => StoreId, stream_id => StreamId,
+                                reason => Reason}),
+            false
+    end.
 
 %% @doc Delete all snapshots for a stream
 -spec delete(atom(), binary()) -> ok | {error, term()}.
@@ -326,9 +351,28 @@ check_snapshot_mac({integrity_violation, _} = Violation, StoreId, StreamId, Vers
     emit_load_violation_telemetry(StoreId, StreamId, Version, Violation),
     {error, Violation}.
 
+%% @private
+%%
+%% A snapshot with no anchor and no MAC is legacy data - served unchanged on a
+%% store that cannot check it. What it may NOT be is a way around the check on
+%% a stream that HAS a seal: an attacker who replaces the record with the same
+%% shape and no MAC was served `{ok, forged}' by both load paths (Terra T22-2).
+%% Past the point where scheme 2 begins, a stream's snapshot carries a MAC or
+%% it is refused.
 should_verify_snapshot(StoreId, Snapshot) ->
     reckon_db_integrity_key:is_enabled(StoreId)
-        andalso (not reckon_gater_integrity:is_legacy_snapshot(Snapshot)).
+        andalso (not reckon_gater_integrity:is_legacy_snapshot(Snapshot)
+                 orelse must_carry_a_mac(StoreId, Snapshot)).
+
+%% @private A stream with a verifying seal has carried scheme-2 MACs since
+%% `v2_from'; a snapshot at or above that version is one of them. Below it the
+%% events are scheme-1, and the save path refuses to seal a snapshot there, so
+%% a legacy snapshot is all such a stream can have.
+must_carry_a_mac(StoreId, #snapshot{stream_id = StreamId, version = Version}) ->
+    case reckon_db_chain_watermark:binding(StoreId, StreamId) of
+        {ok, #{v2_from := V2From}} -> Version >= V2From;
+        {ok, undefined} -> false
+    end.
 
 emit_load_violation_telemetry(StoreId, StreamId, Version, _Violation) ->
     telemetry:execute(

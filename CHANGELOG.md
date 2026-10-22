@@ -970,6 +970,49 @@ has a test that fails on `4fd2168` and passes now. No API shape changes.
   life and the tree holds no stream at all, and an honest delete called
   tampering is a false alarm (item 5). Both are tests now.
 
+### Fixed: the round-22 review, five bugs and one issue folded in
+
+Jupiter and Terra, on `a329134..84db8c9`. Every item was required; each fix
+has a test that fails on `84db8c9` and passes now.
+
+- **A delete with the anchor down recorded nothing** (Jupiter J22-2). The
+  intent's write went to a table that died with the writer and answered `ok`,
+  so the delete committed with neither an intent nor a tombstone and the
+  deleted life was restorable after the next start. An integrity-enabled store
+  now refuses the delete (`{error, {life_anchor_unavailable, StreamId}}`) for
+  the same reason a read refuses to answer; a store without integrity has
+  nothing for the anchor to protect and deletes as it always did.
+- **An intent forgot which life it stood for** (Jupiter J22-1). Recording only
+  a generation accepted ANY life at that generation while the intent stood -
+  including a different one put there by a tree writer, and generation 0 makes
+  that real for every pre-5.12 stream. The intent carries `{delete_intent,
+  Life}` and the same-generation clause compares it, exactly as a recorded
+  life's does.
+- **A failed delete transaction was assumed not to have committed** (Terra
+  T22-4). A Ra timeout is ambiguous and the command can still land; writing the
+  life back unconditionally left a deleted stream looking alive. The tree
+  decides now, exactly as it does at the next start: no life there is a delete
+  that landed (recorded as the tombstone), the life still there is one that did
+  not (the life goes back).
+- **The life pass ran only on an EMPTY anchor** (Terra T22-3). Mints and
+  adoptions are coalesced into one fsync window, so an honest crash can lose
+  the log's TAIL: the log keeps one stream and loses another, and the lost one
+  was a first sight whose restored older life was then adopted. The pass runs
+  on EVERY start - it records only streams this node has no entry for and never
+  moves an entry down - which is what its own doc already claimed was safe.
+- **A legacy-SHAPED snapshot was served unverified on an integrity store**
+  (Terra T22-2). A record with no anchor and no MAC is legacy data, but not on
+  a stream that HAS a seal: replacing an honest snapshot with that shape and a
+  forged payload was answered `{ok, forged}` by both load paths, because the
+  legacy answer skipped the MAC check AND the anchor. Past `v2_from` a sealed
+  stream's snapshot carries a MAC or it is refused; below it the save path
+  refuses to seal at all, so a legacy snapshot is all such a stream can have.
+- **`reckon_db_snapshots:list/2` served what `load/2` refuses**
+  (reckon-db#22, Terra T22-1, closed here). No MAC check and no anchor check,
+  exposed to clients through the gateway as `list_snapshots`: a list was a way
+  around both. Each snapshot in a list now passes the same checks `load_at/3`
+  applies, and one that fails is dropped with telemetry rather than returned.
+
 ### Known residual in this release, named
 
 An attacker who saves an earlier life's sealed watermark and life token
@@ -993,11 +1036,11 @@ every targeted read of such a stream, in one ETS lookup.
    range.
 3. The anchor itself, which lives in the data directory. An attacker who can
    write there can restore an older `reckon_db_lives.log` - which refuses
-   honest streams until `rebuild/1` runs - or delete it. With it deleted, the
-   start's life pass records every stream the tree can vouch for, once, and
-   says loudly that it did; what is left is the UPGRADE WINDOW: a life
-   restored before that pass has been adopted, and the module cannot tell a
-   log an operator removed from one that was never there. A member of a
+   honest streams until `rebuild/1` runs - or delete it. Every start runs the
+   life pass, so whatever the log lost (all of it, or a tail a crash dropped)
+   is recorded again from the tree, loudly; what is left is the UPGRADE
+   WINDOW: a life restored before that pass has been adopted, and the module
+   cannot tell a log an operator removed from one that was never there. A member of a
    cluster that has not read a stream yet adopts it on first sight, unless
    the marker sent it through the same pass.
 4. A tombstone exists only on the node that ran the delete. A stream deleted

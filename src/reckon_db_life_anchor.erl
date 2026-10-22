@@ -34,11 +34,10 @@
          entry/2,
          check/4,
          record_mint/4,
-         record_delete_intent/3,
-         record_delete_undone/4,
+         record_delete_intent/4,
+         record_delete_failed/2,
          record_deleted/3,
          life_pass/1,
-         has_records/1,
          log_path/1,
          rebuild/1,
          stop/1]).
@@ -93,10 +92,12 @@ highest_gen(StoreId, StreamId) ->
         undefined -> 0
     end.
 
-%% @doc The recorded entry: `{Gen, Life}', `{Gen, delete_intent}' or
+%% @doc The recorded entry: `{Gen, Life}', `{Gen, {delete_intent, Life}}' or
 %% `{Gen, deleted}'.
 -spec entry(atom(), binary()) ->
-        {non_neg_integer(), binary() | deleted | delete_intent} | undefined.
+        {non_neg_integer(),
+         binary() | deleted | {delete_intent, binary() | undefined}}
+        | undefined.
 entry(StoreId, StreamId) ->
     lookup(StoreId, StreamId).
 
@@ -122,22 +123,30 @@ check(StoreId, StreamId, TreeGen, TreeLife) ->
 
 %% @private
 %%
-%% An INTENT (delete_intent) is a delete that has not been recorded as
-%% committed, so it refuses nothing: the stream it names may still be there,
-%% and a failed transaction has to leave an honest stream serving. What it
-%% cannot do is excuse a rollback - a tree below the generation the intent
-%% names is refused like any other.
+%% An INTENT (`{delete_intent, Life}') is a delete that has not been recorded
+%% as committed, so it does not refuse an honest stream: the stream it names
+%% may still be there, and a failed transaction has to leave it serving. It
+%% carries the LIFE it stands for, because an intent that named only a
+%% generation accepted any life at that generation - including a different one
+%% put there by a tree writer, and generation 0 makes that real for every
+%% pre-5.12 stream (Jupiter J22-1). The same-generation clause compares the
+%% life, exactly as a recorded life's does.
 check_recorded(StoreId, StreamId, TreeGen, TreeLife) ->
     case lookup(StoreId, StreamId) of
         undefined ->
             adopt(StoreId, StreamId, TreeGen, TreeLife);
-        {Gen, delete_intent} when TreeLife =:= undefined, TreeGen =< Gen ->
+        {Gen, {delete_intent, _Life}} when TreeLife =:= undefined,
+                                           TreeGen =< Gen ->
             ok;
-        {Gen, delete_intent} when TreeGen > Gen ->
+        {Gen, {delete_intent, _Life}} when TreeGen > Gen ->
             adopt(StoreId, StreamId, TreeGen, TreeLife);
-        {Gen, delete_intent} when TreeGen =:= Gen ->
+        {Gen, {delete_intent, Life}} when TreeGen =:= Gen, TreeLife =:= Life ->
             ok;
-        {Gen, delete_intent} ->
+        {Gen, {delete_intent, Life}} when TreeGen =:= Gen, is_binary(Life) ->
+            {refuse, refusal(StreamId, TreeGen, life_gen_mismatch, Gen)};
+        {Gen, {delete_intent, _Life}} when TreeGen =:= Gen ->
+            ok;
+        {Gen, {delete_intent, _Life}} ->
             {refuse, refusal(StreamId, TreeGen, life_gen_rolled_back, Gen)};
         {Gen, deleted} when TreeLife =:= undefined, TreeGen =< Gen ->
             ok;
@@ -181,21 +190,32 @@ record_mint(StoreId, StreamId, Gen, Life) ->
 %% Named and not covered: a delete that commits before the intent reached the
 %% disk, and an intent resolved after a tree writer restored the life - both
 %% drop the intent and leave the stream readable.
--spec record_delete_intent(atom(), binary(), non_neg_integer()) -> ok.
-record_delete_intent(StoreId, StreamId, Gen) ->
+-spec record_delete_intent(atom(), binary(), non_neg_integer(),
+                           binary() | undefined) ->
+        ok | {error, life_anchor_unavailable}.
+record_delete_intent(StoreId, StreamId, Gen, Life) ->
     sync_write(StoreId, StreamId, tombstone_gen(StoreId, StreamId, Gen),
-               delete_intent).
+               {delete_intent, Life}).
 
-%% @doc Undo an intent whose delete transaction did not commit.
+%% @doc Resolve an intent whose delete transaction answered an error.
 %%
 %% A transaction can fail for honest reasons - a Ra timeout, a leader change -
-%% and the intent is already on the disk by then. Left standing, it refuses the
-%% honest stream (life_gen_deleted) until the next restart (Jupiter J21-2).
-%% The life goes back at the generation the intent names, which is the same
-%% generation it was recorded at, so the entry is the one the mint wrote.
--spec record_delete_undone(atom(), binary(), non_neg_integer(), binary()) -> ok.
-record_delete_undone(StoreId, StreamId, Gen, Life) ->
-    sync_write(StoreId, StreamId, tombstone_gen(StoreId, StreamId, Gen), Life).
+%% and the intent is already on the disk by then. An error does NOT mean the
+%% delete did not commit: a timeout is ambiguous and the command can still
+%% land, so writing the life back unconditionally left a deleted stream with a
+%% life in the anchor and its restoration accepted (Terra T22-4). The tree
+%% decides, exactly as it does at the next start: no life there is a delete
+%% that committed, the life still there is one that did not.
+%%
+%% Answers `{error, life_anchor_unavailable}' when the anchor is not running.
+%% The intent is already durable, so nothing is lost: the next start resolves
+%% it, and the read rule does not refuse an honest stream while it stands.
+-spec record_delete_failed(atom(), binary()) -> ok | {error, term()}.
+record_delete_failed(StoreId, StreamId) ->
+    case whereis(name(StoreId)) of
+        undefined -> {error, life_anchor_unavailable};
+        _Pid -> gen_server:call(name(StoreId), {resolve_delete, StreamId}, 30000)
+    end.
 
 %% @doc The tombstone, written AFTER the delete commits.
 -spec record_deleted(atom(), binary(), non_neg_integer()) -> ok.
@@ -225,14 +245,6 @@ tombstone_gen(StoreId, StreamId, Gen) ->
 -spec rebuild(atom()) -> {ok, non_neg_integer()}.
 rebuild(StoreId) ->
     gen_server:call(name(StoreId), rebuild, 120000).
-
-%% @doc Whether this node has recorded anything at all.
--spec has_records(atom()) -> boolean().
-has_records(StoreId) ->
-    case ets:info(table(StoreId), size) of
-        undefined -> false;
-        Size -> Size > 0
-    end.
 
 %% @doc Record every stream the tree can vouch for that this node has no entry
 %% for, and say so loudly.
@@ -281,6 +293,8 @@ handle_call({append_sync, StreamId, Gen, Value}, _From, State) ->
     end;
 handle_call(life_pass, _From, State) ->
     {reply, ok, run_life_pass(State)};
+handle_call({resolve_delete, StreamId}, _From, State) ->
+    {reply, ok, resolve_one(State, StreamId)};
 handle_call(rebuild, _From, State) ->
     {Count, State1} = do_rebuild(State),
     {reply, {ok, Count}, State1};
@@ -362,11 +376,19 @@ write(StoreId, StreamId, Gen, Value) ->
     end.
 
 %% @private The delete intent: durable BEFORE it answers.
+%%
+%% With no anchor process there is nothing to be durable IN: the ETS table dies
+%% with the writer, so the call used to insert nowhere and answer ok, and the
+%% delete then committed with neither an intent nor a tombstone - the deleted
+%% life restorable after the next start (Jupiter J22-2). An intent that cannot
+%% be written refuses the delete instead.
 sync_write(StoreId, StreamId, Gen, Value) ->
     case whereis(name(StoreId)) of
-        undefined -> _ = insert(StoreId, StreamId, Gen, Value), ok;
-        _Pid -> gen_server:call(name(StoreId), {append_sync, StreamId, Gen, Value},
-                                30000)
+        undefined ->
+            {error, life_anchor_unavailable};
+        _Pid ->
+            gen_server:call(name(StoreId), {append_sync, StreamId, Gen, Value},
+                            30000)
     end.
 
 %% @private The table only ever moves up, and at one generation the LAST record
@@ -460,7 +482,7 @@ put_entry(StoreId, StreamId, Gen, Value) ->
 
 %% @private
 delta(Life) when is_binary(Life) -> 1;
-delta(delete_intent) -> 0;
+delta({delete_intent, _Life}) -> 0;
 delta(deleted) -> 0.
 
 %% @private
@@ -597,13 +619,36 @@ resolve_intents(#state{store_id = StoreId} = State) ->
                 State, Intents).
 
 %% @private
-resolve_intent(StoreId, Acc, {StreamId, Gen, delete_intent}) ->
-    case reckon_db_chain_watermark:life(StoreId, StreamId) of
-        {ok, undefined} -> commit_intent(Acc, StreamId, Gen);
-        {ok, Life} when is_binary(Life) -> drop_intent(Acc, StreamId, Gen, Life)
-    end;
+resolve_intent(StoreId, Acc, {StreamId, Gen, {delete_intent, Life}}) ->
+    resolve_entry(StreamId, Gen, Life, Acc, StoreId);
 resolve_intent(_StoreId, Acc, _Entry) ->
     Acc.
+
+%% @private The tree decides, and the life the intent carries is what an undo
+%% writes - the tree's life is only used to answer whether the delete landed.
+resolve_entry(StreamId, Gen, Life, Acc, StoreId) ->
+    case reckon_db_chain_watermark:life(StoreId, StreamId) of
+        {ok, undefined} ->
+            commit_intent(Acc, StreamId, Gen);
+        {ok, Life} when is_binary(Life) ->
+            drop_intent(Acc, StreamId, Gen, Life);
+        {ok, _OtherLife} ->
+            %% The life changed under the intent. Nothing honest does that
+            %% (a re-create records a higher generation and replaces the
+            %% row), so the intent is left standing: it refuses a different
+            %% life at its generation, which is the safe answer.
+            Acc
+    end.
+
+%% @private One stream, resolved on demand - the same decision the start pass
+%% makes for every intent it finds.
+resolve_one(#state{store_id = StoreId} = State, StreamId) ->
+    case lookup(StoreId, StreamId) of
+        {Gen, {delete_intent, Life}} ->
+            resolve_entry(StreamId, Gen, Life, State, StoreId);
+        _ ->
+            State
+    end.
 
 %% @private
 commit_intent(#state{store_id = StoreId} = State, StreamId, Gen) ->

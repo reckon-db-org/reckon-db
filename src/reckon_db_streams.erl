@@ -1311,16 +1311,52 @@ delete_validated(StoreId, StreamId) ->
     %% otherwise place the tombstone at 0 - at or below a restored life of
     %% generation 1 - and the restoration would be adopted (r21 review, item 6).
     Witness = delete_witness(StoreId, StreamId),
-    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId,
-                                                   maps:get(gen, Witness)),
-    Fun = fun() -> delete_stream_tx([Path, CounterPath | IntegrityPaths]) end,
+    case begin_tombstone(StoreId, StreamId, Witness) of
+        ok ->
+            run_delete(StoreId, StreamId,
+                       [Path, CounterPath | IntegrityPaths], Witness);
+        {error, _} = Refusal ->
+            Refusal
+    end.
+
+%% @private The transaction itself, and what a landed delete records.
+run_delete(StoreId, StreamId, Paths, Witness) ->
+    Fun = fun() -> delete_stream_tx(Paths) end,
     case khepri:transaction(StoreId, Fun) of
         {ok, ok} ->
             ok = reckon_db_life_anchor:record_deleted(StoreId, StreamId,
-                                                     maps:get(gen, Witness)),
+                                                      maps:get(gen, Witness)),
             ok;
-        {ok, {error, E}}   -> delete_failed(StoreId, StreamId, Witness, {error, E});
-        {error, _} = Error -> delete_failed(StoreId, StreamId, Witness, Error)
+        {ok, {error, E}} ->
+            delete_failed(StoreId, StreamId, {error, E});
+        {error, _} = Error ->
+            delete_failed(StoreId, StreamId, Error)
+    end.
+
+%% @private The intent has to be durable before the delete runs, or the delete
+%% must not run: with no anchor there is nowhere for it to land, and a delete
+%% that commits with neither an intent nor a tombstone leaves the deleted life
+%% restorable after the next start (Jupiter J22-2). An integrity-enabled store
+%% refuses the delete for the same reason a read refuses to answer - the check
+%% that would catch the restore is not running. A store without integrity has
+%% nothing for the anchor to protect, so it deletes as it always did.
+-spec begin_tombstone(atom(), binary(),
+                      #{gen := non_neg_integer(),
+                        life := binary() | undefined}) ->
+        ok | {error, {life_anchor_unavailable, binary()}}.
+begin_tombstone(StoreId, StreamId, Witness) ->
+    case reckon_db_life_anchor:record_delete_intent(
+           StoreId, StreamId, maps:get(gen, Witness), maps:get(life, Witness)) of
+        ok -> ok;
+        {error, life_anchor_unavailable} = Refusal ->
+            delete_without_anchor(StoreId, StreamId, Refusal)
+    end.
+
+%% @private
+delete_without_anchor(StoreId, StreamId, _Refusal) ->
+    case reckon_db_integrity_key:is_enabled(StoreId) of
+        true -> {error, {life_anchor_unavailable, StreamId}};
+        false -> ok
     end.
 
 %% @private What the tombstone is recorded at, and what a failed transaction
@@ -1337,15 +1373,15 @@ delete_witness(StoreId, StreamId) ->
             #{gen => CounterGen, life => undefined}
     end.
 
-%% @private A transaction that did not commit - a Ra timeout, a leader change -
-%% leaves the intent standing, and an intent refuses an honest stream until the
-%% next restart. The life goes back before the caller is told (Jupiter J21-2).
-delete_failed(StoreId, StreamId, #{gen := Gen, life := Life} = _Witness, Error)
-        when is_binary(Life) ->
-    ok = reckon_db_life_anchor:record_delete_undone(StoreId, StreamId, Gen,
-                                                   Life),
-    Error;
-delete_failed(_StoreId, _StreamId, _Witness, Error) ->
+%% @private The transaction answered an error, and an error is AMBIGUOUS: a
+%% Ra timeout can still commit. The anchor resolves the intent against the tree
+%% - no life there is a delete that landed, the life still there is one that
+%% did not - so an honest stream is not left refused and a landed delete is not
+%% left looking alive (Jupiter J21-2, Terra T22-4). If the anchor has gone in
+%% the meantime the intent is already on its disk and the next start resolves
+%% it; the read rule does not refuse an honest stream while it stands.
+delete_failed(StoreId, StreamId, Error) ->
+    _ = reckon_db_life_anchor:record_delete_failed(StoreId, StreamId),
     Error.
 
 %% @private Every node in one command: they go together or none does.

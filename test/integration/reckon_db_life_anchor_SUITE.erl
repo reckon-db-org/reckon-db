@@ -54,6 +54,9 @@
     an_uncommitted_delete_leaves_an_honest_stream_serving/1,
     a_failed_delete_transaction_puts_the_life_back/1,
     a_tombstone_takes_the_seals_generation_not_only_the_counter/1,
+    a_delete_with_no_anchor_is_refused/1,
+    an_intent_stands_for_its_own_life/1,
+    a_failed_delete_that_landed_is_resolved_as_deleted/1,
 
     %% The upgrade pass
     the_life_pass_records_what_a_missing_log_lost/1,
@@ -91,6 +94,9 @@ all() ->
         an_uncommitted_delete_leaves_an_honest_stream_serving,
         a_failed_delete_transaction_puts_the_life_back,
         a_tombstone_takes_the_seals_generation_not_only_the_counter,
+        a_delete_with_no_anchor_is_refused,
+        an_intent_stands_for_its_own_life,
+        a_failed_delete_that_landed_is_resolved_as_deleted,
         the_life_pass_records_what_a_missing_log_lost,
         a_deleted_stream_answers_not_found_not_a_violation,
         rebuild_takes_the_tree_word_and_leaves_a_log_behind,
@@ -237,7 +243,7 @@ a_tombstone_refuses_the_life_it_replaced(Config) ->
     start_anchor(Config),
     Life = crypto:strong_rand_bytes(16),
     ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, 1, Life),
-    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1),
+    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1, Life),
     ok = reckon_db_life_anchor:record_deleted(StoreId, StreamId, 1),
     await_entry(StoreId, StreamId, {1, deleted}),
     ?assertEqual({1, deleted}, reckon_db_life_anchor:entry(StoreId, StreamId)),
@@ -357,8 +363,8 @@ an_intent_whose_delete_committed_stays_a_tombstone(Config) ->
     DataDir = proplists:get_value(data_dir, Config),
     start_anchor(Config),
 
-    _Life = create(StoreId, StreamId),
-    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1),
+    Life = create(StoreId, StreamId),
+    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1, Life),
     ok = reckon_db_streams:delete(StoreId, StreamId),
     restart_anchor(StoreId, DataDir),
 
@@ -376,7 +382,7 @@ an_intent_whose_delete_never_committed_is_dropped(Config) ->
     start_anchor(Config),
 
     Life = create(StoreId, StreamId),
-    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1),
+    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1, Life),
     %% No delete. The anchor goes down with the intent on disk.
     restart_anchor(StoreId, DataDir),
 
@@ -498,7 +504,7 @@ what_was_recorded_survives_a_restart(Config) ->
     Life = create(StoreId, StreamId),
     %% A tombstone at the current generation and a later life: both go to disk,
     %% and the later one is what a restart must find.
-    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1),
+    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1, Life),
     ok = reckon_db_life_anchor:record_mint(StoreId, StreamId, 2, <<"next">>),
     await_entry(StoreId, StreamId, {2, <<"next">>}),
     ?assertEqual({2, <<"next">>}, reckon_db_life_anchor:entry(StoreId, StreamId)),
@@ -574,14 +580,14 @@ an_uncommitted_delete_leaves_an_honest_stream_serving(Config) ->
     start_anchor(Config),
 
     Life = create(StoreId, StreamId),
-    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1),
-    await_entry(StoreId, StreamId, {1, delete_intent}),
+    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1, Life),
+    await_entry(StoreId, StreamId, {1, {delete_intent, Life}}),
 
     {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
     ?assertEqual([0], [E#event.version || E <- Events]),
 
-    %% And the rollback restores the life it was recorded over.
-    ok = reckon_db_life_anchor:record_delete_undone(StoreId, StreamId, 1, Life),
+    %% And a failed transaction that did NOT land puts the life back.
+    ok = reckon_db_life_anchor:record_delete_failed(StoreId, StreamId),
     await_entry(StoreId, StreamId, {1, Life}),
     ok = reckon_db_life_anchor:check(StoreId, StreamId, 1, Life),
     ok.
@@ -640,6 +646,75 @@ a_tombstone_takes_the_seals_generation_not_only_the_counter(Config) ->
                  reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)),
     ok.
 
+%% Jupiter J22-2. With no anchor there is nowhere for the intent to be durable,
+%% and a delete that commits with neither an intent nor a tombstone leaves the
+%% deleted life restorable after the next start. An integrity-enabled store
+%% refuses the delete instead, for the same reason a read refuses to answer.
+a_delete_with_no_anchor_is_refused(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = sid(<<"no-anchor-delete">>),
+    start_anchor(Config),
+    Life = create(StoreId, StreamId),
+
+    reckon_db_life_anchor:stop(StoreId),
+
+    ?assertEqual({error, {life_anchor_unavailable, StreamId}},
+                 reckon_db_streams:delete(StoreId, StreamId)),
+
+    %% Nothing was deleted: with the anchor back, the stream and its life are
+    %% where they were.
+    {ok, _} = reckon_db_life_anchor:start_link(StoreId,
+                                               proplists:get_value(data_dir,
+                                                                   Config)),
+    {ok, [_ | _]} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
+    ?assertEqual({ok, Life}, reckon_db_chain_watermark:life(StoreId, StreamId)),
+    ok.
+
+%% Jupiter J22-1. An intent that named only a generation accepted ANY life at
+%% that generation, and generation 0 makes a second life at the same generation
+%% real for every pre-5.12 stream. It carries the life it stands for now.
+an_intent_stands_for_its_own_life(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = sid(<<"intent-own-life">>),
+    start_anchor(Config),
+    Life = create(StoreId, StreamId),
+    Other = crypto:strong_rand_bytes(16),
+
+    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1, Life),
+    await_entry(StoreId, StreamId, {1, {delete_intent, Life}}),
+
+    %% Its own life, at its own generation: the delete is in flight, serve.
+    ok = reckon_db_life_anchor:check(StoreId, StreamId, 1, Life),
+    %% A different life at the same generation: refused, exactly as it would be
+    %% without the intent in the way.
+    {refuse, Violation} = reckon_db_life_anchor:check(StoreId, StreamId, 1, Other),
+    ?assertEqual(life_gen_mismatch, detail(Violation)),
+    {refuse, Older} = reckon_db_life_anchor:check(StoreId, StreamId, 0, Other),
+    ?assertEqual(life_gen_rolled_back, detail(Older)),
+    ok.
+
+%% Terra T22-4. An error from the delete transaction is AMBIGUOUS: a timeout
+%% can still commit. Writing the life back unconditionally left a deleted
+%% stream with a life in the anchor and its restoration accepted. The tree
+%% decides, exactly as it does at the next start.
+a_failed_delete_that_landed_is_resolved_as_deleted(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = sid(<<"failed-delete-landed">>),
+    start_anchor(Config),
+    _Life = create(StoreId, StreamId),
+    ok = reckon_db_life_anchor:record_delete_intent(StoreId, StreamId, 1, _Life),
+    await_entry(StoreId, StreamId, {1, {delete_intent, _Life}}),
+
+    %% The transaction landed after all: the tree has no life for the stream.
+    ok = khepri:delete(StoreId, reckon_db_chain_watermark:path(StreamId)),
+    ok = khepri:delete(StoreId, reckon_db_chain_watermark:life_path(StreamId)),
+    ok = khepri:delete(StoreId,
+                       reckon_db_stream_path:stream_path(StreamId)),
+
+    ok = reckon_db_life_anchor:record_delete_failed(StoreId, StreamId),
+    await_entry(StoreId, StreamId, {1, deleted}),
+    ok.
+
 %%====================================================================
 %% The upgrade pass
 %%====================================================================
@@ -658,7 +733,6 @@ the_life_pass_records_what_a_missing_log_lost(Config) ->
     ok = file:delete(reckon_db_life_anchor:log_path(DataDir)),
     {ok, _} = reckon_db_life_anchor:start_link(StoreId, DataDir),
     ?assertEqual(undefined, reckon_db_life_anchor:entry(StoreId, StreamId)),
-    ?assertNot(reckon_db_life_anchor:has_records(StoreId)),
 
     ok = reckon_db_life_anchor:life_pass(StoreId),
 

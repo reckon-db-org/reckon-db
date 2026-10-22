@@ -46,6 +46,7 @@
     tampered_snapshot_mac_is_caught/1,
     tampered_stream_event_breaks_snapshot/1,
     a_restored_old_life_cannot_be_read_through_its_snapshot/1,
+    a_legacy_shaped_snapshot_on_a_sealed_stream_is_refused/1,
     legacy_snapshot_passes_through_on_load/1,
     integrity_disabled_store_skips_load_verification/1
 ]).
@@ -78,6 +79,7 @@ groups() ->
             tampered_snapshot_mac_is_caught,
             tampered_stream_event_breaks_snapshot,
             a_restored_old_life_cannot_be_read_through_its_snapshot,
+            a_legacy_shaped_snapshot_on_a_sealed_stream_is_refused,
             legacy_snapshot_passes_through_on_load,
             integrity_disabled_store_skips_load_verification
         ]}
@@ -324,6 +326,30 @@ a_restored_old_life_cannot_be_read_through_its_snapshot(Config) ->
                  reckon_db_snapshots:load(StoreId, StreamId)),
     ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_snapshots:load_at(StoreId, StreamId, 4)),
+    %% ... and the list is not a way around either check (reckon-db#22).
+    ?assertEqual({ok, []}, reckon_db_snapshots:list(StoreId, StreamId)),
+    ok.
+
+%% Terra T22-2. A snapshot with no anchor and no MAC is legacy data - but not
+%% on a stream that HAS a seal: a tree writer who replaces the record with that
+%% shape and a forged payload was served by both load paths, because the
+%% "legacy" answer skipped the MAC check AND the life anchor.
+a_legacy_shaped_snapshot_on_a_sealed_stream_is_refused(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"snap-legacy-shaped">>),
+    write_n_events(StoreId, StreamId, 5),
+    ok = reckon_db_snapshots:save(StoreId, StreamId, 4, #{balance => 10}),
+    {ok, Honest} = reckon_db_snapshots:load(StoreId, StreamId),
+
+    Forged = Honest#snapshot{data = #{balance => 1000000},
+                             anchor_hash = undefined, mac = undefined},
+    ok = put_snapshot_directly(StoreId, StreamId, 4, Forged),
+
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_snapshots:load(StoreId, StreamId)),
+    ?assertMatch({error, {integrity_violation, _}},
+                 reckon_db_snapshots:load_at(StoreId, StreamId, 4)),
+    ?assertEqual({ok, []}, reckon_db_snapshots:list(StoreId, StreamId)),
     ok.
 
 %% A legacy snapshot (no integrity fields) on an integrity-enabled

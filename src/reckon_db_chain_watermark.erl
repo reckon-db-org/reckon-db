@@ -356,7 +356,7 @@ migrate_store(StoreId, AnchorPath) ->
     case migration_state(StoreId, AnchorPath) of
         migrated ->
             _ = ensure_anchor(StoreId, AnchorPath),
-            _ = life_pass_if_anchor_empty(StoreId),
+            _ = life_pass_at_start(StoreId),
             {ok, 0};
         unauthorised ->
             migration_violation(StoreId),
@@ -366,17 +366,19 @@ migrate_store(StoreId, AnchorPath) ->
     end.
 
 %% @private The marker is on the tree, so it reached this node whole; the
-%% anchor is per node and is not. A node that carries the marker and no anchor
-%% records - a member that has just joined, or one whose log did not survive -
-%% would otherwise treat every stream as a first sight and adopt whatever life
-%% the tree holds at the first read, including a restore that happened before
-%% anyone read it. The pass records each stream's sealed generation once, and
-%% says loudly that it did (r21 review, item 7 / design item 8).
-life_pass_if_anchor_empty(StoreId) ->
-    case reckon_db_life_anchor:has_records(StoreId) of
-        true -> ok;
-        false -> reckon_db_life_anchor:life_pass(StoreId)
-    end.
+%% anchor is per node and is not. A node that carries the marker and no record
+%% of a stream - a member that has just joined, one whose log did not survive,
+%% or one whose log lost its TAIL to a crash, since mints and adoptions are
+%% coalesced into an fsync window - would otherwise treat that stream as a
+%% first sight and adopt whatever life the tree holds at its first read,
+%% including a restore that happened before anyone read it (r21 review item 7,
+%% Terra T22-3).
+%%
+%% So the pass runs on EVERY start, not only when the anchor is empty: it
+%% records only streams this node has no entry for and never moves an entry
+%% down, which is what makes it safe to run every time.
+life_pass_at_start(StoreId) ->
+    reckon_db_life_anchor:life_pass(StoreId).
 
 %% @private
 migration_state(StoreId, AnchorPath) ->
@@ -497,7 +499,7 @@ cluster_loser(StoreId, AnchorPath) ->
     case read_marker(StoreId) of
         {ok, _Refused} ->
             _ = ensure_anchor(StoreId, AnchorPath),
-            _ = life_pass_if_anchor_empty(StoreId),
+            _ = life_pass_at_start(StoreId),
             {ok, 0};
         none ->
             logger:error("integrity migration on store ~p found a marker that "
