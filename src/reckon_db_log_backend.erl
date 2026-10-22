@@ -23,14 +23,19 @@
 %%
 %% == Implementations ==
 %%
-%%   - `reckon_db_khepri_log_backend`  — current Khepri-backed engine
-%%     (baseline; extracts existing code unchanged).
+%% No module implements this behaviour yet. The Khepri-backed path it would
+%% extract is `reckon_db_streams` itself, working on the event tree layout
+%% (`/streams/<type>/<id>/<padded-version>`); there is no
+%% `reckon_db_khepri_log_backend` module, and naming one that does not exist
+%% sent readers looking for it.
 %%
-%%   - `reckon_db_rocksdb_log_backend` — planned, RocksDB via Rustler NIF.
+%% Planned, neither written:
+%%
+%%   - `reckon_db_rocksdb_log_backend` — RocksDB via Rustler NIF.
 %%     Expected: 10-100× throughput, ~1-3 KB/op disk amplification.
 %%
-%%   - `reckon_db_log_nif` — planned custom Rust engine. Long-term
-%%     moat. Append-only segments, mmap, fsync batching, zstd.
+%%   - `reckon_db_log_nif` — custom Rust engine. Long-term moat.
+%%     Append-only segments, mmap, fsync batching, zstd.
 %%
 %% == Contract Notes ==
 %%
