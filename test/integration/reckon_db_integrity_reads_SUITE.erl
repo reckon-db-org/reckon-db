@@ -57,6 +57,9 @@
     a_replayed_boundary_does_not_anchor_a_new_life/1,
     a_restored_life_token_does_not_anchor_a_new_life/1,
     a_verified_cut_with_events_below_it_is_refused/1,
+    residual_a_restored_batch_and_the_top_two_versions_are_served/1,
+    residual_planted_top_two_versions_above_a_hole_are_served/1,
+    residual_a_truncated_new_life_serves_a_restored_run_backward/1,
     a_restored_event_at_the_seal_does_not_anchor_a_new_life/1,
     a_boundary_copied_from_another_store_does_not_anchor/1,
     a_rolled_back_run_above_a_stripped_prefix_refuses_a_targeted_read/1,
@@ -134,6 +137,9 @@ groups() ->
             a_replayed_boundary_does_not_anchor_a_new_life,
             a_restored_life_token_does_not_anchor_a_new_life,
             a_verified_cut_with_events_below_it_is_refused,
+            residual_a_restored_batch_and_the_top_two_versions_are_served,
+            residual_planted_top_two_versions_above_a_hole_are_served,
+            residual_a_truncated_new_life_serves_a_restored_run_backward,
             a_restored_event_at_the_seal_does_not_anchor_a_new_life,
             a_rolled_back_run_above_a_stripped_prefix_refuses_a_targeted_read,
             a_restored_early_life_does_not_survive_a_read_below_the_newest_event,
@@ -1338,6 +1344,77 @@ a_counter_above_a_hole_does_not_hide_the_events_above_it(Config) ->
 
     ?assertMatch({error, {integrity_violation, _}},
                  reckon_db_streams:read(StoreId, StreamId, 0, 3, forward)).
+
+%% @doc RESIDUAL, PINNED: R-6 (i). GIVEN a rollback that restores the old
+%%           seal and life token AND old copies of the batch AND of the TOP
+%%           TWO versions, over a recreated life
+%%      WHEN a targeted read asks for the restored batch
+%%      THEN it is served, and this test exists to say so
+%%
+%% Jupiter r20 J20-6. The check runs through the predecessor link, so it needs
+%% the newest event and the one under it; restoring those two as well is what
+%% R-6 (i) names. Pinning the shape here is deliberate: a test that flips to a
+%% refusal when someone closes it is the signal that the residual shrank.
+residual_a_restored_batch_and_the_top_two_versions_are_served(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"residual-top-two">>),
+    write_n_events(StoreId, StreamId, 10),
+    Saved = save_life_and_events(StoreId, StreamId, [0, 1, 2, 8, 9]),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    write_n_events(StoreId, StreamId, 10),
+    ok = restore_life_and_events(StoreId, StreamId, Saved),
+
+    {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
+    ?assertEqual([0, 1, 2], [V || #event{version = V} <- Events]).
+
+%% @doc RESIDUAL, PINNED: R-6 (i), the planted variant. GIVEN old copies of
+%%           0..2 and of versions 8 and 9 planted above a FIVE-event new life,
+%%           so 5..7 are a hole
+%%      WHEN a targeted read asks for the restored batch
+%%      THEN it is served: the newest event and its predecessor are both old
+%%           life copies and agree with each other
+%%
+%% Jupiter r20 J20-7.
+residual_planted_top_two_versions_above_a_hole_are_served(Config) ->
+    {StoreId, _Key} = setup_integrity_store(Config),
+    StreamId = reckon_db_test_helpers:sid(<<"residual-planted-top">>),
+    write_n_events(StoreId, StreamId, 10),
+    Saved = save_life_and_events(StoreId, StreamId, [0, 1, 2, 8, 9]),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    write_n_events(StoreId, StreamId, 5),
+    ok = restore_life_and_events(StoreId, StreamId, Saved),
+
+    {ok, Events} = reckon_db_streams:read(StoreId, StreamId, 0, 3, forward),
+    ?assertEqual([0, 1, 2], [V || #event{version = V} <- Events]).
+
+%% @doc RESIDUAL, PINNED: R-6 (i), the truncation variant. GIVEN a legacy
+%%           prefix and an old life 3..9, with the old seal, life and 3..5
+%%           restored over a new ten-event life and the new 6..9 deleted
+%%      WHEN a targeted read, BACKWARD, asks for old version 4
+%%      THEN it is served while new-life 0..2 remain untouched
+%%
+%% Terra r20. The restored top two versions are 4 and 5, which is what the
+%% check needs; the surviving new events sit BELOW the batch, where the check
+%% does not look.
+residual_a_truncated_new_life_serves_a_restored_run_backward(Config) ->
+    {StoreId, _Key} = setup_integrity_store_with_legacy_prefix(Config, 3),
+    StreamId = reckon_db_test_helpers:sid(<<"residual-truncation">>),
+    write_legacy_events(StoreId, StreamId, 3),
+    ok = enable_integrity(StoreId),
+    ok = reckon_db_chain_watermark:migrate(StoreId),
+    write_n_events_starting_at(StoreId, StreamId, 3, 7),
+    Saved = save_life_and_events(StoreId, StreamId, [3, 4, 5]),
+
+    ok = reckon_db_streams:delete(StoreId, StreamId),
+    write_n_events(StoreId, StreamId, 10),
+    ok = restore_life_and_events(StoreId, StreamId, Saved),
+    lists:foreach(fun(V) -> ok = khepri:delete(StoreId, event_path(StreamId, V))
+                  end, lists:seq(6, 9)),
+
+    {ok, [Event]} = reckon_db_streams:read(StoreId, StreamId, 4, 1, backward),
+    ?assertEqual(4, Event#event.version).
 
 %% @doc GIVEN a stream deleted while it holds a scavenge boundary
 %%      WHEN the delete completes

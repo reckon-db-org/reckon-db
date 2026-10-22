@@ -2388,10 +2388,10 @@ newest_then_region(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
 %% stops short does not - and the events it serves can be an OLDER life's:
 %% restore the old seal, the old life token and the old events, strip whatever
 %% stood between them and the newest event, and every event in the batch agrees
-%% with itself. What cannot be restored is the newest event underneath: its MAC
-%% names the store and the life it was written under, so under a restored old
-%% life it does not verify (Jupiter r19 J19-1 and J19-5, the second a stream
-%% born with integrity, sealed at 0, carrying no legacy event at all).
+%% with itself. What that costs the attacker is the newest event and the event
+%% under it: the check runs through the predecessor link, so a rollback needs
+%% old copies of the top TWO versions as well as the batch (Jupiter r20 J20-6,
+%% J20-7, and Terra's truncation shape - all three pinned as residual tests).
 %%
 %% The trigger is the STREAM, never a legacy event in the batch: a batch of
 %% restored old-life events is exactly as suspect when nothing in it looks
@@ -2399,8 +2399,10 @@ newest_then_region(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
 %% counter: a counter put above a hole (delete the event at 4, set the counter
 %% to 3) hid five live events from the walk above (Terra r19 T19-1).
 %%
-%% One tree read and one MAC per targeted read, which is what Raf chose over
-%% walking the suffix on every read. What it does not cover is named in R-6.
+%% What it does not cover is named in R-6. A version-node read is O(versions),
+%% not O(1): 130-150 ms on a 50k-event stream, 1000x the targeted read it
+%% guards, which round 21 answers with a MAC'd tip record rather than this
+%% scan.
 -spec newest_event_verdict(atom(), binary(), [event()], term(), term(),
                            non_neg_integer() | undefined) ->
         ok | {integrity_violation, map()}.
@@ -2409,8 +2411,15 @@ newest_event_verdict(StoreId, StreamId, Events, Key, Ctx, Limit) ->
         {ok, Newest} when is_integer(Newest), Newest >= 0 ->
             batch_below_newest(StoreId, StreamId, Newest, Events, Key, Ctx,
                                Limit);
-        _ ->
-            ok
+        {ok, _NoStream} ->
+            %% NO_STREAM: there is no event to check, and the batch is empty
+            %% for the same reason.
+            ok;
+        {error, Reason} ->
+            %% A store that cannot say what its newest version is cannot be
+            %% asked whether this batch stops short of it. Failing closed is
+            %% the whole point of the check (Terra r20 T20-2).
+            {integrity_violation, newest_version_unreadable(StreamId, Reason)}
     end.
 
 %% @private
@@ -2460,14 +2469,26 @@ newest_event_mac(StoreId, StreamId, Newest, NewestEvent, Key, Ctx, Limit) ->
 
 %% @private The newest version the TREE holds, never the counter.
 %%
-%% `local' read options, like the batch read it is compared with: both then
-%% answer from the same applied state, and an event that is here to contradict
-%% a rollback is here for both. A consistency fence would put a leader round
-%% trip on every read of the store to learn something the read's own view
-%% already contains.
+%% `local' read options, the same options the batch is read with. These are
+%% separate queries and they are not one atomic view: a write landing between
+%% them can make this answer a version the batch did not see, and that only
+%% ever makes the check run (fail closed), never skip it. What a local view
+%% cannot do is hide an event that is in the same applied state as the batch,
+%% which is the contradiction the check exists to find. A consistency fence
+%% would put a leader round trip on every read to learn something the read's
+%% own view already holds.
 -spec newest_live_version(atom(), binary()) -> {ok, integer()} | {error, term()}.
 newest_live_version(StoreId, StreamId) ->
     get_version_from_version_nodes(StoreId, StreamId, read_options(local)).
+
+%% @private A version-node read that fails is not "nothing to check": the
+%% check cannot run, so the read is refused rather than served unchecked.
+newest_version_unreadable(StreamId, Reason) ->
+    #{layer => storage,
+      stream_id => StreamId,
+      version => -1,
+      kind => missing_integrity,
+      context => #{detail => newest_version_unreadable, reason => Reason}}.
 
 %% @private A version node with no event under it is a tree nobody wrote on
 %% purpose. Refusing it is the only answer that is not a guess.
