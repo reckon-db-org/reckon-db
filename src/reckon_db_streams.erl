@@ -2404,13 +2404,9 @@ verify_explained_region(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
 %% than a weaker one.
 verify_explained_suffix(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
                         Limit) ->
-    case suffix_from(StoreId, StreamId, Limit) of
-        {ok, Tail} ->
-            verify_from_anchor_then(StoreId, StreamId, StartVersion, Events,
-                                    Mode, Key, Ctx, Limit, Tail);
-        {error, Reason} ->
-            {integrity_violation, suffix_unreadable(StreamId, Limit, Reason)}
-    end.
+    {ok, Tail} = suffix_from(StoreId, StreamId, Limit),
+    verify_from_anchor_then(StoreId, StreamId, StartVersion, Events, Mode, Key,
+                            Ctx, Limit, Tail).
 
 %% @private
 verify_from_anchor_then(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
@@ -2425,8 +2421,7 @@ verify_from_anchor_then(StoreId, StreamId, StartVersion, Events, Mode, Key, Ctx,
     end.
 
 %% @private Every event from the seal to the newest one, in order.
--spec suffix_from(atom(), binary(), non_neg_integer())
-        -> {ok, [event()]} | {error, term()}.
+-spec suffix_from(atom(), binary(), non_neg_integer()) -> {ok, [event()]}.
 suffix_from(StoreId, StreamId, Limit) ->
     case newest_event_version(StoreId, StreamId) of
         {ok, Newest} when is_integer(Newest), Newest >= Limit ->
@@ -2553,15 +2548,6 @@ survivors_below_boundary(StreamId, Limit) ->
       version => Limit,
       kind => missing_integrity,
       context => #{detail => survivors_below_boundary, limit => Limit}}.
-
-%% @private The suffix this read had to verify could not be read at all.
-suffix_unreadable(StreamId, Limit, Reason) ->
-    #{layer => storage,
-      stream_id => StreamId,
-      version => Limit,
-      kind => missing_integrity,
-      context => #{detail => suffix_unreadable, limit => Limit,
-                   reason => Reason}}.
 
 %% @private Integrity is enabled but the store has no key, so nothing this
 %% read returns can be verified. Refusing is the only answer that does not
