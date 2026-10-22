@@ -53,6 +53,10 @@
 
     %% Rebuild
     rebuild_takes_the_tree_word_and_leaves_a_log_behind/1,
+    two_members_each_need_their_own_rebuild/1,
+
+    %% Concurrency
+    concurrent_first_appends_leave_every_creator_readable/1,
 
     %% The log
     what_was_recorded_survives_a_restart/1,
@@ -73,6 +77,8 @@ all() ->
         an_intent_whose_delete_committed_stays_a_tombstone,
         an_intent_whose_delete_never_committed_is_dropped,
         rebuild_takes_the_tree_word_and_leaves_a_log_behind,
+        two_members_each_need_their_own_rebuild,
+        concurrent_first_appends_leave_every_creator_readable,
         what_was_recorded_survives_a_restart,
         a_damaged_tail_costs_the_tail_not_the_head
     ].
@@ -401,6 +407,65 @@ rebuild_takes_the_tree_word_and_leaves_a_log_behind(Config) ->
     ?assertEqual({1, OlderLife}, reckon_db_life_anchor:entry(StoreId, StreamId)),
     ok.
 
+%% F2. The anchor is NODE-LOCAL, and so is a rebuild. A member that has seen
+%% the newer life keeps refusing an honest stream after another member rebuilt,
+%% which is why the operator act has to run on every member.
+two_members_each_need_their_own_rebuild(Config) ->
+    [StoreA, StoreB] = two_member_stores(Config),
+    StreamId = sid(<<"two-members">>),
+    try
+        LifeA = create(StoreA, StreamId),
+        LifeB = create(StoreB, StreamId),
+        %% Both members have seen a NEWER life than the tree now holds: the
+        %% shape a Khepri-only restore leaves behind.
+        ok = reckon_db_life_anchor:record_mint(StoreA, StreamId, 5, <<"newer">>),
+        ok = reckon_db_life_anchor:record_mint(StoreB, StreamId, 5, <<"newer">>),
+        settle(),
+        ok = put_older_life_in_the_tree(StoreA, StreamId, LifeA, 1),
+        ok = put_older_life_in_the_tree(StoreB, StreamId, LifeB, 1),
+
+        {ok, 1} = reckon_db_life_anchor:rebuild(StoreA),
+        ok = reckon_db_life_anchor:check(StoreA, StreamId, 1, LifeA),
+        {refuse, Violation} = reckon_db_life_anchor:check(StoreB, StreamId, 1,
+                                                          LifeB),
+        ?assertEqual(life_gen_rolled_back, detail(Violation)),
+
+        {ok, 1} = reckon_db_life_anchor:rebuild(StoreB),
+        ok = reckon_db_life_anchor:check(StoreB, StreamId, 1, LifeB)
+    after
+        reckon_db_life_anchor:stop(StoreA),
+        reckon_db_life_anchor:stop(StoreB),
+        close_member(StoreA, StoreB)
+    end.
+
+%% Eight creators opening forty fresh streams at once, each stream's events
+%% all from one creator's ANY_VERSION append, and every stream read back after:
+%% no stream may be left unreadable by two writers minting a life under it.
+%% Terra's probe_concurrent_first_append_life, as a test.
+concurrent_first_appends_leave_every_creator_readable(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    start_anchor(Config),
+    Streams = [sid(iolist_to_binary(["first-append-",
+                                     integer_to_list(N)]))
+               || N <- lists:seq(1, 40)],
+
+    %% Eight creators on EACH of the forty streams: every one of them appends
+    %% ANY_VERSION to a stream nobody has opened yet. They all have to come
+    %% back with a version, the events all have to be there afterwards, and the
+    %% stream has to read - which is the shape that left 9 of 40 unreadable
+    %% before the mint became one transaction.
+    Results = lists:append([race_on(StoreId, S) || S <- Streams]),
+    ?assertEqual([], [R || R <- Results, element(1, R) =/= ok]),
+
+    lists:foreach(
+      fun(S) ->
+              {ok, Events} = reckon_db_streams:read(StoreId, S, 0, 100, forward),
+              ?assertEqual(lists:seq(0, 7), [E#event.version || E <- Events]),
+              {ok, Life} = reckon_db_chain_watermark:life(StoreId, S),
+              ?assertEqual({1, Life}, reckon_db_life_anchor:entry(StoreId, S))
+      end, Streams),
+    ok.
+
 %%====================================================================
 %% The log
 %%====================================================================
@@ -449,6 +514,45 @@ a_damaged_tail_costs_the_tail_not_the_head(Config) ->
 
 sid(Label) ->
     reckon_db_test_helpers:sid(Label).
+
+%% Eight creators appending to one fresh stream at once, each ANY_VERSION.
+race_on(StoreId, StreamId) ->
+    Parent = self(),
+    Pids = [spawn_link(fun() ->
+                               Parent ! {self(), reckon_db_streams:append(
+                                                   StoreId, StreamId,
+                                                   ?ANY_VERSION, events(1))}
+                       end) || _ <- lists:seq(1, 8)],
+    [receive {Pid, Result} -> Result end || Pid <- Pids].
+
+%% A second store standing in for a second member: its own tree, its own key,
+%% its own anchor file.
+two_member_stores(Config) ->
+    Base = proplists:get_value(data_dir, Config),
+    [member_store(Base, "a"), member_store(Base, "b")].
+
+member_store(Base, Name) ->
+    Dir = filename:join(Base, Name),
+    os:cmd("rm -rf " ++ Dir),
+    ok = filelib:ensure_dir(filename:join(Dir, "dummy")),
+    StoreId = list_to_atom("life_anchor_member_" ++ Name ++ "_" ++
+                           integer_to_list(erlang:unique_integer([positive]))),
+    {ok, _} = khepri:start(Dir, StoreId),
+    khepri:put(StoreId, [streams], #{}),
+    khepri:put(StoreId, [metadata], #{}),
+    Key = crypto:strong_rand_bytes(32),
+    persistent_term:put({reckon_db, integrity_key, StoreId}, Key),
+    persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
+    {ok, _} = reckon_db_life_anchor:start_link(StoreId, Dir),
+    StoreId.
+
+close_member(StoreA, StoreB) ->
+    [begin
+         catch khepri:stop(S),
+         persistent_term:erase({reckon_db, integrity_key, S}),
+         persistent_term:erase({reckon_db, integrity_enabled, S})
+     end || S <- [StoreA, StoreB]],
+    ok.
 
 start_anchor(Config) ->
     {ok, _} = reckon_db_life_anchor:start_link(

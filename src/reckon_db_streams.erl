@@ -2421,8 +2421,25 @@ life_anchor_then_region(StoreId, StreamId, StartVersion, Events, Mode, Key,
 %% into the seal's MAC, so it cannot be raised. Where the anchor knows nothing
 %% about the stream, it adopts what the tree says (trust on first use, named in
 %% #18) and the read goes on.
--spec life_anchor_verdict(atom(), binary(), map()) ->
-        ok | {integrity_violation, map()}.
+%% The generation is read with a 0 default: a stream with no seal has none, and
+%% a map type that names only the keys this function requires is what the caller
+%% can be held to.
+-type life_anchor_refusal() ::
+    #{layer := storage,
+      stream_id := binary(),
+      version := non_neg_integer(),
+      kind := missing_integrity,
+      context := #{detail := life_absent_in_tree
+                             | life_anchor_unavailable
+                             | life_gen_deleted
+                             | life_gen_mismatch
+                             | life_gen_rolled_back,
+                   recorded_gen := non_neg_integer()}}.
+
+-spec life_anchor_verdict(atom(), binary(),
+                          #{store_id := atom(), life => binary(),
+                            v2_from => non_neg_integer()}) ->
+        ok | {integrity_violation, life_anchor_refusal()}.
 life_anchor_verdict(StoreId, StreamId, Ctx) ->
     Gen = maps:get(gen, Ctx, 0),
     Life = maps:get(life, Ctx, undefined),
@@ -2440,7 +2457,6 @@ life_anchor_verdict(StoreId, StreamId, Ctx) ->
 %% read path no longer calls this - the anchor's O(1) generation check replaced
 %% it - but this walk is O(suffix) by construction and only runs for a
 %% legacy or migrated region.
-%% @private The newest version the TREE holds, never the counter.
 -spec newest_live_version(atom(), binary()) -> {ok, integer()} | {error, term()}.
 newest_live_version(StoreId, StreamId) ->
     get_version_from_version_nodes(StoreId, StreamId, #{}).

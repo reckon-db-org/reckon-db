@@ -181,9 +181,13 @@ init({StoreId, DataDir}) ->
     State2 = resolve_intents(State1),
     {ok, maybe_compact(State2)}.
 
+%% The delete INTENT. It skips the adopt coalescing and it answers only after
+%% the record is on the disk: the delete that follows compares against this
+%% record at the next start, so a reply that outran the fsync would leave a
+%% delete nothing can resolve.
 handle_call({append_sync, StreamId, Gen, Value}, _From, State) ->
     case insert(State#state.store_id, StreamId, Gen, Value) of
-        true -> {reply, ok, append(State, StreamId, Gen, Value)};
+        true -> {reply, ok, flush(append(State, StreamId, Gen, Value))};
         false -> {reply, ok, State}
     end;
 handle_call(rebuild, _From, State) ->
@@ -280,20 +284,21 @@ sync_write(StoreId, StreamId, Gen, Value) ->
 %% Answers whether anything changed, which is what decides whether a record is
 %% appended: an entry that already says this writes nothing.
 insert(StoreId, StreamId, Gen, Value) ->
-    Tab = table(StoreId),
-    case ets:info(Tab, size) of
-        undefined ->
+    case ets:info(table(StoreId), size) of
+        undefined -> false;
+        _ -> replace_row(table(StoreId), StreamId, Gen, Value)
+    end.
+
+%% @private
+replace_row(Tab, StreamId, Gen, Value) ->
+    case ets:lookup(Tab, StreamId) of
+        [{_, Existing, Value}] when Existing >= Gen ->
+            false;
+        [{_, Existing, _}] when Existing > Gen ->
             false;
         _ ->
-            case ets:lookup(Tab, StreamId) of
-                [{_, Existing, Value}] when Existing >= Gen ->
-                    false;
-                [{_, Existing, _}] when Existing > Gen ->
-                    false;
-                _ ->
-                    ets:insert(Tab, {StreamId, Gen, Value}),
-                    true
-            end
+            ets:insert(Tab, {StreamId, Gen, Value}),
+            true
     end.
 
 %% @private Whether this node's anchor is up. The table is created by the
@@ -304,14 +309,16 @@ running(StoreId) ->
 
 %% @private
 lookup(StoreId, StreamId) ->
-    Tab = table(StoreId),
-    case ets:info(Tab, size) of
+    case ets:info(table(StoreId), size) of
         undefined -> undefined;
-        _ ->
-            case ets:lookup(Tab, StreamId) of
-                [{_, Gen, Value}] -> {Gen, Value};
-                [] -> undefined
-            end
+        _ -> row(table(StoreId), StreamId)
+    end.
+
+%% @private
+row(Tab, StreamId) ->
+    case ets:lookup(Tab, StreamId) of
+        [{_, Gen, Value}] -> {Gen, Value};
+        [] -> undefined
     end.
 
 %%====================================================================
@@ -377,14 +384,18 @@ decode(StoreId, Bin, PrevMac) ->
         #{version := ?LOG_VERSION, stream := StreamId, gen := Gen,
           value := Value, prev_mac := PrevMac, mac := Mac}
                 when is_binary(StreamId), is_integer(Gen), is_binary(Mac) ->
-            case mac_matches(Mac, record_mac(StoreId, StreamId, Gen, Value,
-                                             PrevMac)) of
-                true -> {ok, #{stream => StreamId, gen => Gen, value => Value,
-                               mac => Mac}};
-                false -> error
-            end;
+            decode_verified(StoreId, StreamId, Gen, Value, PrevMac, Mac);
         _ ->
             error
+    end.
+
+%% @private
+decode_verified(StoreId, StreamId, Gen, Value, PrevMac, Mac) ->
+    Expected = record_mac(StoreId, StreamId, Gen, Value, PrevMac),
+    case mac_matches(Mac, Expected) of
+        true -> {ok, #{stream => StreamId, gen => Gen, value => Value,
+                       mac => Mac}};
+        false -> error
     end.
 
 %% @private
@@ -436,14 +447,13 @@ flush(#state{fd = Fd} = State) ->
     _ = file:sync(Fd),
     State.
 
-%% @private
 %% @private The log is created here when it is not there yet - a fresh store,
-%% or the first start after a rebuild set the old one aside. Without `create'
-%% the open failed on a fresh store and every record went to the table only,
-%% so nothing the anchor learned survived a restart.
+%% or the first start after a rebuild set the old one aside. `write' is what
+%% creates it: there is no `create' mode in file:open, and a mode list that
+%% carries one is not a call dialyzer can give a return to.
 open_at_end(Path, Good) ->
     ok = filelib:ensure_dir(Path),
-    case file:open(Path, [read, write, raw, binary, create]) of
+    case file:open(Path, [read, write, raw, binary]) of
         {ok, Fd} ->
             {ok, _} = file:position(Fd, Good),
             ok = file:truncate(Fd),
@@ -483,17 +493,18 @@ mac_matches(Mac, Expected) ->
 %% next replay reaches the same answer.
 resolve_intents(#state{store_id = StoreId} = State) ->
     Intents = ets:tab2list(table(StoreId)),
-    lists:foldl(
-      fun({StreamId, Gen, deleted}, Acc) ->
-              case reckon_db_chain_watermark:life(StoreId, StreamId) of
-                  {ok, undefined} ->
-                      Acc;
-                  {ok, Life} when is_binary(Life) ->
-                      drop_intent(Acc, StreamId, Gen, Life)
-              end;
-         ({_StreamId, _Gen, _Life}, Acc) ->
-              Acc
-      end, State, Intents).
+    lists:foldl(fun(Entry, Acc) -> resolve_intent(StoreId, Acc, Entry) end,
+                State, Intents).
+
+%% @private A tombstone whose life is still in the tree is dropped; one whose
+%% life is gone is the delete that committed, and it stays.
+resolve_intent(StoreId, Acc, {StreamId, Gen, deleted}) ->
+    case reckon_db_chain_watermark:life(StoreId, StreamId) of
+        {ok, undefined} -> Acc;
+        {ok, Life} when is_binary(Life) -> drop_intent(Acc, StreamId, Gen, Life)
+    end;
+resolve_intent(_StoreId, Acc, _Entry) ->
+    Acc.
 
 %% @private
 drop_intent(#state{store_id = StoreId, path = Path} = State, StreamId, Gen,
@@ -516,27 +527,30 @@ maybe_compact(State) ->
     State.
 
 %% @private
-compact(#state{store_id = StoreId, path = Path, fd = OldFd} = State) ->
+compact(#state{path = Path, fd = OldFd} = State) ->
     Temp = Path ++ ".new",
     case file:open(Temp, [write, raw, binary]) of
-        {ok, Fd} ->
-            State1 = lists:foldl(
-                       fun({StreamId, Gen, Value}, Acc) ->
-                               append(Acc, StreamId, Gen, Value)
-                       end, State#state{fd = Fd, entries = 0, records = 0,
-                                        last_mac = <<>>},
-                       ets:tab2list(table(StoreId))),
-            _ = file:sync(Fd),
-            _ = file:close(Fd),
-            _ = file:close(OldFd),
-            ok = file:rename(Temp, Path),
-            State1#state{path = Path, fd = open_at_end(Path, file_size(Path))};
+        {ok, Fd} -> compact_into(State, Fd, OldFd, Temp);
         {error, Reason} ->
             logger:warning("life anchor compaction failed: ~p", [Reason]),
             State
     end.
 
 %% @private
+compact_into(#state{store_id = StoreId, path = Path} = State, Fd, OldFd, Temp) ->
+    Fresh = State#state{fd = Fd, entries = 0, records = 0, last_mac = <<>>},
+    State1 = lists:foldl(fun compact_entry/2, Fresh,
+                         ets:tab2list(table(StoreId))),
+    _ = file:sync(Fd),
+    _ = file:close(Fd),
+    _ = file:close(OldFd),
+    ok = file:rename(Temp, Path),
+    State1#state{path = Path, fd = open_at_end(Path, file_size(Path))}.
+
+%% @private
+compact_entry({StreamId, Gen, Value}, Acc) ->
+    append(Acc, StreamId, Gen, Value).
+
 %% @private Discard the log and take the tree's word for every stream.
 %%
 %% The file has to be REOPENED, not just renamed: the old descriptor points at
@@ -555,16 +569,16 @@ do_rebuild(#state{store_id = StoreId, path = Path, fd = OldFd} = State) ->
                       #{path => Path, aside => Aside}),
     State1 = State#state{fd = Fd, entries = 0, records = 0, last_mac = <<>>},
     {ok, Streams} = reckon_db_streams:list_streams(StoreId),
-    {Count, State2} =
-        lists:foldl(fun(StreamId, {N, Acc}) ->
-                            case rebuild_stream(Acc, StreamId) of
-                                {ok, Acc1} -> {N + 1, Acc1};
-                                none -> {N, Acc}
-                            end
-                    end, {0, State1}, Streams),
+    {Count, State2} = lists:foldl(fun rebuild_one/2, {0, State1}, Streams),
     {Count, State2#state{entries = Count, records = Count}}.
 
 %% @private
+rebuild_one(StreamId, {N, Acc}) ->
+    case rebuild_stream(Acc, StreamId) of
+        {ok, Acc1} -> {N + 1, Acc1};
+        none -> {N, Acc}
+    end.
+
 %% @private `rebuild' has to leave a log behind, not only a table: the whole
 %% point of the act is that the NEXT start agrees with this one.
 rebuild_stream(#state{store_id = StoreId} = State, StreamId) ->

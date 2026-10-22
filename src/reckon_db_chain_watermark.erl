@@ -72,9 +72,13 @@
 
 %% What binding/2 answers: everything a verifier needs to check this
 %% stream's scheme-2 MACs.
+%% `gen' is the generation of the life the seal carries: 0 for a seal written
+%% before 5.12.0 (a scheme-2 record has no generation to read), and the value
+%% bound into the MAC of a scheme-3 one.
 -type binding() :: #{version := non_neg_integer(),
                      v2_from := non_neg_integer(),
-                     life := binary()}.
+                     life := binary(),
+                     gen := non_neg_integer()}.
 
 %% One stream as the migration scan found it.
 -type scan() :: #{store_id := atom(),
