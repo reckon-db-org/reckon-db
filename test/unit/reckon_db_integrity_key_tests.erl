@@ -143,7 +143,7 @@ env_var_wrong_size_is_an_error_test() ->
 
 sealed_file_loads_valid_key_test() ->
     StoreId = unique_store_id(),
-    KeyBytes = crypto:strong_rand_bytes(32),
+    KeyBytes = random_key(32),
     Path = make_sealed_file(KeyBytes),
 
     Cfg = base_cfg(StoreId, enabled_file(Path)),
@@ -158,7 +158,7 @@ sealed_file_trims_trailing_newline_test() ->
     %% The loader trims a single trailing newline before validating
     %% size.
     StoreId = unique_store_id(),
-    KeyBytes = crypto:strong_rand_bytes(32),
+    KeyBytes = random_key(32),
     Path = make_sealed_file(<<KeyBytes/binary, "\n">>),
 
     Cfg = base_cfg(StoreId, enabled_file(Path)),
@@ -194,7 +194,7 @@ sealed_file_missing_is_an_error_test() ->
 sealed_file_wrong_size_is_an_error_test() ->
     StoreId = unique_store_id(),
     %% 20 bytes
-    TooShort = crypto:strong_rand_bytes(20),
+    TooShort = random_key(20),
     Path = make_sealed_file(TooShort),
 
     Cfg = base_cfg(StoreId, enabled_file(Path)),
@@ -233,6 +233,17 @@ random_suffix() ->
 
 base64_encode(Bin) ->
     binary_to_list(base64:encode(Bin)).
+
+%% Random key material that can never END in a newline. The loader strips one
+%% trailing newline by design, so a key written by echo or cat is accepted; a
+%% random key whose last byte happened to be \n therefore came back one byte
+%% short and the size assertions failed about one run in 256. Deterministic at
+%% the one byte that matters.
+random_key(Size) ->
+    case crypto:strong_rand_bytes(Size) of
+        <<Head:(Size - 1)/binary, $\n>> -> <<Head/binary, $x>>;
+        Key -> Key
+    end.
 
 make_sealed_file(Content) ->
     Path = tmp_path("sealed_key_" ++ random_suffix()),
