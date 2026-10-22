@@ -28,7 +28,9 @@
          a_mapping_above_the_head_is_detected/1,
          an_append_refuses_a_log_whose_head_is_gone/1,
          a_store_numbered_without_integrity_is_sealed_at_start/1,
-         concurrent_appends_keep_one_verified_head/1]).
+         concurrent_appends_keep_one_verified_head/1,
+         a_read_is_refused_from_a_log_whose_head_is_gone/1,
+         a_delivered_event_verifies_once_the_seq_is_stripped/1]).
 
 suite() ->
     [{timetrap, {minutes, 5}}].
@@ -48,7 +50,9 @@ all() ->
      a_mapping_above_the_head_is_detected,
      an_append_refuses_a_log_whose_head_is_gone,
      a_store_numbered_without_integrity_is_sealed_at_start,
-     concurrent_appends_keep_one_verified_head].
+     concurrent_appends_keep_one_verified_head,
+     a_read_is_refused_from_a_log_whose_head_is_gone,
+     a_delivered_event_verifies_once_the_seq_is_stripped].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(crypto),
@@ -331,6 +335,42 @@ concurrent_appends_keep_one_verified_head(Config) ->
     ?assertEqual(lists:seq(0, Writers * Each - 1), Seqs),
     ?assertEqual(ok, reckon_db_global_seq:verify(StoreId)).
 
+
+%% The head is enforced on the read path too, and for a page it costs the
+%% head and the counter, not the log: a resume point read out of a log whose
+%% head was removed names events nobody can vouch for.
+a_read_is_refused_from_a_log_whose_head_is_gone(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    with_integrity(StoreId),
+    StreamId = sid(<<"seq-read-gate">>),
+    {ok, 2} = append(StoreId, StreamId, ?NO_STREAM, [1, 2, 3]),
+    ?assertMatch({ok, _}, reckon_db_global_seq:read_from(StoreId, none, 10)),
+    ok = khepri:delete(StoreId, [metadata, integrity, global_seq_head]),
+    ?assertEqual({error, {global_seq_head_missing, StoreId}},
+                 reckon_db_global_seq:read_from(StoreId, none, 10)),
+    ?assertEqual({error, {global_seq_head_missing, StoreId}},
+                 reckon_db_streams:read_all_global(StoreId, 0, 10)).
+
+%% `global_position' is added to the DELIVERED copy; the stored event is
+%% untouched, so stripping the key gives back the bytes the store MAC'd. A
+%% consumer that verifies a delivered event does exactly that, and the chain
+%% still links to the predecessor as stored.
+a_delivered_event_verifies_once_the_seq_is_stripped(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    Key = with_integrity(StoreId),
+    StreamId = sid(<<"seq-delivered">>),
+    {ok, 1} = append(StoreId, StreamId, ?NO_STREAM, [1, 2]),
+    {ok, [First, Second]} = reckon_db_streams:read_all_global(StoreId, 0, 10),
+    ?assertEqual([0, 1], [position(E) || E <- [First, Second]]),
+    Genesis = reckon_gater_integrity:genesis_prev_hash(),
+    %% As delivered it carries one more metadata key than the MAC covers.
+    ?assertMatch({integrity_violation, #{kind := mac_mismatch}},
+                 verify(StoreId, Key, First, Genesis)),
+    %% Stripped, it verifies: the annotation is the only difference.
+    ok = verify(StoreId, Key, strip_position(First), Genesis),
+    Tip = reckon_gater_integrity:compute_chain_hash(strip_position(First), Genesis),
+    ok = verify(StoreId, Key, strip_position(Second), Tip).
+
 %%====================================================================
 %% Helpers
 %%====================================================================
@@ -369,7 +409,7 @@ with_integrity(StoreId) ->
     Key = crypto:strong_rand_bytes(32),
     persistent_term:put({reckon_db, integrity_key, StoreId}, Key),
     persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),
-    ok.
+    Key.
 
 %% The seq the store delivered this event at.
 position(#event{metadata = Metadata}) ->
@@ -384,3 +424,15 @@ collect_events(Count, Acc) ->
     after 5000 ->
             ct:fail({expected_events, Count, got, length(Acc)})
     end.
+
+%% Verify a delivered event the way a consumer would, in the context its
+%% stream's watermark names.
+verify(StoreId, Key, Event, PrevTip) ->
+    {ok, #{life := Life, v2_from := V2From}} =
+        reckon_db_chain_watermark:binding(StoreId, Event#event.stream_id),
+    Ctx = #{store_id => StoreId, life => Life, v2_from => V2From},
+    reckon_gater_integrity:verify_event(Event, PrevTip, Key, Ctx).
+
+%% The delivery-added key, removed: what the store's MAC covers.
+strip_position(#event{metadata = Metadata} = Event) ->
+    Event#event{metadata = maps:remove(global_position, Metadata)}.

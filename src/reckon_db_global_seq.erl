@@ -544,11 +544,14 @@ ensure_head(StoreId, Key) ->
         {ok, Head} -> verify_existing(StoreId, Key, Head)
     end.
 
-%% @private
-verify_existing(StoreId, Key, Head) ->
-    case head_mac_matches(StoreId, Key, Head) of
-        true -> ok;
-        false -> report_head_unverified(StoreId)
+%% @private A head that is present has to be the one this store wrote AND
+%% agree with the counter, because the two are written in one command. Either
+%% disagreement is reported, not repaired.
+verify_existing(StoreId, Key, #{last := Last} = Head) ->
+    case {head_mac_matches(StoreId, Key, Head), last_assigned(StoreId)} of
+        {true, {ok, Last}} -> ok;
+        {true, _Other} -> report_head_unverified(StoreId);
+        {false, _} -> report_head_unverified(StoreId)
     end.
 
 %% @private
@@ -716,11 +719,66 @@ seq_for(StoreId, StreamId, Version) ->
 -spec read_from(atom(), seq() | none, pos_integer()) ->
         {ok, [{seq(), event()}]} | {error, term()}.
 read_from(StoreId, Cursor, BatchSize) when is_integer(BatchSize), BatchSize > 0 ->
+    case read_gate(StoreId) of
+        {ok, Last} ->
+            read_forward(StoreId, cursor(Cursor), Last, BatchSize, 0, []);
+        {error, _} = Error ->
+            Error
+    end.
+
+%% @private What a read is allowed to see.
+%%
+%% A store with no integrity key has nothing to authenticate with, so its
+%% log is served as it is. A store with one is served only from a log it can
+%% vouch for: a head that verifies and a counter that agrees with it. That
+%% is two reads and one HMAC per page, not one per event, and it turns the
+%% head from something an operator can check into something the store
+%% enforces - a resume point read out of a log whose head was removed or
+%% rewritten is worth exactly nothing, because the consumer cannot tell
+%% which event it names.
+%%
+%% The O(seqs) half of the check (does every mapping still hash to the
+%% head's chain) stays in `verify/1': it is an audit, not a per-page cost.
+-spec read_gate(atom()) -> {ok, seq()} | {error, term()}.
+read_gate(StoreId) ->
     case is_backfilled(StoreId) of
-        true ->
-            read_forward(StoreId, cursor(Cursor), last_seq(StoreId), BatchSize, []);
-        false ->
-            {error, {store_not_migrated, StoreId}}
+        false -> {error, {store_not_migrated, StoreId}};
+        true -> read_gate_backfilled(StoreId)
+    end.
+
+%% @private
+read_gate_backfilled(StoreId) ->
+    case reckon_db_integrity_key:get(StoreId) of
+        undefined -> {ok, last_seq(StoreId)};
+        Key -> read_gate_head(StoreId, Key)
+    end.
+
+%% @private
+read_gate_head(StoreId, Key) ->
+    case read_head(StoreId) of
+        none ->
+            unsealed_or_empty(StoreId);
+        malformed ->
+            {error, {global_seq_head_unverified, StoreId}};
+        {ok, Head} ->
+            read_gate_verified(StoreId, Key, Head)
+    end.
+
+%% @private An integrity store with no head: fine when it has nothing
+%% numbered, refused when it does (the head was removed, or the store was
+%% started without its start steps).
+unsealed_or_empty(StoreId) ->
+    case last_assigned(StoreId) of
+        none -> {ok, -1};
+        {ok, _Last} -> {error, {global_seq_head_missing, StoreId}}
+    end.
+
+%% @private
+read_gate_verified(StoreId, Key, #{last := Last} = Head) ->
+    case {head_mac_matches(StoreId, Key, Head), last_assigned(StoreId)} of
+        {true, {ok, Last}} -> {ok, Last};
+        {true, _Other} -> {error, {global_seq_head_counter_mismatch, StoreId}};
+        {false, _} -> {error, {global_seq_head_unverified, StoreId}}
     end.
 
 %% @private
@@ -735,18 +793,19 @@ last_seq(StoreId) ->
 cursor(none) -> 0;
 cursor(Cursor) when is_integer(Cursor), Cursor >= 0 -> Cursor.
 
-%% @private
-read_forward(_StoreId, Cursor, Last, _BatchSize, Acc) when Cursor > Last ->
+%% @private `Taken' counts the events in `Acc', so a page does not re-walk
+%% what it has collected on every seq it skips.
+read_forward(_StoreId, Cursor, Last, _BatchSize, _Taken, Acc) when Cursor > Last ->
     {ok, lists:reverse(Acc)};
-read_forward(_StoreId, _Cursor, _Last, BatchSize, Acc) when length(Acc) >= BatchSize ->
+read_forward(_StoreId, _Cursor, _Last, BatchSize, Taken, Acc) when Taken >= BatchSize ->
     {ok, lists:reverse(Acc)};
-read_forward(StoreId, Cursor, Last, BatchSize, Acc) ->
+read_forward(StoreId, Cursor, Last, BatchSize, Taken, Acc) ->
     case event_at(StoreId, Cursor) of
         {ok, Event} ->
-            read_forward(StoreId, Cursor + 1, Last, BatchSize,
+            read_forward(StoreId, Cursor + 1, Last, BatchSize, Taken + 1,
                          [{Cursor, Event} | Acc]);
         hole ->
-            read_forward(StoreId, Cursor + 1, Last, BatchSize, Acc)
+            read_forward(StoreId, Cursor + 1, Last, BatchSize, Taken, Acc)
     end.
 
 %% @private Resolve one seq to its event: the ref names the stream and the

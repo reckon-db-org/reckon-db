@@ -79,6 +79,13 @@ seqs it already holds; a head that is present but does not verify is reported,
 not re-sealed, and the store's appends stay refused rather than extending a
 log the store cannot vouch for.
 
+The head is checked on the read path as well, at the cost of the head and the
+counter per page rather than per event: on a store with integrity, a read is
+refused when the head is missing over a log that has seqs, when it does not
+verify, or when the counter disagrees with it. The O(seqs) half - does every
+mapping still hash to the head's chain - is `reckon_db_global_seq:verify/1`,
+which is an audit rather than a per-page cost.
+
 ## [5.12.0] - 2026-10-21
 
 ### Changed: a store config with no mode is a single-node store

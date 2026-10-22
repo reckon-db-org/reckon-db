@@ -179,6 +179,14 @@ order the old reader produced, so an existing checkpoint keeps its meaning. A
 store that had already scavenged cannot be reconstructed: the affected
 projections need one rebuild each (see the Scavenging guide).
 
+On a store with integrity enabled, every delivered event carries its MAC over
+the STORED record, and `global_position` is added to the delivered copy
+afterwards — so it is not covered by the MAC. A consumer that verifies a
+delivered event itself must strip `global_position` from the metadata first;
+the store's own catch-up already verifies the event as stored, before
+annotating it. A store with integrity also refuses to serve a read from a log
+whose head is missing or does not verify: the resume point names nothing.
+
 ## Receiving Events
 
 ### Using Process Groups
