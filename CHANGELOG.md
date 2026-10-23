@@ -5,7 +5,7 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.11.14] - unreleased
+## [5.11.14] - 2026-10-23
 
 ### Added: paged DCB reads by type, tag and payload (evoq#6, part two)
 
@@ -66,6 +66,51 @@ fetched as a dependency; the README states the range (reckon-db#23).
 It called `subscribe/4`, which has no subscriber, and waited for
 `{event, Event}`. It now passes `#{subscriber => self()}` to `subscribe/5` and
 receives `{events, Events}`, which is what the store sends.
+
+### Fixed: a subscription delivers live what its catch-up delivers (#8, #11)
+
+`event_pattern` and `event_payload` subscriptions never fired live: their
+trigger's pattern was a map, and a stored event is an `#event{}` record,
+which no map matches. Their catch-up, meanwhile, delivered the whole log. A
+`by_tags` subscription delivered every new event live, while its catch-up
+applied the tags. `reckon_db_filters:matches/3` is now the one predicate,
+and the trigger applies it before broadcasting, so live and catch-up agree:
+
+- `event_pattern`: a map of `#event{}` fields, and every field given
+  matches;
+- `event_payload`: every key given has that value in the event's data;
+- `by_tags`: the event carries every tag.
+
+### Fixed: a selector no subscription can use is refused before it is stored (#9)
+
+A selector the builders could not use raised after the subscription record
+was written, so the gateway's retry found the record, got `already_exists`
+and answered `ok` for a subscription that never delivered. `subscribe/5` now
+builds the filter first and answers `{error, {invalid_filter, _}}`: a
+non-map, empty or unknown-field `event_pattern`, a non-map or empty
+`event_payload`, `by_tags` that is not a non-empty list of binaries, an
+empty or non-binary `event_type`, and an unknown subscription type. A
+subscription a previous release accepted and armed under such a selector is
+torn down on refusal (emitters, trigger, record), instead of delivering to a
+subscriber that has just been told no.
+
+### Fixed: a subscriber from a previous boot is reclaimed (#12)
+
+A persisted subscription was reclaimed only when its stored subscriber pid
+was dead. On a node that is not distributed every VM has creation 0, so a
+pid read back after a restart may be held by an unrelated live process: the
+real subscriber was refused with `already_exists` and the stale trigger was
+never refreshed. Each record is now stamped with a boot token, 16 random
+bytes drawn once per VM, and a local pid counts as alive only when this boot
+stored it. Remote pids are unchanged.
+
+### Fixed: the default telemetry handler detached itself on the first unsubscribe
+
+The handler read `subscription_id` from the subscription-removed and
+event-delivered events, whose producers send `subscription_key`. The
+badmatch made telemetry detach it on the first unsubscribe, and every later
+reckon_db log line from it was lost. It reads `subscription_key` and stays
+attached.
 
 ### Fixed: an integrity store refused every projection checkpoint (reckon-db#25)
 
