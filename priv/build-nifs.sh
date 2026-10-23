@@ -135,7 +135,7 @@ build_nif reckon_db_aggregate_nif || NIF_FAILURES=$((NIF_FAILURES + 1))
 build_nif reckon_db_filter_nif || NIF_FAILURES=$((NIF_FAILURES + 1))
 
 if [ "${NIF_FAILURES}" -ne 0 ]; then
-    echo "[reckon-db] ${NIF_FAILURES} NIF(s) were built by cargo but not found. See the ERROR lines above." >&2
+    echo "[reckon-db] ${NIF_FAILURES} NIF(s) failed to build or were not found. See the ERROR lines above." >&2
     exit 1
 fi
 
