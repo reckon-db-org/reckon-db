@@ -126,21 +126,25 @@ emit_subscription_events_test() ->
     ok = reckon_db_telemetry:emit(
         ?SUBSCRIPTION_CREATED,
         #{system_time => erlang:system_time(millisecond)},
-        #{store_id => test_store, subscription_id => <<"sub-1">>, type => by_stream}
+        #{store_id => test_store, type => stream, selector => <<"sel">>,
+          subscription_name => <<"sub-1">>}
     ),
 
     ok = reckon_db_telemetry:emit(
         ?SUBSCRIPTION_DELETED,
         #{system_time => erlang:system_time(millisecond)},
-        #{store_id => test_store, subscription_id => <<"sub-1">>}
+        #{store_id => test_store, subscription_key => <<"90616956">>}
     ),
 
     ok = reckon_db_telemetry:emit(
         ?SUBSCRIPTION_EVENT_DELIVERED,
         #{duration => 100},
-        #{store_id => test_store, subscription_id => <<"sub-1">>, event_id => <<"evt-1">>}
+        #{store_id => test_store, subscription_key => <<"90616956">>, topic => <<"t">>}
     ),
 
+    %% telemetry detaches a handler that crashes; still attached = no crash.
+    ?assertMatch([_], telemetry:list_handlers(?SUBSCRIPTION_DELETED)),
+    ?assertMatch([_], telemetry:list_handlers(?SUBSCRIPTION_EVENT_DELIVERED)),
     reckon_db_telemetry:detach_default_handler().
 
 emit_snapshot_events_test() ->

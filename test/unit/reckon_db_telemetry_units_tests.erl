@@ -18,7 +18,8 @@
 %% Every handler clause that prints a duration prints 50 ms as 50000us.
 every_logged_duration_is_microseconds_test_() ->
     Meta = #{store_id => s, stream_id => <<"st">>, reason => r,
-             subscription_id => <<"sub">>, version => 1},
+             subscription_key => <<"sub">>, subscription_id => <<"sub">>,
+             version => 1},
     Events = [?STREAM_WRITE_STOP, ?STREAM_WRITE_ERROR, ?STREAM_READ_STOP,
               ?SUBSCRIPTION_EVENT_DELIVERED, ?SNAPSHOT_CREATED, ?SNAPSHOT_READ,
               ?EMITTER_BROADCAST],

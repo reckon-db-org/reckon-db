@@ -96,7 +96,7 @@ Events = [
 %% Receive events: they arrive in batches of #event{} records
 %% (include_lib "reckon_gater/include/reckon_gater_types.hrl")
 receive
-    {events, Events} -> io:format("Received: ~p~n", [Events])
+    {events, Received} -> io:format("Received: ~p~n", [Received])
 end.
 ```
 

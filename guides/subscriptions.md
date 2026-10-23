@@ -171,9 +171,9 @@ init(StoreId) ->
 
     {ok, #{store_id => StoreId, sub_key => SubKey}}.
 
-handle_info({event, Event}, State) ->
-    %% Process the event
-    handle_event(Event),
+handle_info({events, Events}, State) ->
+    %% The store delivers events in batches
+    lists:foreach(fun handle_event/1, Events),
     {noreply, State}.
 
 handle_event(#event{event_type = <<"OrderPlaced">>} = Event) ->
@@ -314,12 +314,11 @@ init(StoreId) ->
     reckon_db_emitter_group:join(StoreId, SubKey, self()),
     {ok, #{store_id => StoreId, sub_key => SubKey}}.
 
-handle_info({event, Event}, #{store_id := StoreId} = State) ->
-    %% Process the event
-    handle_event(Event),
-
-    %% Save checkpoint
-    save_checkpoint(StoreId, Event#event.version),
+handle_info({events, Events}, #{store_id := StoreId} = State) ->
+    %% Process the batch, then checkpoint at its last event
+    lists:foreach(fun handle_event/1, Events),
+    Last = lists:last(Events),
+    save_checkpoint(StoreId, Last#event.version),
 
     {noreply, State}.
 

@@ -151,23 +151,23 @@ stream_event(Event, Measurements, Meta, Config) ->
 %% Subscription events
 subscription_event(?SUBSCRIPTION_CREATED, _Measurements, Meta, _Config) ->
     StoreId = maps:get(store_id, Meta, unknown),
-    SubId = maps:get(subscription_id, Meta, maps:get(subscription_name, Meta, <<>>)),
+    SubId = maps:get(subscription_key, Meta, maps:get(subscription_name, Meta, <<>>)),
     Type = maps:get(type, Meta, unknown),
     logger:info("Subscription created: store=~p id=~s type=~p",
                [StoreId, SubId, Type]),
     ok;
 
 subscription_event(?SUBSCRIPTION_DELETED, _Measurements, Meta, _Config) ->
-    #{store_id := StoreId, subscription_id := SubId} = Meta,
-    logger:info("Subscription deleted: store=~p id=~s", [StoreId, SubId]),
+    #{store_id := StoreId, subscription_key := SubKey} = Meta,
+    logger:info("Subscription deleted: store=~p key=~s", [StoreId, SubKey]),
     ok;
 
 subscription_event(?SUBSCRIPTION_EVENT_DELIVERED, Measurements, Meta, _Config) ->
     Duration = duration_us(Measurements),
-    #{store_id := StoreId, subscription_id := SubId} = Meta,
+    #{store_id := StoreId, subscription_key := SubKey} = Meta,
     EventId = maps:get(event_id, Meta, undefined),
     logger:debug("Event delivered: store=~p subscription=~s event=~p duration=~pus",
-                [StoreId, SubId, EventId, Duration]),
+                [StoreId, SubKey, EventId, Duration]),
     ok;
 subscription_event(Event, Measurements, Meta, Config) ->
     unhandled_event(Event, Measurements, Meta, Config).

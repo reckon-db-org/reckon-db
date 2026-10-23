@@ -169,8 +169,8 @@ init(StoreId) ->
     {ok, #{store_id => StoreId, sub_key => SubKey}}.
 
 %% Handle events from subscription
-handle_info({event, Event}, State) ->
-    project_event(Event),
+handle_info({events, Events}, State) ->
+    lists:foreach(fun project_event/1, Events),
     {noreply, State}.
 
 %% Query interface
