@@ -5,6 +5,29 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.15] - unreleased
+
+### Fixed: a snapshot version that is not a non-negative integer is refused, not a dead worker (reckon-db#14)
+
+A gateway call with a version that is not a non-negative integer — `latest`,
+which the reckon-gater guides showed until their round 13, is the shape a
+reader arrives with — reached `reckon_db_snapshots:load_at/3`, where
+`integer_to_list/1` raised `badarg` and killed the gateway worker serving every
+other caller on it. `save/5`, `load_at/3` and `delete_at/3` now answer
+`{error, {invalid_version, V}}` for it, so the caller is told and the worker
+stays up. reckon-gater 3.15.2 is that reason's other half: it no longer retries
+it, so the caller is not handed `retries_exhausted` after the backoff.
+
+### Changed: version 0 reads "latest", and the comment says so plainly (reckon-db#15)
+
+The worker's comment claimed no version-0 snapshot exists. It does: event
+versions start at 0, so an aggregate snapshotted after its first event has one,
+and it can be listed and read by version through
+`reckon_db_snapshots:load_at/3`. Through `read_snapshot` version 0 still means
+"latest", which a version-0 snapshot cannot be read by once a later one exists;
+the comment now says that instead of denying the snapshot exists, and an e2e
+case pins both halves.
+
 ## [5.11.14] - 2026-10-23
 
 ### Fixed: `priv/build-nifs.sh` finds the NIF wherever cargo wrote it (reckon-db#10)
