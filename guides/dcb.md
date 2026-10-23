@@ -190,6 +190,26 @@ a follow-up write against an overlapping tag set, *if* you can
 guarantee no concurrent third party wrote between your commit and
 your follow-up. Most callers re-read fresh context instead.
 
+### Reading a context larger than one page (5.11.14+)
+
+The limit-only reads (`read_by_tags`, `read_by_event_types`, the payload
+reads) return the first Limit matching events and cannot go on. A context
+larger than that is read in pages, in DCB sequence order, through the gater's
+paged reads (reckon-gater 3.15.0+): `dcb_read_by_event_types_page/4`,
+`dcb_read_by_tags_page/5`, `dcb_read_by_payload_page/5` and
+`dcb_read_by_payload_hash_page/5`. Each takes `start` or the cursor the
+previous page returned, and returns the events and the next cursor or
+`done`.
+
+Sequence order is what makes the pages a sound context. A DCB event's seq
+is assigned inside its append transaction, so an event committed while you
+page sorts after every page you have read: a later page returns it, and the
+highest seq you saw is a cutoff the append checks it against. The cursor is
+stateless (any worker, any node) and is bound to its read and arguments.
+
+Each page reads the whole index branch of its filter, since Khepri has no
+range query on a path, so very large contexts cost one branch read per page.
+
 ---
 
 ## Worked example: email uniqueness

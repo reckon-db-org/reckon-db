@@ -5,6 +5,42 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.11.14] - unreleased
+
+### Added: paged DCB reads by type, tag and payload (evoq#6, part two)
+
+The limit-only DCB reads return the first Limit matching events and cannot
+go further, so an evoq decision over a larger context could not read it
+(evoq refuses such a context since 1.25.1). The gateway worker now answers
+reckon-gater 3.15.0's four paged reads:
+
+- `{dcb_read_by_event_types_page, StoreId, EventTypes, After, Limit}`
+- `{dcb_read_by_tags_page, StoreId, Tags, Match, After, Limit}`
+- `{dcb_read_by_payload_page, StoreId, Key, Value, After, Limit}`
+- `{dcb_read_by_payload_hash_page, StoreId, Keys, Values, After, Limit}`
+
+Each answers `{ok, {Events, Next}}`: up to Limit matching DCB events after
+the cursor, in ascending DCB sequence order, and the next cursor or `done`.
+They read the indexes the DCB append writes, keyed by the sequence number
+the append assigns inside its transaction, so an event committed while a
+reader pages sorts after every page already read. The cursor
+(`reckon_db_dcb_paged_reads`) names the last sequence key and a digest of
+the read and its arguments: no state on the server, valid on any worker,
+`{invalid_cursor, Cursor}` for another read's cursor or one that does not
+decode, and `{invalid_page_request, Reason}` for a Limit below 1 or a Match
+other than `any` or `all`.
+
+### Added: acknowledged snapshot writes (reckon-evoq#1)
+
+`record_snapshot` and `delete_snapshot` are casts: the caller learns
+nothing, and an integrity store's refusal of a snapshot it cannot anchor
+reaches only a log line. The gateway worker now also answers
+`{record_snapshot_sync, ...}` and `{delete_snapshot_sync, ...}` as calls,
+with `ok` once written or `{error, Reason}`.
+
+Seen red first: `reckon_db_dcb_paged_reads_SUITE` (all 10 cases answered
+`unknown_request` before).
+
 ## [5.11.13] - 2026-10-21
 
 ### Fixed: two concurrent appends to one stream silently lost events
