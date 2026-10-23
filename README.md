@@ -303,7 +303,7 @@ names it (`duration_us`, `uptime_ms`).
 ```bash
 rebar3 compile         # Compile
 rebar3 eunit           # Unit tests
-rebar3 ct              # Integration tests
+scripts/check_ct.sh    # Integration + e2e tests, as the gate runs them
 rebar3 dialyzer        # Type checking
 rebar3 cover           # Coverage report
 ```
@@ -322,6 +322,11 @@ rebar3 ct --dir=test/e2e                  # E2E tests with gater
 rebar3 ct --suite=reckon_db_streams_SUITE  # Streams tests
 rebar3 ct --suite=reckon_db_cluster_SUITE  # Cluster tests
 ```
+
+`scripts/check_ct.sh` runs `rebar3 ct` (and passes its arguments on) but also
+fails when a suite did not load: ct prints `error_in_suite` for such a suite,
+leaves it out of "All N tests passed" and `rebar3 ct` exits 0. A stale suite
+left in `_build` after its source was deleted is the usual way to get one.
 
 ## Gateway API
 

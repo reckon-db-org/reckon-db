@@ -150,9 +150,11 @@ jobs:
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
         run: rebar3 eunit
 
-      - name: Common Test
+      # Through scripts/check_ct.sh, not a bare `rebar3 ct': a suite ct cannot
+      # load is printed as error_in_suite and rebar3 still exits 0 (#20).
+      - name: Common Test (a suite that did not load fails the step)
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
-        run: rebar3 ct
+        run: bash scripts/check_ct.sh
 
       # The branch's list did not include proper, though rebar3_proper is a
       # project plugin here and the suite passes. Added so the plugin is not
