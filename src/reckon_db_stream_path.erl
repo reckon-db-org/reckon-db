@@ -34,8 +34,7 @@
 
 -include("reckon_db.hrl").
 
--type validation_error() ::
-    {invalid_stream_id, reckon_gater_stream_id:validation_error(), term()}.
+-type validation_error() :: reckon_gater_stream_id:invalid_stream_id().
 -include_lib("khepri/include/khepri.hrl").
 
 -export([
@@ -65,16 +64,15 @@
 %% (reckon-db#4). A caller that validates first turns a malformed id
 %% into an answer.
 %%
-%% The reason is `reckon_gater_stream_id:validate/1''s own:
-%% `empty', `not_binary', `malformed_user_id', `malformed_system_id'.
-%% so the shape matches the one `reckon_db_streams:append/5' already
-%% returns, which the gater's retry layer classifies as permanent.
+%% The error is `reckon_gater_stream_id:check/1''s:
+%% `{invalid_stream_id, Reason, StreamId, Rule}', where Reason is
+%% `empty', `not_binary', `malformed_user_id' or `malformed_system_id'
+%% and Rule is the sentence a person needs to fix the id, with a link to
+%% the Stream Ids guide. Every read, write and subscribe path returns
+%% this one shape, which the gater's retry layer classifies as permanent.
 -spec validate(term()) -> ok | {error, validation_error()}.
 validate(StreamId) ->
-    case reckon_gater_stream_id:validate(StreamId) of
-        ok -> ok;
-        {error, Reason} -> {error, {invalid_stream_id, Reason, StreamId}}
-    end.
+    reckon_gater_stream_id:check(StreamId).
 
 %%====================================================================
 %% Path builders

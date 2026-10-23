@@ -197,9 +197,10 @@ subscribe_rejects_malformed_stream_id(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
     Name = <<"poisoned_subscription">>,
+    Rule = reckon_gater_stream_id:explain(malformed_user_id),
 
     ?assertMatch(
-        {error, {invalid_filter, {invalid_stream_id, malformed_user_id, BadId}}},
+        {error, {invalid_filter, {invalid_stream_id, malformed_user_id, BadId, Rule}}},
         reckon_db_subscriptions:subscribe(StoreId, stream, BadId, Name)),
 
     {ok, Subscriptions} = reckon_db_subscriptions:list(StoreId),

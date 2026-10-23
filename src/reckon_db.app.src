@@ -58,6 +58,7 @@
         "include",
         "assets",
         "rebar.config",
+        "rebar.config.script",
         "rebar.lock",
         "README.md",
         "LICENSE",

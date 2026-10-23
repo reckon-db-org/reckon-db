@@ -5,6 +5,33 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed: a refused stream id says which rule it broke
+
+Every path that refuses a stream id (append, read, read_all, delete,
+subscribe, the gateway worker) now returns reckon_gater 3.14's
+`{invalid_stream_id, Reason, StreamId, Rule}`, built by
+`reckon_gater_stream_id:check/1`: `Rule` is one sentence saying what a valid
+id looks like and how to make one, with a link to the Stream Ids guide.
+reckon-db 5.11.13 and older return the three-tuple without the rule. The
+gater's retry layer treats both shapes as permanent. The reckon_gater floor is
+now `~> 3.14` (reckon-gater#5).
+
+### Added: a build on an unsupported OTP stops with a message
+
+reckon-db runs on Erlang/OTP 28. On OTP 29 the khepri 0.17 build fails and,
+past that, horus 0.3 crashes the first write, both as stack traces from deep in
+the storage layer. `rebar.config.script` now stops a build on any OTP newer
+than 28 with a message naming the supported release, also when reckon_db is
+fetched as a dependency; the README states the range (reckon-db#23).
+
+### Fixed: the README quick start's subscription received nothing
+
+It called `subscribe/4`, which has no subscriber, and waited for
+`{event, Event}`. It now passes `#{subscriber => self()}` to `subscribe/5` and
+receives `{events, Events}`, which is what the store sends.
+
 ## [5.11.13] - 2026-10-21
 
 ### Fixed: two concurrent appends to one stream silently lost events
