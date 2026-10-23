@@ -352,6 +352,8 @@ ok = reckon_gater_api:save_subscription(my_store, stream, StreamId, Name, 0, sel
 %% Snapshot operations
 ok = reckon_gater_api:record_snapshot(my_store, SourceUuid, StreamUuid, Version, Record).
 {ok, Snap} = reckon_gater_api:read_snapshot(my_store, SourceUuid, StreamUuid, Version).
+%% Acknowledged: ok once written, or why not (reckon-gater 3.15.0+, 5.11.14+)
+ok = reckon_gater_api:record_snapshot_sync(my_store, SourceUuid, StreamUuid, Version, Record).
 ```
 
 See [reckon-gater](https://hex.pm/packages/reckon_gater) for complete API documentation.
