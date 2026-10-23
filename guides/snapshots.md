@@ -310,6 +310,23 @@ handle_event(#{event_type := <<"LargeTransactionProcessed">>} = Event, State) ->
     NewState.
 ```
 
+## Snapshots on an Integrity Store
+
+With integrity on, a snapshot is sealed with an HMAC, and how depends on the
+stream at the time of the save and of the load:
+
+| Stream | Seal | Refused on load |
+|--------|------|-----------------|
+| user stream, or a `$` stream with events | the chain hash of the event at the snapshot's version (the anchor), plus a MAC | an anchor that no longer matches the stream, an edited value, a MAC with no anchor |
+| `$` stream with no events (a projection checkpoint) | a MAC bound to this store and stream, no anchor | no MAC at all, a MAC from another store or stream, an edited version or value |
+
+A save on an anchored stream at a version that holds no event is refused:
+there is nothing to anchor to. That is why a checkpoint belongs on a `$`
+stream of its own, such as `$evoq-checkpoint:order_summary`, and never on a
+user stream. A refused load answers `{error, {integrity_violation, _}}` and
+emits `[reckon, db, snapshot, integrity, violation]` with `store_id`,
+`stream_id` and `version`; the caller rebuilds from events.
+
 ## Snapshot Storage Considerations
 
 ### What to Store

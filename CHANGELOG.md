@@ -67,7 +67,28 @@ It called `subscribe/4`, which has no subscriber, and waited for
 `{event, Event}`. It now passes `#{subscriber => self()}` to `subscribe/5` and
 receives `{events, Events}`, which is what the store sends.
 
-||||||| parent of 4a39c87 (reckon-db: paged DCB reads by type, tag and payload; acknowledged snapshot writes)
+### Fixed: an integrity store refused every projection checkpoint (reckon-db#25)
+
+A projection checkpoint is a snapshot on a stream that holds no events. An
+integrity store seals each snapshot with an anchor into its stream's event
+chain, found no event to anchor to, and refused the save, so a projection on
+such a store kept no checkpoint and replayed from the start on every boot.
+
+A snapshot on a system (`$`) stream that holds no events is now sealed with
+a scheme-2 MAC bound to the store and the life token `<<"$unanchored">>`, and
+no anchor. The stream decides how a snapshot is verified at the time of the
+load, never the stored record: on such a stream a scheme-1 MAC, a MAC from
+another store or stream, or an edited version or value is refused, and a
+snapshot with no MAC fails closed with
+`{integrity_violation, unsealed_system_snapshot}` instead of passing as
+legacy data. A stream that holds events keeps the anchored seal, and an
+unanchored seal on it is refused with
+`{integrity_violation, unanchored_seal_on_stream_with_events}`. Every
+refusal emits `[reckon, db, snapshot, integrity, violation]`. User streams
+and stores with integrity off are unchanged.
+
+Seen red first: `reckon_db_unanchored_snapshots_SUITE` (7 of 10 failed
+before).
 
 ## [5.11.13] - 2026-10-21
 
