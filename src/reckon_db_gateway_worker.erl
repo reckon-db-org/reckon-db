@@ -274,11 +274,14 @@ snapshot_op({delete_snapshot_sync, _StoreId, _SourceUuid, StreamUuid, Version}, 
             #state{store_id = StoreId} = State) ->
     {reply, reckon_db_snapshots:delete_at(StoreId, StreamUuid, Version), State};
 
-%% Read snapshot. Version =:= 0 means "latest" — there is no version-0
-%% snapshot in the store (snapshot versions reflect an event index,
-%% which is the first written event's version, never 0 for an aggregate
-%% that has emitted events). Use load/2 in that case so callers can
-%% ask for the most recent snapshot without a List+At round-trip.
+%% Read snapshot. Version 0 means "latest", so a caller can ask for the
+%% most recent snapshot without a List+At round-trip. A snapshot recorded
+%% AT version 0 does exist (event versions start at 0, so an aggregate
+%% snapshotted after its first event has one): through the gateway it is
+%% reachable by version only via list_snapshots, and directly via
+%% reckon_db_snapshots:load_at/3 (reckon-db#15). Any other version goes
+%% to load_at/3, which answers {error, {invalid_version, V}} for one that
+%% is not a non-negative integer (reckon-db#14).
 snapshot_op({read_snapshot, _StoreId, _SourceUuid, StreamUuid, 0}, _From,
             #state{store_id = StoreId} = State) ->
     Result = reckon_db_snapshots:load(StoreId, StreamUuid),

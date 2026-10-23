@@ -44,6 +44,9 @@
 
 -export_type([snapshot_data/0, snapshot_metadata/0]).
 
+%% A snapshot version: the version of the event it was taken at.
+-define(IS_VERSION(V), (is_integer(V) andalso V >= 0)).
+
 %%====================================================================
 %% API
 %%====================================================================
@@ -63,8 +66,14 @@ save(StoreId, StreamId, Version, Data) ->
     save(StoreId, StreamId, Version, Data, #{}).
 
 %% @doc Save a snapshot with metadata
--spec save(atom(), binary(), non_neg_integer(), snapshot_data(), snapshot_metadata()) ->
+%%
+%% A version that is not a non-negative integer is answered
+%% {error, {invalid_version, Version}}, as by load_at/3 and delete_at/3:
+%% it reaches them from gateway clients as any term (reckon-db#14).
+-spec save(atom(), binary(), non_neg_integer() | term(), snapshot_data(), snapshot_metadata()) ->
     ok | {error, term()}.
+save(_StoreId, _StreamId, Version, _Data, _Metadata) when not ?IS_VERSION(Version) ->
+    {error, {invalid_version, Version}};
 save(StoreId, StreamId, Version, Data, Metadata) ->
     StartTime = erlang:monotonic_time(),
 
@@ -135,8 +144,11 @@ load(StoreId, StreamId) ->
 %% @doc Load a specific snapshot version.
 %%
 %% Same verification semantics as load/2.
--spec load_at(atom(), binary(), non_neg_integer()) ->
-    {ok, snapshot()} | {error, not_found | store_integrity_violation() | {snapshot_anchor_unavailable, map()}}.
+-spec load_at(atom(), binary(), non_neg_integer() | term()) ->
+    {ok, snapshot()} | {error, not_found | {invalid_version, term()}
+                              | store_integrity_violation() | {snapshot_anchor_unavailable, map()}}.
+load_at(_StoreId, _StreamId, Version) when not ?IS_VERSION(Version) ->
+    {error, {invalid_version, Version}};
 load_at(StoreId, StreamId, Version) ->
     case reckon_db_snapshots_store:get(StoreId, StreamId, Version) of
         undefined ->
@@ -178,7 +190,9 @@ delete(StoreId, StreamId) ->
     reckon_db_snapshots_store:delete(StoreId, StreamId).
 
 %% @doc Delete a specific snapshot version
--spec delete_at(atom(), binary(), non_neg_integer()) -> ok | {error, term()}.
+-spec delete_at(atom(), binary(), non_neg_integer() | term()) -> ok | {error, term()}.
+delete_at(_StoreId, _StreamId, Version) when not ?IS_VERSION(Version) ->
+    {error, {invalid_version, Version}};
 delete_at(StoreId, StreamId, Version) ->
     reckon_db_snapshots_store:delete(StoreId, StreamId, Version).
 
