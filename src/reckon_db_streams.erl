@@ -601,7 +601,7 @@ scan_by_event_types(StoreId, EventTypes, BatchSize) ->
     %% The leaf condition is applied at both depths by query_event_results
     %% (regular 4-level events + the 2-level DCB log).
     TypeConditions = [
-        #if_data_matches{pattern = #event{event_type = ET, _ = '_'}}
+        #if_data_matches{pattern = reckon_db_filters:event_type_pattern(ET)}
         || ET <- EventTypes
     ],
     LeafMatch = case TypeConditions of
@@ -1359,9 +1359,14 @@ wrap_verification({integrity_violation, _} = Violation) -> {error, Violation}.
 %% event's `prev_event_hash` must equal the chain hash of its
 %% predecessor, regardless of the order the caller chose to receive
 %% them in.
+%%
+%% A violation comes back bare, as integrity_violation(); the public read
+%% API wraps it in {error, _} (wrap_verification/1). These specs said
+%% {error, term()}, so dialyzer read every violation as impossible and
+%% flagged the patterns that handle one.
 -spec maybe_verify_events(
     atom(), binary(), non_neg_integer(), direction(), [event()], read_opts()
-) -> {ok, [event()]} | {error, term()}.
+) -> {ok, [event()]} | integrity_violation().
 maybe_verify_events(StoreId, StreamId, StartVersion, Direction, Events, Opts) ->
     Mode = maps:get(verify, Opts, skip_legacy),
     case verify_required(StoreId, Direction, Mode) of
@@ -1385,7 +1390,7 @@ verify_required(StoreId, _Direction, _Mode) ->
 %% reverses to forward order, verifies, and reverses the result back.
 -spec verify_in_direction(
     atom(), binary(), non_neg_integer(), direction(), [event()], verify_mode()
-) -> {ok, [event()]} | {error, term()}.
+) -> {ok, [event()]} | integrity_violation().
 verify_in_direction(StoreId, StreamId, StartVersion, forward, Events, Mode) ->
     verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode);
 verify_in_direction(StoreId, StreamId, StartVersion, backward, Events, Mode) ->
@@ -1412,7 +1417,7 @@ verify_in_direction(StoreId, StreamId, StartVersion, backward, Events, Mode) ->
 %% running chain tip. Short-circuits on the first integrity_violation.
 -spec verify_events_forward(
     atom(), binary(), non_neg_integer(), [event()], verify_mode()
-) -> {ok, [event()]} | {error, term()}.
+) -> {ok, [event()]} | integrity_violation().
 verify_events_forward(StoreId, StreamId, StartVersion, Events, Mode) ->
     {ok, ChainStart} = reckon_db_chain_watermark:lookup(StoreId, StreamId),
     Key = reckon_db_integrity_key:get(StoreId),

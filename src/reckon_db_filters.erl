@@ -16,6 +16,7 @@
     by_event_pattern/1,
     by_event_payload/1,
     by_tags/1,
+    event_type_pattern/1,
     matches/3
 ]).
 
@@ -113,10 +114,21 @@ by_event_type(EventType) when is_binary(EventType) ->
          #if_all{conditions = [
              #if_path_matches{regex = any},
              #if_has_data{has_data = true},
-             #if_data_matches{pattern = #event{event_type = EventType, _ = '_'}}
+             #if_data_matches{pattern = event_type_pattern(EventType)}
          ]}],
         #{on_actions => [create]}
     ).
+
+%% @doc A Khepri data-match pattern for a stored `#event{}' of this type:
+%% the record's tag, the type, and `'_'' in every other field.
+%%
+%% It is a match pattern, not an event, so it is built as a tuple:
+%% `#event{event_type = T, _ = '_'}' says the same thing in record syntax
+%% and violates every other field's declared type.
+-spec event_type_pattern(binary()) -> tuple().
+event_type_pattern(EventType) ->
+    Wild = erlang:make_tuple(record_info(size, event), '_', [{1, event}]),
+    setelement(#event.event_type, Wild, EventType).
 
 %% @doc Create a filter matching events with a specific pattern in their metadata
 %%

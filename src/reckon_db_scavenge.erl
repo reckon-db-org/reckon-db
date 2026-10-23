@@ -44,10 +44,18 @@
 -type scavenge_result() :: #{
     stream_id := binary(),
     deleted_count := non_neg_integer(),
-    deleted_versions := {non_neg_integer(), non_neg_integer()}, %% {from, to}
+    %% {from, to}: scavenging deletes a prefix of the stream, so from is 0.
+    deleted_versions := {0, non_neg_integer()},
     archived := boolean(),
-    archive_key => binary()
+    archive_key => binary(),
+    dry_run => true                %% present on a preview: nothing was deleted
 }.
+
+-type scavenge_error() :: store_integrity_violation()
+                        | {no_snapshot, binary()}
+                        | {stream_not_found, binary()}
+                        | reckon_db_stream_path:validation_error().
+
 
 -export_type([scavenge_opts/0, scavenge_result/0]).
 
@@ -77,7 +85,7 @@
 %% }).
 %% '''
 -spec scavenge(atom(), binary(), scavenge_opts()) ->
-    {ok, scavenge_result()} | {error, term()}.
+    {ok, scavenge_result()} | {error, scavenge_error()}.
 scavenge(StoreId, StreamId, Opts) ->
     StartTime = erlang:monotonic_time(),
 
@@ -295,7 +303,8 @@ wildcard_to_regex(Pattern) ->
     <<"^", Converted/binary, "$">>.
 
 %% @private Emit telemetry for scavenge operations
--spec emit_telemetry(atom(), binary(), term(), integer()) -> ok.
+-spec emit_telemetry(atom(), binary(), {ok, scavenge_result()} | {error, scavenge_error()},
+                     integer()) -> ok.
 emit_telemetry(StoreId, StreamId, Result, Duration) ->
     {DeletedCount, Archived} = case Result of
         {ok, #{deleted_count := DC, archived := A}} -> {DC, A};

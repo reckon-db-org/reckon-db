@@ -207,6 +207,18 @@
 
 -type store_config() :: #store_config{}.
 
+%% The integrity violation the store itself returns: storage or snapshot
+%% layer, always about a concrete version, always with context. Narrower
+%% than reckon_gater's integrity_violation(), which also covers the replay
+%% and gateway layers.
+-type store_integrity_violation() :: {integrity_violation, #{
+    layer := storage | snapshot,
+    stream_id := binary(),
+    version := non_neg_integer(),
+    kind := integrity_failure_kind(),
+    context := map()
+}}.
+
 %%====================================================================
 %% Cluster Node Record
 %%====================================================================

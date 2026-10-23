@@ -521,7 +521,9 @@ apply_transform(Transform, Event) when is_function(Transform, 1) ->
     end.
 
 %% @private Convert event record to map for appending
--spec event_to_map(event()) -> map().
+-spec event_to_map(event()) ->
+    #{event_id := binary(), event_type := binary(), data := binary() | map(),
+      metadata := #{source_stream := binary(), source_version := non_neg_integer(), _ => _}}.
 event_to_map(Event) ->
     #{
         event_id => Event#event.event_id,

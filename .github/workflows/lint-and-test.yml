@@ -99,12 +99,18 @@ jobs:
           sudo mv rebar3 /usr/local/bin/rebar3
           rebar3 version
 
-      - name: Cache hex packages and PLTs
+      # The project PLT (_build/default/*_plt) is NOT cached. It holds the
+      # dependencies' types, the dependencies float within rebar.config's
+      # constraints (rebar.lock is not committed), and this key changed only
+      # with rebar.config: a PLT built against older deps survived, and the
+      # ratchet passed on main while a fresh PLT reported 8 findings outside
+      # the baseline (#20). OTP's own base PLT lives in ~/.cache/rebar3 and is
+      # keyed by the OTP version below.
+      - name: Cache hex packages and OTP's base PLT
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/rebar3
-            _build/default/*_plt
           key: ${{ runner.os }}-otp-${{ steps.beam.outputs.otp-version }}-${{ hashFiles('rebar.config') }}
 
       - name: Compile

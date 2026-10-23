@@ -111,7 +111,8 @@ entries_for({payload_hash, _Keys}, _Event, _OrderKey, _Ref) ->
     [].
 
 %% @doc The unique, time-orderable leaf key for an event's index entries.
--spec order_key(event()) -> nonempty_binary().
+%% epoch_us is the append's wall clock in microseconds, never negative.
+-spec order_key(#event{epoch_us :: non_neg_integer()}) -> <<_:16, _:_*8>>.
 order_key(#event{epoch_us = EpochUs, stream_id = StreamId, version = Version}) ->
     Epoch = pad(EpochUs, ?INDEX_ORDER_KEY_WIDTH),
     Ver = pad(Version, ?VERSION_PADDING),

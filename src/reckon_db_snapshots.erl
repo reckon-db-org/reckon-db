@@ -99,7 +99,7 @@ save(StoreId, StreamId, Version, Data, Metadata) ->
 %% violation as a directive to fall back to full event replay from
 %% the stream's chain_start_version watermark.
 -spec load(atom(), binary()) ->
-    {ok, snapshot()} | {error, not_found} | {error, term()}.
+    {ok, snapshot()} | {error, not_found | store_integrity_violation() | {snapshot_anchor_unavailable, map()}}.
 load(StoreId, StreamId) ->
     StartTime = erlang:monotonic_time(),
 
@@ -132,7 +132,7 @@ load(StoreId, StreamId) ->
 %%
 %% Same verification semantics as load/2.
 -spec load_at(atom(), binary(), non_neg_integer()) ->
-    {ok, snapshot()} | {error, not_found} | {error, term()}.
+    {ok, snapshot()} | {error, not_found | store_integrity_violation() | {snapshot_anchor_unavailable, map()}}.
 load_at(StoreId, StreamId, Version) ->
     case reckon_db_snapshots_store:get(StoreId, StreamId, Version) of
         undefined ->
