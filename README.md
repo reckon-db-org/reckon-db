@@ -48,12 +48,12 @@ warning and uses the pure-Erlang fallbacks, so it works everywhere.
 
 | Component | Version |
 |---|---|
-| `reckon_db` (this repo) | 5.5.4 |
-| `reckon_gater` (dep) | ~> 3.7 |
+| `reckon_db` (this repo) | 5.11.13 |
+| `reckon_gater` (dep) | ~> 3.10 |
 | `khepri` (dep) | 0.17.2 |
 | `ra` (transitive, via khepri) | 2.16.x |
 | `telemetry` (dep) | 1.3.0 |
-| Erlang/OTP | 27+ |
+| Erlang/OTP | 28 (built and tested on 28.4.3: CI and `.tool-versions`) |
 
 reckon-db depends on `reckon_gater`, `khepri`, and `ra` only. It does **not**
 depend on `evoq` or `reckon_evoq` (see [Reckon stack](#reckon-stack)).

@@ -18,14 +18,23 @@
 #   scripts/check_ct.sh --log F      check an existing log (exit 2 if F is unreadable)
 set -uo pipefail
 
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$REPO_DIR" || exit 1
-
+# The patterns are cth_readable's console lines, which rebar3 ct prints by
+# default; --readable=false or --verbose print a different shape, and the gate
+# uses neither.
+#
+# A relative --log F is the caller's: it is read before the cd to the root.
 STATUS=0
+LOG=""
 if [ "${1:-}" = "--log" ]; then
   LOG="${2:-}"
   [ -r "$LOG" ] || { echo "check_ct: cannot read log '$LOG'" >&2; exit 2; }
-else
+  LOG="$(cd "$(dirname "$LOG")" && pwd)/$(basename "$LOG")"
+fi
+
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_DIR" || exit 1
+
+if [ -z "$LOG" ]; then
   LOG="$(mktemp)"; trap 'rm -f "$LOG"' EXIT
   rebar3 ct "$@" 2>&1 | tee "$LOG"
   STATUS=${PIPESTATUS[0]}

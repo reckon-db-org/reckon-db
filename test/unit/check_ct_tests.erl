@@ -38,6 +38,14 @@ any_error_in_suite_fails_the_gate_test() ->
 a_log_that_is_missing_fails_the_gate_test() ->
     ?assertMatch({2, _}, run(["--log", "/nonexistent/ct.log"])).
 
+%% A relative --log path is the caller's, not the repository root's.
+a_relative_log_is_read_from_the_callers_directory_test() ->
+    Name = "check_ct_relative_" ++ integer_to_list(erlang:unique_integer([positive])) ++ ".log",
+    ok = file:write_file(filename:join(test_dir(), Name), ?UNLOADABLE),
+    Result = run(["--log", Name], [{cd, test_dir()}]),
+    ok = file:delete(filename:join(test_dir(), Name)),
+    ?assertMatch({1, _}, Result).
+
 %%% Helpers
 
 check_log(Text) ->
@@ -48,9 +56,12 @@ check_log(Text) ->
     Result.
 
 run(Args) ->
+    run(Args, []).
+
+run(Args, PortOpts) ->
     Port = open_port({spawn_executable, "/usr/bin/env"},
                      [{args, ["bash", script() | Args]},
-                      exit_status, stderr_to_stdout, binary]),
+                      exit_status, stderr_to_stdout, binary | PortOpts]),
     {Status, Out} = collect(Port, <<>>),
     {Status, binary_to_list(Out)}.
 
