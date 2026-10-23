@@ -119,7 +119,7 @@
 %% ```
 %% reckon_db_links:create(my_store, #{
 %%     name   => <<"high-value-webhook">>,
-%%     source => #{type => stream, name => <<"$link:webhook-feed">>},
+%%     source => #{type => stream, stream_id => <<"$link:webhook-feed">>},
 %%     filter => fun(E) ->
 %%         maps:get(total, E#event.data, 0) > 1000
 %%     end
@@ -153,6 +153,11 @@
 %% later start/2 picks up from where it stopped, so the link also gets
 %% what the source received while it was stopped.
 %%
+%% A link that cannot progress (a transform that crashes or returns
+%% something other than an event) stops with status `error' and the
+%% reason, and writes nothing for that event; the other links keep
+%% running. Fix the cause, then start/2 it again.
+%%
 %% == Status ==
 %%
 %% Live delivery works for every source type since reckon-db#24; before
@@ -183,7 +188,9 @@
 -export([
     link_record/2,
     link_stream_id/1,
-    record_progress/5
+    record_running/4,
+    record_progress/6,
+    record_halt/3
 ]).
 
 %%====================================================================
@@ -212,7 +219,8 @@
     source := source_spec(),
     status := running | stopped | error,
     processed := non_neg_integer(),
-    last_event => binary()
+    last_event => binary(),
+    reason => term()
 }.
 
 -export_type([link_spec/0, link_info/0, source_spec/0, filter_fun/0, transform_fun/0]).
@@ -306,11 +314,11 @@ list(StoreId) ->
 
 %% @doc Start processing a link.
 %%
-%% Starts the link's consumer, which subscribes to the source, writes the
-%% backfill if the link asks for it (or, on a later start, what the source
-%% received while the link was stopped), and then follows the source live.
-%% A link that cannot subscribe answers the subscribe error and stays
-%% stopped.
+%% Starts the link's consumer, which subscribes to the source, sets the
+%% status to running, writes the backfill if the link asks for it (or, on
+%% a later start, what the source received while the link was stopped),
+%% and then follows the source live. A link that cannot subscribe answers
+%% the subscribe error and keeps its status.
 -spec start(atom(), binary()) -> ok | {error, term()}.
 start(StoreId, Name) ->
     case link_record(StoreId, Name) of
@@ -319,7 +327,6 @@ start(StoreId, Name) ->
     end.
 
 started(ok, StoreId, Name) ->
-    ok = set_status(StoreId, Name, running),
     emit_telemetry(StoreId, Name, started),
     ok;
 started({error, _} = Error, _StoreId, _Name) ->
@@ -360,7 +367,7 @@ info(StoreId, Name) ->
                 created_at => Link#link.created_at,
                 last_event => Link#link.last_event
             },
-            {ok, Info};
+            {ok, with_reason(Link, Info)};
         Error ->
             Error
     end.
@@ -402,24 +409,45 @@ link_record(StoreId, Name) ->
 link_stream_id(Name) ->
     <<?LINK_STREAM_PREFIX/binary, Name/binary>>.
 
+%% @doc Store that the link's consumer has subscribed: status running, no
+%% reason, and the positions it starts from. The consumer writes this
+%% before it reads anything, so a stop it comes to is never overwritten
+%% by start/2.
+-spec record_running(atom(), binary(), #{binary() => integer()}, integer()) -> ok.
+record_running(StoreId, Name, Positions, LinkVersion) ->
+    in_link_tx(StoreId, Name,
+               fun(Link) -> Link#link{status = running, reason = undefined,
+                                      positions = Positions, link_version = LinkVersion}
+               end).
+
 %% @doc Store the consumer's progress: the positions it has handled up to,
-%% and the events it has just written. One transaction, so a concurrent
-%% start/2 or stop/2 status write is never lost.
--spec record_progress(atom(), binary(), #{binary() => integer()}, [event()],
+%% the link-stream version its last append reached, and the events it has
+%% just written. One transaction, so a concurrent start/2 or stop/2 status
+%% write is never lost.
+-spec record_progress(atom(), binary(), #{binary() => integer()}, integer(), [event()],
                       binary() | undefined) -> ok.
-record_progress(StoreId, Name, Positions, Written, LastEvent) ->
-    Path = link_path(StoreId, Name),
+record_progress(StoreId, Name, Positions, LinkVersion, Written, LastEvent) ->
     Count = length(Written),
-    {ok, ok} = khepri:transaction(
-                 StoreId,
-                 fun() -> progress_tx(Path, Positions, Count, LastEvent) end),
+    in_link_tx(StoreId, Name,
+               fun(Link) -> Link#link{positions = Positions, link_version = LinkVersion,
+                                      processed = Link#link.processed + Count,
+                                      last_event = last_event(LastEvent, Link)}
+               end).
+
+%% @doc Store that the link stopped because it cannot progress: status
+%% error, and the reason.
+-spec record_halt(atom(), binary(), term()) -> ok.
+record_halt(StoreId, Name, Reason) ->
+    in_link_tx(StoreId, Name, fun(Link) -> Link#link{status = error, reason = Reason} end).
+
+in_link_tx(StoreId, Name, Change) ->
+    Path = link_path(StoreId, Name),
+    {ok, ok} = khepri:transaction(StoreId, fun() -> change_tx(Path, Change) end),
     ok.
 
-progress_tx(Path, Positions, Count, LastEvent) ->
+change_tx(Path, Change) ->
     {ok, Link} = khepri_tx:get(Path),
-    khepri_tx:put(Path, Link#link{positions = Positions,
-                                  processed = Link#link.processed + Count,
-                                  last_event = last_event(LastEvent, Link)}).
+    khepri_tx:put(Path, Change(Link)).
 
 last_event(undefined, #link{last_event = Last}) -> Last;
 last_event(LastEvent, _Link) -> LastEvent.
@@ -440,13 +468,16 @@ link_to_info(Link) ->
         status => Link#link.status,
         processed => Link#link.processed
     },
-    case Link#link.last_event of
-        undefined -> Info;
-        LastEvent -> Info#{last_event => LastEvent}
-    end.
+    with_reason(Link, case Link#link.last_event of
+                          undefined -> Info;
+                          LastEvent -> Info#{last_event => LastEvent}
+                      end).
+
+with_reason(#link{status = error, reason = Reason}, Info) -> Info#{reason => Reason};
+with_reason(_Link, Info) -> Info.
 
 %% @private Set the link's status; a link that is gone has none to set.
--spec set_status(atom(), binary(), running | stopped) -> ok | {error, term()}.
+-spec set_status(atom(), binary(), stopped) -> ok | {error, term()}.
 set_status(StoreId, Name, Status) ->
     Path = link_path(StoreId, Name),
     Tx = fun() -> status_tx(Path, Status) end,

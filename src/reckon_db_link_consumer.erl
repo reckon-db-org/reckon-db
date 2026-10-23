@@ -24,9 +24,10 @@
 %% <li>a link that never ran starts at version -1 for every stream with
 %%     `backfill => true', and at each matching stream's current version
 %%     without it, so only later events arrive;</li>
-%% <li>the last event in the link stream raises its source stream's
-%%     position, which covers a crash between an append and the progress
-%%     write that follows it;</li>
+%% <li>every event in the link stream past the link-stream version stored
+%%     with the positions raises its source stream's position, which covers
+%%     a crash between an append and the progress write that follows it,
+%%     also when that append held events from several source streams;</li>
 %% <li>after subscribing, every matching stream is read from its position
 %%     to its end: that is the backfill, and on a restart it is what the
 %%     link missed while it was down.</li>
@@ -35,6 +36,16 @@
 %% Each source event that passes the filter reaches the link stream once.
 %% A failed append or progress write crashes the consumer; its supervisor
 %% restarts it, and the restart reads again from the stored positions.
+%%
+%% == A link that cannot progress ==
+%%
+%% A transform that crashes or returns something other than an event, and
+%% an event in the link stream that does not name its source position,
+%% would fail again on every restart. The link stops instead: it writes
+%% what it took before that event, nothing for the event itself (never the
+%% untransformed event), removes its subscription, stores status `error'
+%% with the reason, and ends normally, so its supervisor leaves it down and
+%% every other link keeps running. A filter that crashes selects nothing.
 %%
 %% @author rgfaber
 
@@ -54,8 +65,10 @@
     link :: #link{},
     link_stream :: binary(),
     positions :: #{binary() => integer()},
-    written = [] :: [event()],
-    moved = false :: boolean()
+    link_version :: integer(),
+    written = [] :: [{event(), event()}],
+    moved = false :: boolean(),
+    halted :: term()
 }).
 
 %%====================================================================
@@ -84,26 +97,30 @@ init({StoreId, Name}) ->
         {error, Reason} -> {stop, Reason}
     end.
 
-init_link(StoreId, #link{name = Name, source = Source} = Link) ->
+%% The link stream is read in handle_continue, not here: a link that
+%% cannot read it stops there without its supervisor restarting it.
+init_link(StoreId, #link{name = Name, source = Source, link_version = LinkVersion} = Link) ->
     LinkStream = reckon_db_links:link_stream_id(Name),
-    Positions = after_last_written(StoreId, LinkStream,
-                                   starting_positions(StoreId, Link, LinkStream)),
-    ok = reckon_db_links:record_progress(StoreId, Name, Positions, [], undefined),
+    Positions = starting_positions(StoreId, Link, LinkStream),
     {ok, GlobalCount} = reckon_db_streams:global_event_count(StoreId),
     Subscribed = reckon_db_subscriptions:subscribe(
                    StoreId, stream, selector(Source), subscription_name(Name),
                    #{subscriber => self(), start_from => GlobalCount}),
     State = #state{store_id = StoreId, link = Link, link_stream = LinkStream,
-                   positions = Positions},
+                   positions = Positions, link_version = LinkVersion},
     subscribed(Subscribed, State).
 
-subscribed({ok, _Key}, State) -> {ok, State, {continue, sweep}};
-subscribed({error, Reason}, _State) -> {stop, Reason}.
+subscribed({ok, _Key}, #state{store_id = StoreId, link = #link{name = Name}} = State) ->
+    ok = reckon_db_links:record_running(StoreId, Name, State#state.positions,
+                                        State#state.link_version),
+    {ok, State, {continue, sweep}};
+subscribed({error, Reason}, _State) ->
+    {stop, Reason}.
 
-%% @private Read every matching stream from its position to its end.
-handle_continue(sweep, #state{store_id = StoreId, link = Link, link_stream = LinkStream} = State) ->
-    Streams = source_streams(StoreId, Link#link.source, LinkStream),
-    {noreply, flush(lists:foldl(fun sweep_stream/2, State, Streams))}.
+%% @private Raise the positions from what the link stream already holds,
+%% then read every matching stream from its position to its end.
+handle_continue(sweep, State) ->
+    progressed(flush(sweep(after_last_written(State)))).
 
 %% @private
 handle_call(_Request, _From, State) ->
@@ -115,7 +132,7 @@ handle_cast(_Msg, State) ->
 
 %% @private Live events from the subscription, and catch-up batches.
 handle_info({events, Events}, State) ->
-    {noreply, flush(lists:foldl(fun follow/2, State, Events))};
+    progressed(flush(lists:foldl(fun follow/2, State, Events)));
 handle_info({subscription_error, Violation}, #state{link = #link{name = Name}} = State) ->
     logger:error("Link ~s: its subscription reported ~p", [Name, Violation]),
     {noreply, State};
@@ -135,27 +152,45 @@ starting_positions(StoreId, #link{source = Source}, LinkStream) ->
     maps:from_list([{S, reckon_db_streams:get_version(StoreId, S)}
                     || S <- source_streams(StoreId, Source, LinkStream)]).
 
-%% The last event written to the link stream names the source position it
-%% came from; the progress write after that append may not have happened.
-after_last_written(StoreId, LinkStream, Positions) ->
-    after_last_written(reckon_db_streams:get_version(StoreId, LinkStream),
-                       StoreId, LinkStream, Positions).
+%% Each event written to the link stream after the stored link-stream
+%% version names the source position it came from; the progress write
+%% after that append may not have happened.
+after_last_written(#state{store_id = StoreId, link_stream = LinkStream} = State) ->
+    after_last_written(reckon_db_streams:get_version(StoreId, LinkStream), State).
 
-after_last_written(Last, _StoreId, _LinkStream, Positions) when Last < 0 ->
-    Positions;
-after_last_written(Last, StoreId, LinkStream, Positions) ->
-    {ok, [#event{metadata = #{source_stream := S, source_version := V}}]} =
-        reckon_db_streams:read(StoreId, LinkStream, Last, 1, forward),
-    Positions#{S => max(V, maps:get(S, Positions, -1))}.
+after_last_written(Last, #state{link_version = Read} = State) when Last =< Read ->
+    State;
+after_last_written(Last, #state{store_id = StoreId, link_stream = LinkStream,
+                                link_version = Read} = State) ->
+    {ok, Events} = reckon_db_streams:read(StoreId, LinkStream, Read + 1,
+                                          min(?READ_BATCH, Last - Read), forward),
+    raised(lists:foldl(fun raise/2, State, Events), Last).
+
+raised(#state{halted = undefined} = State, Last) -> after_last_written(Last, State);
+raised(State, _Last) -> State.
+
+raise(_Event, #state{halted = Reason} = State) when Reason =/= undefined ->
+    State;
+raise(#event{version = LV, metadata = #{source_stream := S, source_version := V}},
+      #state{positions = Positions} = State) when is_binary(S), is_integer(V) ->
+    State#state{positions = Positions#{S => max(V, maps:get(S, Positions, -1))},
+                link_version = LV};
+raise(#event{version = LV}, State) ->
+    State#state{halted = {unreadable_link_event, LV}}.
 
 %%====================================================================
 %% Following
 %%====================================================================
 
+sweep(#state{store_id = StoreId, link = Link, link_stream = LinkStream} = State) ->
+    lists:foldl(fun sweep_stream/2, State, source_streams(StoreId, Link#link.source, LinkStream)).
+
 sweep_stream(StreamId, #state{store_id = StoreId} = State) ->
     fill(StreamId, position(StreamId, State) + 1,
          reckon_db_streams:get_version(StoreId, StreamId), State).
 
+follow(_Event, #state{halted = Reason} = State) when Reason =/= undefined ->
+    State;
 follow(#event{stream_id = S} = Event, #state{link = Link, link_stream = LinkStream} = State) ->
     follow(is_source(Link#link.source, LinkStream, S), Event, State).
 
@@ -172,6 +207,8 @@ follow_at(V, Position, #event{stream_id = S} = Event, State) ->
     take(Event, fill(S, Position + 1, V - 1, State)).
 
 %% Read [From, To] of one source stream and take each event in order.
+fill(_StreamId, _From, _To, #state{halted = Reason} = State) when Reason =/= undefined ->
+    State;
 fill(_StreamId, From, To, State) when From > To ->
     State;
 fill(StreamId, From, To, #state{store_id = StoreId} = State) ->
@@ -185,37 +222,57 @@ fill_next(Events, StreamId, To, State) ->
     Taken = lists:foldl(fun take/2, State, Events),
     fill(StreamId, position(StreamId, Taken) + 1, To, Taken).
 
-take(#event{stream_id = S, version = V} = Event,
-     #state{link = Link, positions = Positions, written = Written} = State) ->
-    Moved = State#state{positions = Positions#{S => V}, moved = true},
-    take(apply_filter(Link#link.filter, Event), Link, Event, Moved, Written).
+take(_Event, #state{halted = Reason} = State) when Reason =/= undefined ->
+    State;
+take(#event{} = Event, #state{link = Link} = State) ->
+    taken(derive(apply_filter(Link#link.filter, Event), Link#link.transform, Event),
+          Event, State).
 
-take(true, Link, Event, State, Written) ->
-    State#state{written = [apply_transform(Link#link.transform, Event) | Written]};
-take(false, _Link, _Event, State, _Written) ->
-    State.
+taken({halt, Reason}, _Event, State) ->
+    State#state{halted = Reason};
+taken(skip, Event, State) ->
+    moved(Event, State);
+taken({write, Derived}, Event, #state{written = Written} = State) ->
+    moved(Event, State#state{written = [{Event, Derived} | Written]}).
+
+moved(#event{stream_id = S, version = V}, #state{positions = Positions} = State) ->
+    State#state{positions = Positions#{S => V}, moved = true}.
 
 position(StreamId, #state{positions = Positions}) ->
     maps:get(StreamId, Positions, -1).
 
-%% Append what was taken, then store the positions it was taken up to.
+%% Append what was taken, then store the positions it was taken up to and
+%% the link-stream version that append reached.
 flush(#state{moved = false} = State) ->
     State;
 flush(#state{store_id = StoreId, link = #link{name = Name}, link_stream = LinkStream,
              positions = Positions, written = Written} = State) ->
-    Events = lists:reverse(Written),
-    ok = append(StoreId, LinkStream, Events),
-    ok = reckon_db_links:record_progress(StoreId, Name, Positions, Events, last_id(Events)),
-    State#state{written = [], moved = false}.
+    Pairs = lists:reverse(Written),
+    LinkVersion = append(StoreId, LinkStream, Pairs, State#state.link_version),
+    Derived = [D || {_Source, D} <- Pairs],
+    ok = reckon_db_links:record_progress(StoreId, Name, Positions, LinkVersion,
+                                         Derived, last_id(Derived)),
+    State#state{written = [], moved = false, link_version = LinkVersion}.
 
-append(_StoreId, _LinkStream, []) ->
-    ok;
-append(StoreId, LinkStream, Events) ->
-    {ok, _} = reckon_db_streams:append(StoreId, LinkStream, -2, [event_to_map(E) || E <- Events]),
-    ok.
+append(_StoreId, _LinkStream, [], LinkVersion) ->
+    LinkVersion;
+append(StoreId, LinkStream, Pairs, _LinkVersion) ->
+    {ok, LinkVersion} = reckon_db_streams:append(
+                          StoreId, LinkStream, -2,
+                          [event_to_map(Source, Derived) || {Source, Derived} <- Pairs]),
+    LinkVersion.
 
 last_id([]) -> undefined;
 last_id(Events) -> (lists:last(Events))#event.event_id.
+
+%% A link that cannot progress stops; see the moduledoc.
+progressed(#state{halted = undefined} = State) ->
+    {noreply, State};
+progressed(#state{store_id = StoreId, link = #link{name = Name}, halted = Reason} = State) ->
+    logger:error("Link ~s stopped, it cannot progress: ~p (store: ~p)", [Name, Reason, StoreId]),
+    _ = reckon_db_subscriptions:unsubscribe(StoreId, stream, subscription_name(Name)),
+    ok = reckon_db_links:record_halt(StoreId, Name, Reason),
+    {stop, normal, State}.
 
 %%====================================================================
 %% Source
@@ -270,22 +327,30 @@ apply_filter(Filter, Event) ->
     catch _:_ -> false
     end.
 
-apply_transform(undefined, Event) ->
-    Event;
-apply_transform(Transform, Event) ->
-    try Transform(Event)
-    catch _:_ -> Event
+%% What a selected event becomes. The halt reason names the source
+%% position only: a crash reason can carry the event's data, which a
+%% redacting transform exists to keep out of the store.
+derive(false, _Transform, _Event) ->
+    skip;
+derive(true, undefined, Event) ->
+    {write, Event};
+derive(true, Transform, #event{stream_id = S, version = V} = Event) ->
+    try Transform(Event) of
+        #event{metadata = M} = Derived when is_map(M) -> {write, Derived};
+        _NotAnEvent -> {halt, {transform_returned_no_event, S, V}}
+    catch Class:_ -> {halt, {transform_crashed, S, V, Class}}
     end.
 
-%% The derived event keeps the source event's id and type and names the
-%% source position it came from.
-event_to_map(Event) ->
+%% The derived event keeps the id and type the transform left it and names
+%% the source position it came from, whatever the transform did to the
+%% event's own stream id and version.
+event_to_map(#event{stream_id = S, version = V}, Derived) ->
     #{
-        event_id => Event#event.event_id,
-        event_type => Event#event.event_type,
-        data => Event#event.data,
-        metadata => maps:merge(Event#event.metadata, #{
-            source_stream => Event#event.stream_id,
-            source_version => Event#event.version
+        event_id => Derived#event.event_id,
+        event_type => Derived#event.event_type,
+        data => Derived#event.data,
+        metadata => maps:merge(Derived#event.metadata, #{
+            source_stream => S,
+            source_version => V
         })
     }.

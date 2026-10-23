@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [5.11.14] - 2026-10-23
 
+### Fixed: a started link only ever held its backfill (reckon-db#24)
+
+`reckon_db_links:start/2` wrote the backfill and then followed nothing: a
+`stream_pattern` source crashed it, `all` and `stream` sources never
+received a live event, and `stop/2` left the subscription behind. A started
+link now has a consumer (`reckon_db_link_consumer`, one per running link,
+under the store's `reckon_db_links_sup`) that follows its source live, and:
+
+- each source event that passes the filter reaches the link stream once,
+  across a consumer crash and a store restart: the link stores, per source
+  stream, the last version it handled and the link-stream version its last
+  append reached;
+- a link stored as running resumes when the store's leader activates;
+- `start/2` answers the subscribe error; `stop/2` removes the subscription;
+  `create/2` refuses a source it cannot follow with
+  `{error, {invalid_source, Source}}`;
+- a link that cannot progress (a transform that crashes or returns no
+  event, a link-stream event without its source position) stops with
+  status `error` and a `reason`, writes nothing for that event, and leaves
+  every other link running. A crashing transform used to write the
+  untransformed event.
+
+Links stored by an earlier version are a shorter `#link{}` record and
+cannot be read by this one: recreate them (`delete/2`, `create/2`).
+
 ### Added: paged DCB reads by type, tag and payload (evoq#6, part two)
 
 The limit-only DCB reads return the first Limit matching events and cannot

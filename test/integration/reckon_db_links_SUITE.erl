@@ -35,7 +35,11 @@
     start_answers_the_subscribe_error/1,
     stop_stops_delivery/1,
     a_crashed_consumer_loses_and_repeats_nothing/1,
-    a_running_link_resumes_after_the_store_restarts/1
+    a_running_link_resumes_after_the_store_restarts/1,
+    a_poisoned_link_stops_alone/1,
+    a_crashing_transform_writes_nothing_raw/1,
+    an_unreadable_link_stream_stops_the_link/1,
+    a_crash_inside_a_two_stream_batch_repeats_nothing/1
 ]).
 
 -define(WAIT_MS, 5000).
@@ -55,7 +59,11 @@ all() ->
         start_answers_the_subscribe_error,
         stop_stops_delivery,
         a_crashed_consumer_loses_and_repeats_nothing,
-        a_running_link_resumes_after_the_store_restarts
+        a_running_link_resumes_after_the_store_restarts,
+        a_poisoned_link_stops_alone,
+        a_crashing_transform_writes_nothing_raw,
+        an_unreadable_link_stream_stops_the_link,
+        a_crash_inside_a_two_stream_batch_repeats_nothing
     ].
 
 init_per_suite(Config) ->
@@ -271,8 +279,142 @@ a_running_link_resumes_after_the_store_restarts(Config) ->
     ?assertEqual(running, maps:get(status, Info)).
 
 %%====================================================================
+%% A link that cannot progress
+%%====================================================================
+
+%% A transform that returns something other than an event used to crash
+%% the consumer on every restart, until links_sup gave up and came back
+%% empty, every other link with it. The bad link now writes what it took
+%% before that event, stops with status error, and is not restarted; the
+%% healthy link next to it keeps following and links_sup is the same
+%% process.
+a_poisoned_link_stops_alone(Config) ->
+    StoreId = ?config(store_id, Config),
+    Source = sid(<<"linkpoison">>),
+    LinksSup = whereis(reckon_db_naming:links_sup_name(StoreId)),
+    ok = create_and_start(StoreId, <<"healthy">>, #{type => stream, stream_id => Source}),
+    ok = reckon_db_links:create(StoreId, #{
+        name => <<"poisoned">>,
+        source => #{type => stream, stream_id => Source},
+        transform => fun(#event{data = #{n := 1}}) -> not_an_event;
+                        (E) -> E
+                     end
+    }),
+    ok = reckon_db_links:start(StoreId, <<"poisoned">>),
+    append(StoreId, Source, 3),
+    ok = link_holds(StoreId, <<"healthy">>, [{Source, V} || V <- lists:seq(0, 2)]),
+    ok = link_halted(StoreId, <<"poisoned">>),
+    ?assertEqual([{Source, 0}], positions(read_link(StoreId, <<"poisoned">>))),
+    {ok, Info} = reckon_db_links:get(StoreId, <<"poisoned">>),
+    ?assertEqual({transform_returned_no_event, Source, 1}, maps:get(reason, Info)),
+    append(StoreId, Source, 1),
+    ok = link_holds(StoreId, <<"healthy">>, [{Source, V} || V <- lists:seq(0, 3)]),
+    ?assertEqual([{Source, 0}], positions(read_link(StoreId, <<"poisoned">>))),
+    ?assertEqual(LinksSup, whereis(reckon_db_naming:links_sup_name(StoreId))).
+
+%% A redacting transform that throws used to let the raw event through.
+%% Nothing the transform did not return reaches the link stream.
+a_crashing_transform_writes_nothing_raw(Config) ->
+    StoreId = ?config(store_id, Config),
+    Source = sid(<<"linkredact">>),
+    ok = reckon_db_links:create(StoreId, #{
+        name => <<"redacted">>,
+        source => #{type => stream, stream_id => Source},
+        transform => fun(#event{data = #{n := N} = D} = E) when N =/= 1 ->
+                            E#event{data = maps:put(redacted, 1, D)}
+                     end
+    }),
+    ok = reckon_db_links:start(StoreId, <<"redacted">>),
+    append(StoreId, Source, 3),
+    ok = link_halted(StoreId, <<"redacted">>),
+    {ok, Linked} = read_link(StoreId, <<"redacted">>),
+    ?assertEqual([{Source, 0}], positions({ok, Linked})),
+    ?assertEqual([1], [maps:get(redacted, E#event.data, 0) || E <- Linked]),
+    {ok, Info} = reckon_db_links:get(StoreId, <<"redacted">>),
+    ?assertEqual({transform_crashed, Source, 1, error}, maps:get(reason, Info)).
+
+%% An event in the link stream that does not name its source position used
+%% to badmatch in the consumer's start, on every restart. The link now
+%% stops with status error and the healthy link keeps following.
+an_unreadable_link_stream_stops_the_link(Config) ->
+    StoreId = ?config(store_id, Config),
+    Source = sid(<<"linkunreadable">>),
+    ok = create_and_start(StoreId, <<"healthy">>, #{type => stream, stream_id => Source}),
+    ok = reckon_db_links:create(StoreId, #{name => <<"unreadable">>,
+                                           source => #{type => stream, stream_id => Source}}),
+    {ok, _} = reckon_db_streams:append(StoreId, <<"$link:unreadable">>, -2,
+                                       [#{event_type => <<"link_tested_v1">>, data => #{}}]),
+    ok = reckon_db_links:start(StoreId, <<"unreadable">>),
+    ok = link_halted(StoreId, <<"unreadable">>),
+    {ok, Info} = reckon_db_links:get(StoreId, <<"unreadable">>),
+    ?assertEqual({unreadable_link_event, 0}, maps:get(reason, Info)),
+    append(StoreId, Source, 1),
+    ok = link_holds(StoreId, <<"healthy">>, [{Source, 0}]).
+
+%% One flush appends events from two source streams, then stores the
+%% positions. The consumer dies between the two: the restart used to raise
+%% only the last event's stream from the link stream and wrote the other
+%% stream's event again.
+a_crash_inside_a_two_stream_batch_repeats_nothing(Config) ->
+    StoreId = ?config(store_id, Config),
+    A = sid(<<"linkbatch-a">>),
+    B = sid(<<"linkbatch-b">>),
+    append(StoreId, A, 1),
+    append(StoreId, B, 1),
+    ok = reckon_db_links:create(StoreId, #{
+        name => <<"batch">>,
+        source => #{type => stream_pattern, pattern => <<"linkbatch*">>},
+        backfill => true
+    }),
+    Crashed = ets:new(crashed, [public]),
+    ok = meck:new(reckon_db_links, [passthrough]),
+    try
+        ok = meck:expect(reckon_db_links, record_progress,
+                         fun(S, N, P, LV, Written, Last) ->
+                             crash_once(Crashed, length(Written)),
+                             meck:passthrough([S, N, P, LV, Written, Last])
+                         end),
+        ok = reckon_db_links:start(StoreId, <<"batch">>),
+        Expected = lists:sort([{A, 0}, {B, 0}]),
+        Holds = fun() -> lists:sort(positions(read_link(StoreId, <<"batch">>))) =:= Expected end,
+        ok = reckon_db_test_helpers:wait_for(Holds, ?WAIT_MS),
+        ok = reckon_db_test_helpers:wait_for(
+               fun() -> is_pid(consumer(StoreId, <<"batch">>)) end, ?WAIT_MS),
+        timer:sleep(500),
+        ?assertEqual([{crashed}], ets:lookup(Crashed, crashed)),
+        ?assertEqual(Expected, lists:sort(positions(read_link(StoreId, <<"batch">>))))
+    after
+        meck:unload(reckon_db_links)
+    end.
+
+crash_once(Crashed, 2) ->
+    case ets:insert_new(Crashed, {crashed}) of
+        true -> exit(crashed_between_append_and_progress);
+        false -> ok
+    end;
+crash_once(_Crashed, _Count) ->
+    ok.
+
+%%====================================================================
 %% Helpers
 %%====================================================================
+
+%% The link's consumer is gone, stays gone, and its status is error.
+link_halted(StoreId, Name) ->
+    Halted = fun() ->
+                 {ok, Info} = reckon_db_links:get(StoreId, Name),
+                 maps:get(status, Info) =:= error
+                     andalso consumer(StoreId, Name) =:= undefined
+             end,
+    case reckon_db_test_helpers:wait_for(Halted, ?WAIT_MS) of
+        ok ->
+            timer:sleep(500),
+            ?assertEqual(undefined, consumer(StoreId, Name)),
+            ok;
+        timeout ->
+            ct:fail("link ~s did not stop with status error: ~p",
+                    [Name, reckon_db_links:get(StoreId, Name)])
+    end.
 
 create_and_start(StoreId, Name, Source) ->
     ok = reckon_db_links:create(StoreId, #{name => Name, source => Source}),
