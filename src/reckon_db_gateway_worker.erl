@@ -236,12 +236,44 @@ stream_append_op({dcb_read_by_payload_hash, _StoreId, Keys, Values, Limit}, _Fro
             #state{store_id = StoreId} = State) ->
     Result = reckon_db_dcb:read_by_payload_hash(StoreId, Keys, Values, Limit),
     {reply, Result, State};
+%% Paged DCB reads, in DCB sequence order (reckon-db 5.11.14+, reckon-gater
+%% 3.15.0+; evoq#6 part two). Each answers {ok, {Events, Next}}, Next a
+%% cursor or done; the contract is in reckon_db_dcb_paged_reads.
+stream_append_op({dcb_read_by_event_types_page, _StoreId, EventTypes, After, Limit}, _From,
+            #state{store_id = StoreId} = State) ->
+    {reply, reckon_db_dcb_paged_reads:by_event_types(StoreId, EventTypes, After, Limit), State};
+stream_append_op({dcb_read_by_tags_page, _StoreId, Tags, Match, After, Limit}, _From,
+            #state{store_id = StoreId} = State) ->
+    {reply, reckon_db_dcb_paged_reads:by_tags(StoreId, Tags, Match, After, Limit), State};
+stream_append_op({dcb_read_by_payload_page, _StoreId, Key, Value, After, Limit}, _From,
+            #state{store_id = StoreId} = State) ->
+    {reply, reckon_db_dcb_paged_reads:by_payload(StoreId, Key, Value, After, Limit), State};
+stream_append_op({dcb_read_by_payload_hash_page, _StoreId, Keys, Values, After, Limit}, _From,
+            #state{store_id = StoreId} = State) ->
+    {reply, reckon_db_dcb_paged_reads:by_payload_hash(StoreId, Keys, Values, After, Limit),
+     State};
 stream_append_op(Request, From, State) ->
     snapshot_op(Request, From, State).
 
 %%====================================================================
 %% Snapshot Operations (handle_call)
 %%====================================================================
+
+%% Record a snapshot and answer once it is written (reckon-db 5.11.14+,
+%% reckon-gater 3.15.0+; reckon-evoq#1). The cast below cannot tell its
+%% caller anything: a projection checkpoint needs to know the write
+%% happened, and two of them from one caller to land in order. An id that
+%% does not decompose comes back as the boundary's invalid_stream_id.
+snapshot_op({record_snapshot_sync, _StoreId, _SourceUuid, StreamUuid, Version, SnapshotRecord},
+            _From, #state{store_id = StoreId} = State) ->
+    Data = maps:get(data, SnapshotRecord, SnapshotRecord),
+    Metadata = maps:get(metadata, SnapshotRecord, #{}),
+    {reply, reckon_db_snapshots:save(StoreId, StreamUuid, Version, Data, Metadata), State};
+
+%% Delete a snapshot and answer once it is gone (5.11.14+).
+snapshot_op({delete_snapshot_sync, _StoreId, _SourceUuid, StreamUuid, Version}, _From,
+            #state{store_id = StoreId} = State) ->
+    {reply, reckon_db_snapshots:delete_at(StoreId, StreamUuid, Version), State};
 
 %% Read snapshot. Version =:= 0 means "latest" — there is no version-0
 %% snapshot in the store (snapshot versions reflect an event index,
