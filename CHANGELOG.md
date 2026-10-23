@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [5.11.14] - 2026-10-23
 
+### Fixed: `priv/build-nifs.sh` finds the NIF wherever cargo wrote it (reckon-db#10)
+
+With `CARGO_TARGET_DIR` set — a shared CI build cache, sccache, a monorepo
+build — cargo wrote the library to `${CARGO_TARGET_DIR}/release` and both of
+the script's copies, hardcoded to `${CRATE_DIR}/target/release`, missed. It
+printed `WARNING: Could not find compiled NIF.`, exited 0, and the package then
+ran on the Erlang fallbacks with nothing in the build output to say so.
+
+The artefact directory now comes from `cargo metadata` (`target_directory`),
+which answers for `CARGO_TARGET_DIR` and for a workspace member whose artefact
+lands under the workspace root; the old default stays as the fallback when
+`cargo metadata` is unavailable. Cargo ran and no `.so`/`.dylib` appeared is now
+an ERROR and a non-zero exit, after every crate has been attempted. The "no
+Rust toolchain, use the fallbacks" path is unchanged.
+
+`scripts/does_build_nifs_honour_cargo_target_dir.sh` covers the three shapes
+with a fake cargo, plus `--real`, which builds all five crates once through a
+shared target directory; CI runs it before the compile.
+
 ### Fixed: a started link only ever held its backfill (reckon-db#24)
 
 `reckon_db_links:start/2` wrote the backfill and then followed nothing: a

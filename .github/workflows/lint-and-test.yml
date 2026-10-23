@@ -113,6 +113,15 @@ jobs:
             ~/.cache/rebar3
           key: ${{ runner.os }}-otp-${{ steps.beam.outputs.otp-version }}-${{ hashFiles('rebar.config') }}
 
+      # Runs BEFORE the compile, and without needing it: it catches a
+      # build-nifs.sh that cannot find cargo's artefact at all (#10: with
+      # CARGO_TARGET_DIR set, every NIF was dropped and the build still exited
+      # 0), so that failure shows in a minute instead of after the whole suite.
+      # `--real' builds the five crates once through a shared target directory;
+      # the other three cases use a fake cargo and take no compiler time.
+      - name: build-nifs.sh honours CARGO_TARGET_DIR
+        run: bash scripts/does_build_nifs_honour_cargo_target_dir.sh --real
+
       - name: Compile
         id: compile
         run: rebar3 compile
