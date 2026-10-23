@@ -185,7 +185,13 @@ elif all_artefacts_present "$D_DIR"; then
     fail "a failed cargo build copied the STALE artefact into priv/"
     printf '%s\n' "$D_OUT" | sed 's/^/       /'
 elif ! printf '%s\n' "$D_OUT" | grep -q "cargo build failed"; then
-    fail "non-zero exit, but no line says the cargo build failed"
+    fail "non-zero exit, but the per-crate line does not say the build failed"
+    printf '%s\n' "$D_OUT" | sed 's/^/       /'
+elif ! printf '%s\n' "$D_OUT" | grep -q "failed to build or were not found"; then
+    fail "the summary line does not say a build may have FAILED (it counts both causes)"
+    printf '%s\n' "$D_OUT" | sed 's/^/       /'
+elif printf '%s\n' "$D_OUT" | grep -q "were built by cargo but not found"; then
+    fail "the summary line claims cargo built them, which a failed compile contradicts"
     printf '%s\n' "$D_OUT" | sed 's/^/       /'
 else
     pass "failed compile is an error, stale artefact left alone"
