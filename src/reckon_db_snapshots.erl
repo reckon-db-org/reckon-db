@@ -145,10 +145,32 @@ load_at(StoreId, StreamId, Version) ->
             maybe_verify_snapshot_on_load(StoreId, StreamId, Snapshot)
     end.
 
-%% @doc List all snapshots for a stream
--spec list(atom(), binary()) -> {ok, [snapshot()]} | {error, term()}.
+%% @doc List all snapshots for a stream, in version order.
+%%
+%% Same verification semantics as load/2, for every snapshot listed: if one
+%% fails, the list is refused with its {integrity_violation, _} (or
+%% {snapshot_anchor_unavailable, _}), never served with it in or silently
+%% left out. A caller that picks the latest from this list (reckon-evoq's
+%% checkpoint read) gets the same protection load/2 gives.
+-spec list(atom(), binary()) ->
+    {ok, [snapshot()]} | {error, store_integrity_violation() | {snapshot_anchor_unavailable, map()} | term()}.
 list(StoreId, StreamId) ->
-    reckon_db_snapshots_store:list(StoreId, StreamId).
+    verify_listed(reckon_db_snapshots_store:list(StoreId, StreamId), StoreId, StreamId).
+
+verify_listed({ok, Snapshots}, StoreId, StreamId) ->
+    Kind = snapshot_kind(StoreId, StreamId),
+    lists:foldl(fun(Snapshot, Acc) -> keep_verified(Acc, Kind, StoreId, StreamId, Snapshot) end,
+                {ok, []}, lists:reverse(Snapshots));
+verify_listed({error, _} = Error, _StoreId, _StreamId) ->
+    Error.
+
+keep_verified({ok, Kept}, Kind, StoreId, StreamId, Snapshot) ->
+    prepend_verified(verify_by_kind(Kind, StoreId, StreamId, Snapshot), Kept);
+keep_verified({error, _} = Error, _Kind, _StoreId, _StreamId, _Snapshot) ->
+    Error.
+
+prepend_verified({ok, Snapshot}, Kept) -> {ok, [Snapshot | Kept]};
+prepend_verified({error, _} = Error, _Kept) -> Error.
 
 %% @doc Delete all snapshots for a stream
 -spec delete(atom(), binary()) -> ok | {error, term()}.

@@ -135,6 +135,23 @@ and stores with integrity off are unchanged.
 Seen red first: `reckon_db_unanchored_snapshots_SUITE` (7 of 10 failed
 before).
 
+### Fixed: listed snapshots were served unverified (reckon-db#25, reckon-evoq#1)
+
+`list/2`, which the gateway's `list_snapshots` calls, returned the stored
+records without the checks `load/2` runs, and reckon-evoq reads a
+projection checkpoint (and the latest aggregate snapshot) by listing and
+picking the highest version. So on an integrity store a planted, raised or
+unsealed snapshot was served on that path, and the seals above protected
+`load/2` only. `list/2` now verifies every snapshot it lists the way
+`load/2` does, and refuses the whole list with the first
+`{integrity_violation, _}` (or `{snapshot_anchor_unavailable, _}`) instead
+of serving it or leaving it out unseen. Every refusal emits the snapshot
+integrity violation event.
+
+Seen red first: four `a_listed_*` and `the_gateway_list_is_verified` cases
+in `reckon_db_unanchored_snapshots_SUITE` (4 of 5 failed before; the
+genuine-checkpoint case passed).
+
 ### Fixed: a snapshot record that is not a map took the gateway worker down
 
 `record_snapshot` read the record with `maps:get/3`, which raises `badmap`

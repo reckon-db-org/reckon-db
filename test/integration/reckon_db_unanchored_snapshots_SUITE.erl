@@ -28,7 +28,12 @@
          a_system_stream_with_events_keeps_its_anchor/1,
          an_unanchored_seal_on_a_stream_with_events_is_refused/1,
          a_user_stream_snapshot_is_unchanged/1,
-         a_store_without_integrity_is_unchanged/1]).
+         a_store_without_integrity_is_unchanged/1,
+         a_listed_checkpoint_is_verified/1,
+         a_listed_raised_checkpoint_is_refused/1,
+         a_listed_unsealed_system_snapshot_fails_closed/1,
+         a_listed_tampered_user_snapshot_is_refused/1,
+         the_gateway_list_is_verified/1]).
 
 -define(STREAM, <<"$evoq-checkpoint:order_summary">>).
 -define(OTHER, <<"$evoq-checkpoint:invoice_totals">>).
@@ -43,7 +48,12 @@ all() ->
      a_system_stream_with_events_keeps_its_anchor,
      an_unanchored_seal_on_a_stream_with_events_is_refused,
      a_user_stream_snapshot_is_unchanged,
-     a_store_without_integrity_is_unchanged].
+     a_store_without_integrity_is_unchanged,
+     a_listed_checkpoint_is_verified,
+     a_listed_raised_checkpoint_is_refused,
+     a_listed_unsealed_system_snapshot_fails_closed,
+     a_listed_tampered_user_snapshot_is_refused,
+     the_gateway_list_is_verified].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(crypto),
@@ -181,6 +191,49 @@ a_store_without_integrity_is_unchanged(Config) ->
     ?assertEqual(ok, save(StoreId, ?STREAM, 41)),
     ?assertMatch({ok, #snapshot{version = 41, mac = undefined}},
                  reckon_db_snapshots:load(StoreId, ?STREAM)).
+
+%% list/2 is how reckon-evoq reads a checkpoint (the gateway's
+%% list_snapshots). It returned the stored records unverified, so every row
+%% above was served on that path: the seal protected load/2 only.
+a_listed_checkpoint_is_verified(Config) ->
+    StoreId = ?config(store_id, Config),
+    ok = save(StoreId, ?STREAM, 41),
+    ?assertMatch({ok, [#snapshot{version = 41, mac = {v2, _, _}}]},
+                 reckon_db_snapshots:list(StoreId, ?STREAM)).
+
+a_listed_raised_checkpoint_is_refused(Config) ->
+    StoreId = ?config(store_id, Config),
+    ok = save(StoreId, ?STREAM, 41),
+    Stored = reckon_db_snapshots_store:get(StoreId, ?STREAM, 41),
+    ok = reckon_db_snapshots_store:put(StoreId, Stored#snapshot{version = 900,
+                                                               data = #{checkpoint => 900}}),
+    ?assertMatch({error, {integrity_violation, _}}, reckon_db_snapshots:list(StoreId, ?STREAM)).
+
+a_listed_unsealed_system_snapshot_fails_closed(Config) ->
+    StoreId = ?config(store_id, Config),
+    ok = save(StoreId, ?STREAM, 41),
+    ok = reckon_db_snapshots_store:put(StoreId, snapshot(?STREAM, 900)),
+    ?assertEqual({error, {integrity_violation, unsealed_system_snapshot}},
+                 reckon_db_snapshots:list(StoreId, ?STREAM)).
+
+%% An anchored snapshot on a user stream, its value edited in the tree.
+a_listed_tampered_user_snapshot_is_refused(Config) ->
+    StoreId = ?config(store_id, Config),
+    Stream = <<"order-018f6a7b8c9d4e5f60718293a4b5c6d7">>,
+    {ok, _} = reckon_db_streams:append(StoreId, Stream, -1,
+                                       [#{event_type => <<"noted_v1">>, data => #{n => 1}}]),
+    ok = save(StoreId, Stream, 0),
+    Stored = reckon_db_snapshots_store:get(StoreId, Stream, 0),
+    ok = reckon_db_snapshots_store:put(StoreId, Stored#snapshot{data = #{checkpoint => 900}}),
+    ?assertMatch({error, {integrity_violation, _}}, reckon_db_snapshots:list(StoreId, Stream)).
+
+the_gateway_list_is_verified(Config) ->
+    StoreId = ?config(store_id, Config),
+    ok = reckon_db_snapshots_store:put(StoreId, snapshot(?STREAM, 900)),
+    {reply, Reply, _} = reckon_db_gateway_worker:handle_call(
+                          {list_snapshots, StoreId, ?STREAM, ?STREAM}, self(),
+                          {state, StoreId, undefined}),
+    ?assertEqual({error, {integrity_violation, unsealed_system_snapshot}}, Reply).
 
 %%====================================================================
 %% Helpers

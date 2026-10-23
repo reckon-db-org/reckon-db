@@ -327,6 +327,10 @@ user stream. A refused load answers `{error, {integrity_violation, _}}` and
 emits `[reckon, db, snapshot, integrity, violation]` with `store_id`,
 `stream_id` and `version`; the caller rebuilds from events.
 
+`list/2` applies the same checks to every snapshot it lists, and refuses the
+whole list on the first that fails: a caller that picks the latest from a list
+is protected as `load/2` is.
+
 ## Snapshot Storage Considerations
 
 ### What to Store
