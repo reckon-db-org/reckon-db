@@ -32,13 +32,17 @@
     exists/2,
     setup_tracking/2,
     snapshot_live/1,
-    restore/2
+    restore/2,
+    this_boot/0
 ]).
 
 %% Upper bound on the query behind snapshot_live/1: it runs right before
 %% a local reset, possibly against a store the healer already judged
 %% unhealthy, and must never hang its caller.
 -define(SNAPSHOT_TIMEOUT, 5000).
+
+%% Where this VM's boot token lives; see this_boot/0.
+-define(BOOT_TOKEN, {?MODULE, boot_token}).
 
 %%====================================================================
 %% Types
@@ -122,10 +126,10 @@ subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
 %% store cannot use used to raise after the record was written: the retry
 %% then found that record, answered already_exists, and the gateway turned
 %% it into ok for a subscription that never delivered (reckon-db#9). A
-%% record already stored under this key carries this same selector, so it
-%% is one of those half-created ones and is removed.
+%% record already stored under this key carries this same selector, and is
+%% torn down whole (see tear_down_refused/3).
 subscribe_with_filter({error, Reason}, StoreId, Key, _Subscription, _Opts, _StartTime) ->
-    _ = reckon_db_subscriptions_store:delete(StoreId, Key),
+    ok = tear_down_refused(StoreId, Key, reckon_db_subscriptions_store:get(StoreId, Key)),
     {error, {invalid_filter, Reason}};
 subscribe_with_filter(Filter, StoreId, Key,
                       #subscription{subscription_name = Name} = Subscription, Opts, StartTime) ->
@@ -135,6 +139,16 @@ subscribe_with_filter(Filter, StoreId, Key,
         false ->
             store_and_setup(StoreId, Key, Filter, Subscription, StartTime)
     end.
+
+%% @private A record under a refused selector's key is either a #9
+%% half-created one or a subscription a previous release accepted and armed
+%% under a selector the builders now refuse: its trigger proc and emitters
+%% still deliver. Either way it goes the whole way, as an unsubscribe does.
+tear_down_refused(_StoreId, _Key, undefined) ->
+    ok;
+tear_down_refused(StoreId, Key, Subscription) ->
+    _ = do_unsubscribe(StoreId, Key, Subscription),
+    ok.
 
 %% @private An existing subscription with a STILL-LIVE subscriber is an
 %% active subscription — re-subscribing to it is a genuine duplicate and
@@ -175,11 +189,26 @@ stored_by_this_boot(#{subscriber_boot := Boot}) ->
 stored_by_this_boot(_) ->
     false.
 
-%% @private Names this VM's boot: the OS process and the VM's start time
-%% differ from one boot to the next, and need no state to compute.
--spec this_boot() -> {string(), integer()}.
+%% @doc Names this VM's boot: 16 random bytes, drawn once per VM and kept
+%% in persistent_term. Nothing the VM can read about itself does this job:
+%% in a container the BEAM is OS pid 1 on every boot, and
+%% erlang:system_info(start_time) is the fixed value monotonic time starts
+%% at, so that pair named every boot of a container the same (reckon-db#12).
+%%
+%% reckon_db_app draws it at application start, before any subscriber can
+%% race for the first draw; a VM that subscribes without the application
+%% (a bare khepri store) draws it on first use.
+-spec this_boot() -> binary().
 this_boot() ->
-    {os:getpid(), erlang:system_info(start_time)}.
+    case persistent_term:get(?BOOT_TOKEN, undefined) of
+        undefined -> draw_boot_token();
+        Token -> Token
+    end.
+
+draw_boot_token() ->
+    Token = crypto:strong_rand_bytes(16),
+    persistent_term:put(?BOOT_TOKEN, Token),
+    Token.
 
 %% @private
 store_and_setup(StoreId, Key, Filter, Subscription, StartTime) ->

@@ -40,6 +40,9 @@ start(_StartType, _StartArgs) ->
     %% Start telemetry handlers
     ok = start_telemetry_handlers(),
 
+    %% Draw this VM's boot token before any subscriber can race for it
+    _ = reckon_db_subscriptions:this_boot(),
+
     %% Start top-level supervisor
     case reckon_db_sup:start_link() of
         {ok, Pid} ->

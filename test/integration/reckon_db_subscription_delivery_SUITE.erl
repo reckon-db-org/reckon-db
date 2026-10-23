@@ -38,7 +38,8 @@
     event_payload_catchup_delivers_only_matching/1,
     by_tags_delivers_only_tagged_live/1,
     by_tags_catchup_delivers_only_tagged/1,
-    unusable_selector_is_refused_and_leaves_nothing/1
+    unusable_selector_is_refused_and_leaves_nothing/1,
+    refusing_an_armed_selector_tears_it_down/1
 ]).
 
 %%====================================================================
@@ -62,7 +63,8 @@ all() ->
         event_payload_catchup_delivers_only_matching,
         by_tags_delivers_only_tagged_live,
         by_tags_catchup_delivers_only_tagged,
-        unusable_selector_is_refused_and_leaves_nothing
+        unusable_selector_is_refused_and_leaves_nothing,
+        refusing_an_armed_selector_tears_it_down
     ].
 
 init_per_suite(Config) ->
@@ -414,6 +416,46 @@ unusable_selector_is_refused_and_leaves_nothing(Config) ->
     lists:foreach(fun(TS) -> refused_twice(StoreId, TS) end, Unusable),
     {ok, Stored} = reckon_db_subscriptions_store:list(StoreId),
     ?assertEqual([], Stored).
+
+%% @doc A subscription a previous release accepted and fully armed (record,
+%% trigger proc, emitter group), under a selector the builders now refuse,
+%% is torn down when that selector is subscribed again. Removing only the
+%% record left its trigger and emitters delivering to a subscriber that had
+%% just been told its subscription was refused.
+%%
+%% The legacy subscription is armed with by_tags accepting a tag that is
+%% not a binary and a predicate that selects everything, as the old
+%% trigger proc did.
+refusing_an_armed_selector_tears_it_down(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    Name = <<"legacy_armed_sub">>,
+    Opts = #{subscriber => self()},
+    {Key, Emitter} = armed_by_a_previous_release(StoreId, Name, Opts),
+    ?assertMatch({error, {invalid_filter, _}},
+                 reckon_db_subscriptions:subscribe(StoreId, by_tags, [1], Name, Opts)),
+    ?assertEqual({error, not_found}, reckon_db_subscriptions:get(StoreId, Key)),
+    Topic = reckon_db_emitter_group:topic(StoreId, Key),
+    ?assertEqual(false, khepri:exists(StoreId, [procs, on_new_event, Topic])),
+    ?assertEqual([], reckon_db_emitter_group:members(StoreId, Key)),
+    {ok, _} = reckon_db_streams:append(StoreId, reckon_db_test_helpers:sid(<<"legacyarmed-001">>),
+                                       -2, [#{event_type => <<"after_refusal_v1">>, data => #{}}]),
+    receive {events, Events} -> ct:fail("delivered after refusal: ~p", [Events])
+    after 1000 -> ok
+    end,
+    meck:unload(reckon_db_filters),
+    gen_server:stop(Emitter).
+
+armed_by_a_previous_release(StoreId, Name, Opts) ->
+    ok = meck:new(reckon_db_filters, [passthrough]),
+    ok = meck:expect(reckon_db_filters, matches, fun(_, _, _) -> true end),
+    ok = meck:expect(reckon_db_filters, by_tags,
+                     fun(_) -> meck:passthrough([[<<"legacy">>]]) end),
+    {ok, Key} = reckon_db_subscriptions:subscribe(StoreId, by_tags, [1], Name, Opts),
+    ok = meck:expect(reckon_db_filters, by_tags, fun(Tags) -> meck:passthrough([Tags]) end),
+    EmitterName = reckon_db_emitter_group:emitter_name(StoreId, Key),
+    {ok, Emitter} = reckon_db_emitter:start_link(StoreId, Key, self(), EmitterName),
+    ?assertNotEqual([], reckon_db_emitter_group:members(StoreId, Key)),
+    {Key, Emitter}.
 
 refused_twice(StoreId, {Type, Selector}) ->
     Name = <<"unusable_selector_sub">>,

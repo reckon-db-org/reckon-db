@@ -310,13 +310,19 @@ subscribe_duplicate_is_idempotent(Config) ->
 %% log after a restart is the same term as whatever process now holds that
 %% number, and the liveness check alone answered already_exists.
 %%
-%% Two records from another VM: one stamped with that VM's boot, and one
-%% from a release that stamped none.
+%% Three records from another VM: one stamped with that VM's boot, one
+%% from a release that stamped none, and one stamped the way 4d39279 did,
+%% {os:getpid(), erlang:system_info(start_time)}. In a container that pair
+%% is the same on every boot (the BEAM is OS pid 1, and start_time is the
+%% fixed value monotonic time starts at), so the previous boot of the same
+%% container wrote exactly what this VM computes.
 subscribe_reclaims_a_subscription_from_a_previous_vm(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     StreamId = reckon_db_test_helpers:sid(<<"testrestartstream-001">>),
+    SameContainer = {os:getpid(), erlang:system_info(start_time)},
     Stamps = [fun(Opts) -> Opts#{subscriber_boot => {"another-vm", 0}} end,
-              fun(Opts) -> maps:remove(subscriber_boot, Opts) end],
+              fun(Opts) -> maps:remove(subscriber_boot, Opts) end,
+              fun(Opts) -> Opts#{subscriber_boot => SameContainer} end],
     lists:foreach(fun(Stamp) -> reclaimed_after_restart(StoreId, StreamId, Stamp) end, Stamps).
 
 reclaimed_after_restart(StoreId, StreamId, Stamp) ->
