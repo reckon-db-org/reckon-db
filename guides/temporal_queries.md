@@ -152,17 +152,18 @@ State = lists:foldl(fun apply_event/2, initial_state(), Events).
 ```erlang
 %% What was the account balance at end of fiscal year?
 FiscalYearEnd = 1735689599999999,  %% Dec 31, 2024 23:59:59.999999 UTC
-{ok, Events} = reckon_db_temporal:read_until(my_store, <<"account-456">>, FiscalYearEnd),
+{ok, Events} = reckon_db_temporal:read_until(my_store, <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>, FiscalYearEnd),
 Balance = calculate_balance(Events).
 ```
 
 ### 3. Time-Range Analytics
 
 ```erlang
-%% Analyze orders from Q4 2024
+%% One order's events in Q4 2024. read_range/4 reads one stream, by its
+%% exact id: for every order, run it per stream.
 Q4Start = 1727740800000000,  %% Oct 1, 2024
 Q4End = 1735689599999999,    %% Dec 31, 2024
-{ok, Events} = reckon_db_temporal:read_range(my_store, <<"orders-*">>, Q4Start, Q4End),
+{ok, Events} = reckon_db_temporal:read_range(my_store, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>, Q4Start, Q4End),
 analyze_quarterly_orders(Events).
 ```
 

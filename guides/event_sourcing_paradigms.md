@@ -422,7 +422,7 @@ However, ReckonDB supports **tags for query purposes**:
 Event = #{
     event_type => enrollment_completed,
     data => #{
-        process_id => <<"enrollment-req-123">>,
+        process_id => <<"enrollment-018f6a7b8c9d4e5f60718293a4b5c6df">>,
         student_id => 456,
         course_id => <<"CS101">>
     },
@@ -430,10 +430,10 @@ Event = #{
 },
 
 %% Concurrency remains stream-version-based
-{ok, V} = reckon_db:append(<<"enrollment-req-123">>, [Event], ExpectedVersion).
+{ok, V} = reckon_db_streams:append(my_store, <<"enrollment-018f6a7b8c9d4e5f60718293a4b5c6df">>, ExpectedVersion, [Event]).
 
 %% But you can query across processes by tags
-{ok, AllStudentEnrollments} = reckon_db:read_by_tags([<<"student:456">>], #{}).
+{ok, AllStudentEnrollments} = reckon_db_streams:read_by_tags(my_store, [<<"student:456">>], any, 1000).
 ```
 
 ---

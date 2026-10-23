@@ -44,10 +44,16 @@ Balance = lists:foldl(fun apply_event/2, 0, PastEvents).
 Rebuild read models, fix bugs in projections, or create new views of historical data:
 
 ```erlang
-%% Rebuild a projection from scratch: page through the whole store's log.
-%% read/5 reads one stream by its exact id; there is no wildcard id.
-{ok, Events} = reckon_db_streams:read_all_global(my_store, 0, 1000),
-lists:foreach(fun(E) -> update_projection(E) end, Events).
+%% Rebuild a projection from scratch: page through the whole store's log,
+%% 1000 events at a time. read/5 reads one stream by its exact id; there is
+%% no wildcard id.
+replay(Offset) ->
+    {ok, Events} = reckon_db_streams:read_all_global(my_store, Offset, 1000),
+    lists:foreach(fun(E) -> update_projection(E) end, Events),
+    replay_rest(Offset + length(Events), Events).
+
+replay_rest(_Offset, []) -> done;
+replay_rest(Offset, _Events) -> replay(Offset).
 ```
 
 ### Decoupled Systems
