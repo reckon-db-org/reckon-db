@@ -18,6 +18,10 @@
 -include("reckon_db.hrl").
 -include("reckon_db_telemetry.hrl").
 
+%% The life token an unanchored snapshot's scheme-2 MAC binds. "$" keeps it
+%% apart from every life a stream can be minted with (reckon-db#25).
+-define(UNANCHORED_LIFE, <<"$unanchored">>).
+
 %% API
 -export([
     save/4,
@@ -207,28 +211,38 @@ emit_save_telemetry({error, Reason}, _StartTime, StoreId, StreamId, Version, _Da
 %%
 %% For integrity-disabled stores: returns the snapshot unchanged.
 %%
-%% For integrity-enabled stores: computes the anchor_hash (the chain
-%% hash of the event at the snapshot's version) by reading that event
-%% from storage, then computes the snapshot MAC over the snapshot
-%% record with both fields populated. The resulting snapshot is what
-%% gets persisted.
+%% For integrity-enabled stores the stream decides how the snapshot is
+%% sealed (see snapshot_kind/2):
 %%
-%% If integrity is enabled but the event at the snapshot version is
-%% not present or not integrity-bearing, the save is refused: a
-%% snapshot whose anchor cannot be established would be unverifiable
-%% at load time and is strictly worse than no snapshot at all.
+%% anchored: computes the anchor_hash (the chain hash of the event at the
+%% snapshot's version) by reading that event from storage, then computes
+%% the snapshot MAC over the snapshot record with both fields populated.
+%% If the event at the snapshot version is not present or not
+%% integrity-bearing, the save is refused: a snapshot whose anchor cannot
+%% be established would be unverifiable at load time and is strictly worse
+%% than no snapshot at all.
+%%
+%% unanchored: a system stream that holds no events (a projection
+%% checkpoint) has no chain to anchor into. It is sealed with a scheme-2
+%% MAC bound to this store and the life token <<"$unanchored">>, and no
+%% anchor (reckon-db#25).
 -spec apply_snapshot_integrity(
     atom(), binary(), non_neg_integer(), snapshot()
 ) -> {ok, snapshot()} | {error, term()}.
 apply_snapshot_integrity(StoreId, StreamId, Version, Snapshot) ->
-    seal_if_enabled(reckon_db_integrity_key:is_enabled(StoreId),
-                    StoreId, StreamId, Version, Snapshot).
+    seal(snapshot_kind(StoreId, StreamId), StoreId, StreamId, Version, Snapshot).
 
-seal_if_enabled(false, _StoreId, _StreamId, _Version, Snapshot) ->
+seal(plain, _StoreId, _StreamId, _Version, Snapshot) ->
     {ok, Snapshot};
-seal_if_enabled(true, StoreId, StreamId, Version, Snapshot) ->
+seal(anchored, StoreId, StreamId, Version, Snapshot) ->
     seal_with_anchor(compute_event_chain_hash(StoreId, StreamId, Version),
-                     StoreId, Snapshot).
+                     StoreId, Snapshot);
+seal(unanchored, StoreId, _StreamId, _Version, Snapshot) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    Snapshot1 = Snapshot#snapshot{anchor_hash = undefined},
+    Mac = reckon_gater_integrity:compute_snapshot_mac(
+            Snapshot1, Key, #{store_id => StoreId, life => ?UNANCHORED_LIFE}),
+    {ok, Snapshot1#snapshot{mac = Mac}}.
 
 seal_with_anchor({ok, AnchorHash}, StoreId, Snapshot) ->
     Key = reckon_db_integrity_key:get(StoreId),
@@ -238,41 +252,84 @@ seal_with_anchor({ok, AnchorHash}, StoreId, Snapshot) ->
 seal_with_anchor({error, _} = Err, _StoreId, _Snapshot) ->
     Err.
 
+%% @private How a snapshot on this stream is sealed and verified.
+%%
+%% plain: the store has integrity off.
+%% unanchored: a system ("$") stream with no events stored.
+%% anchored: every other stream, as before.
+%%
+%% Decided by the stream at the time of the call, never by what the stored
+%% snapshot claims: a seal that does not fit the stream is refused on load.
+-spec snapshot_kind(atom(), binary()) -> plain | anchored | unanchored.
+snapshot_kind(StoreId, StreamId) ->
+    kind_on(reckon_db_integrity_key:is_enabled(StoreId), StoreId, StreamId).
+
+kind_on(false, _StoreId, _StreamId) ->
+    plain;
+kind_on(true, StoreId, StreamId) ->
+    anchoring(reckon_gater_stream_id:is_system(StreamId)
+                  andalso reckon_db_streams:get_version(StoreId, StreamId) =:= ?NO_STREAM).
+
+anchoring(true)  -> unanchored;
+anchoring(false) -> anchored.
+
 %%====================================================================
 %% Tamper-resistance — load side
 %%====================================================================
 
-%% @private Run snapshot verification if integrity is enabled on the
-%% store AND the snapshot itself carries integrity fields. Returns
-%% {ok, Snapshot} unchanged in all other cases (the snapshot is
-%% treated as legacy data).
-maybe_verify_snapshot_on_load(StoreId, StreamId,
-                              #snapshot{version = Version} = Snapshot) ->
-    verify_if_needed(should_verify_snapshot(StoreId, Snapshot),
-                     StoreId, StreamId, Version, Snapshot).
+%% @private Verify a loaded snapshot the way its stream says it is sealed
+%% (see snapshot_kind/2).
+%%
+%% plain: returned unchanged.
+%% unanchored: the scheme-2 MAC must verify against this store and the
+%% <<"$unanchored">> life; a scheme-1 MAC is refused (v2_from 0), and a
+%% bare value with no MAC fails closed: on a system stream it is not
+%% believed.
+%% anchored: a snapshot with integrity fields is verified against the
+%% stream's chain; one with neither field is legacy data and returned
+%% unchanged; an unanchored seal (MAC, no anchor) is refused, since the
+%% stream now holds events and an anchor is what it must carry.
+maybe_verify_snapshot_on_load(StoreId, StreamId, Snapshot) ->
+    verify_by_kind(snapshot_kind(StoreId, StreamId), StoreId, StreamId, Snapshot).
 
-verify_if_needed(false, _StoreId, _StreamId, _Version, Snapshot) ->
+verify_by_kind(plain, _StoreId, _StreamId, Snapshot) ->
     {ok, Snapshot};
-verify_if_needed(true, StoreId, StreamId, Version, Snapshot) ->
-    verify_against_anchor(compute_event_chain_hash(StoreId, StreamId, Version),
-                          StoreId, StreamId, Version, Snapshot).
+verify_by_kind(unanchored, StoreId, StreamId, #snapshot{mac = undefined} = Snapshot) ->
+    refuse(unsealed_system_snapshot, StoreId, StreamId, Snapshot);
+verify_by_kind(unanchored, StoreId, StreamId, #snapshot{mac = Mac} = Snapshot) ->
+    Key = reckon_db_integrity_key:get(StoreId),
+    Ctx = #{store_id => StoreId, life => ?UNANCHORED_LIFE, v2_from => 0},
+    check_snapshot_mac(reckon_gater_integrity:verify_snapshot_mac_shape(Mac, Snapshot, Key, Ctx),
+                       StoreId, StreamId, Snapshot);
+verify_by_kind(anchored, StoreId, StreamId,
+               #snapshot{anchor_hash = undefined, mac = Mac} = Snapshot) when Mac =/= undefined ->
+    refuse(unanchored_seal_on_stream_with_events, StoreId, StreamId, Snapshot);
+verify_by_kind(anchored, StoreId, StreamId, Snapshot) ->
+    verify_if_needed(not reckon_gater_integrity:is_legacy_snapshot(Snapshot),
+                     StoreId, StreamId, Snapshot).
 
-verify_against_anchor({ok, ActualAnchor}, StoreId, StreamId, Version, Snapshot) ->
+verify_if_needed(false, _StoreId, _StreamId, Snapshot) ->
+    {ok, Snapshot};
+verify_if_needed(true, StoreId, StreamId, #snapshot{version = Version} = Snapshot) ->
+    verify_against_anchor(compute_event_chain_hash(StoreId, StreamId, Version),
+                          StoreId, StreamId, Snapshot).
+
+verify_against_anchor({ok, ActualAnchor}, StoreId, StreamId, Snapshot) ->
     Key = reckon_db_integrity_key:get(StoreId),
     check_snapshot_mac(reckon_gater_integrity:verify_snapshot(Snapshot, ActualAnchor, Key),
-                       StoreId, StreamId, Version, Snapshot);
-verify_against_anchor({error, _} = Err, _StoreId, _StreamId, _Version, _Snapshot) ->
+                       StoreId, StreamId, Snapshot);
+verify_against_anchor({error, _} = Err, _StoreId, _StreamId, _Snapshot) ->
     Err.
 
-check_snapshot_mac(ok, _StoreId, _StreamId, _Version, Snapshot) ->
+refuse(Reason, StoreId, StreamId, Snapshot) ->
+    check_snapshot_mac({integrity_violation, Reason}, StoreId, StreamId, Snapshot).
+
+check_snapshot_mac(ok, _StoreId, _StreamId, Snapshot) ->
     {ok, Snapshot};
-check_snapshot_mac({integrity_violation, _} = Violation, StoreId, StreamId, Version, _Snapshot) ->
+check_snapshot_mac({integrity_violation, _} = Violation, StoreId, StreamId,
+                   #snapshot{version = Version}) ->
     emit_load_violation_telemetry(StoreId, StreamId, Version, Violation),
     {error, Violation}.
-
-should_verify_snapshot(StoreId, Snapshot) ->
-    reckon_db_integrity_key:is_enabled(StoreId)
-        andalso (not reckon_gater_integrity:is_legacy_snapshot(Snapshot)).
 
 emit_load_violation_telemetry(StoreId, StreamId, Version, _Violation) ->
     telemetry:execute(
