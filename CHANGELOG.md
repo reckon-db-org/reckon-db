@@ -41,6 +41,30 @@ with `ok` once written or `{error, Reason}`.
 Seen red first: `reckon_db_dcb_paged_reads_SUITE` (all 10 cases answered
 `unknown_request` before).
 
+### Fixed: an integrity store refused every projection checkpoint (reckon-db#25)
+
+A projection checkpoint is a snapshot on a stream that holds no events. An
+integrity store seals each snapshot with an anchor into its stream's event
+chain, found no event to anchor to, and refused the save, so a projection on
+such a store kept no checkpoint and replayed from the start on every boot.
+
+A snapshot on a system (`$`) stream that holds no events is now sealed with
+a scheme-2 MAC bound to the store and the life token `<<"$unanchored">>`, and
+no anchor. The stream decides how a snapshot is verified at the time of the
+load, never the stored record: on such a stream a scheme-1 MAC, a MAC from
+another store or stream, or an edited version or value is refused, and a
+snapshot with no MAC fails closed with
+`{integrity_violation, unsealed_system_snapshot}` instead of passing as
+legacy data. A stream that holds events keeps the anchored seal, and an
+unanchored seal on it is refused with
+`{integrity_violation, unanchored_seal_on_stream_with_events}`. Every
+refusal emits `[reckon, db, snapshot, integrity, violation]`. User streams
+and stores with integrity off are unchanged. The reckon-gater floor is now
+3.13 (the scheme-2 snapshot MAC).
+
+Seen red first: `reckon_db_unanchored_snapshots_SUITE` (7 of 10 failed
+before).
+
 ## [5.11.13] - 2026-10-21
 
 ### Fixed: two concurrent appends to one stream silently lost events
