@@ -1,13 +1,16 @@
 %% @doc Notification supervisor for reckon-db
 %%
 %% Manages notification-related components using rest_for_one strategy:
+%% - LinksSystem (one consumer per running link)
 %% - LeaderSystem (leader responsibilities, tracking)
 %% - EmitterSystem (event distribution workers)
 %% - SubscriptionHealthMonitor (periodic health checks)
 %%
 %% rest_for_one ensures that if LeaderSystem crashes, EmitterSystem and
 %% HealthMonitor are also restarted, preventing stale emitter pools from
-%% outliving their leader tracking infrastructure.
+%% outliving their leader tracking infrastructure. LinksSystem comes
+%% first: leader activation resumes running links, so it must find the
+%% links supervisor up, and a leader restart leaves running consumers be.
 %%
 %% @author rgfaber
 
@@ -46,6 +49,7 @@ init(#store_config{store_id = StoreId} = Config) ->
     },
 
     Children = [
+        links_sup_spec(Config),
         leader_sup_spec(Config),
         emitter_sup_spec(Config),
         health_monitor_spec(Config)
@@ -58,6 +62,18 @@ init(#store_config{store_id = StoreId} = Config) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+%% @private
+-spec links_sup_spec(store_config()) -> supervisor:child_spec().
+links_sup_spec(#store_config{store_id = StoreId} = Config) ->
+    #{
+        id => reckon_db_naming:links_sup_name(StoreId),
+        start => {reckon_db_links_sup, start_link, [Config]},
+        restart => permanent,
+        shutdown => infinity,
+        type => supervisor,
+        modules => [reckon_db_links_sup]
+    }.
 
 %% @private
 -spec leader_sup_spec(store_config()) -> supervisor:child_spec().

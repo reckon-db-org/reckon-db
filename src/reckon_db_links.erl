@@ -141,17 +141,30 @@
 %%     they don't fold. For aggregation, use a process manager.</li>
 %% </ul>
 %%
+%% == Running a link ==
+%%
+%% start/2 starts the link's consumer (reckon_db_link_consumer), which
+%% follows the source live and, with `backfill => true', writes what the
+%% source already held first. Each source event that passes the filter
+%% reaches the link stream once, also across a consumer crash or a store
+%% restart: the consumer stores, per source stream, the last version it
+%% handled. A link stored as running is resumed when the store's leader
+%% activates. stop/2 ends the consumer and removes its subscription; a
+%% later start/2 picks up from where it stopped, so the link also gets
+%% what the source received while it was stopped.
+%%
 %% == Status ==
 %%
-%% This module ships with the initial reckon-db release. The
-%% feature is wired but **not yet exercised in production**;
-%% treat as preview while we accumulate real usage.
+%% Live delivery works for every source type since reckon-db#24; before
+%% that a link only ever held its backfill. Treat links as preview while
+%% we accumulate real usage.
 %%
 %% @author rgfaber
 
 -module(reckon_db_links).
 
 -include("reckon_db.hrl").
+-include("reckon_db_links.hrl").
 -include_lib("khepri/include/khepri.hrl").
 
 %% API
@@ -162,7 +175,15 @@
     list/1,
     start/2,
     stop/2,
-    info/2
+    info/2,
+    resume/1
+]).
+
+%% For reckon_db_link_consumer
+-export([
+    link_record/2,
+    link_stream_id/1,
+    record_progress/5
 ]).
 
 %%====================================================================
@@ -197,29 +218,6 @@
 -export_type([link_spec/0, link_info/0, source_spec/0, filter_fun/0, transform_fun/0]).
 
 %%====================================================================
-%% Khepri Paths
-%%====================================================================
-
--define(LINKS_PATH, [links]).
--define(LINK_STREAM_PREFIX, <<"$link:">>).
-
-%%====================================================================
-%% Link Record
-%%====================================================================
-
--record(link, {
-    name :: binary(),
-    source :: source_spec(),
-    filter :: filter_fun() | undefined,
-    transform :: transform_fun() | undefined,
-    backfill :: boolean(),
-    created_at :: integer(),
-    status = stopped :: running | stopped | error,
-    processed = 0 :: non_neg_integer(),
-    last_event :: binary() | undefined
-}).
-
-%%====================================================================
 %% API
 %%====================================================================
 
@@ -231,27 +229,31 @@
 %% - filter: Predicate function to filter events
 %% - transform: Function to transform events
 %% - backfill: Process existing events (default: false)
+%%
+%% A source the link cannot follow is refused with
+%% `{error, {invalid_source, Source}}' and nothing is stored: a `stream'
+%% source needs a non-empty binary `stream_id' other than the link's own
+%% stream, a `stream_pattern' source a non-empty binary `pattern'.
 -spec create(atom(), link_spec()) -> ok | {error, term()}.
 create(StoreId, Spec) ->
     Name = maps:get(name, Spec),
     Source = maps:get(source, Spec),
-    Filter = maps:get(filter, Spec, undefined),
-    Transform = maps:get(transform, Spec, undefined),
-    Backfill = maps:get(backfill, Spec, false),
+    create(valid_source(Source, Name), StoreId, Name, Source, Spec).
 
+create(false, _StoreId, _Name, Source, _Spec) ->
+    {error, {invalid_source, Source}};
+create(true, StoreId, Name, Source, Spec) ->
     Link = #link{
         name = Name,
         source = Source,
-        filter = Filter,
-        transform = Transform,
-        backfill = Backfill,
+        filter = maps:get(filter, Spec, undefined),
+        transform = maps:get(transform, Spec, undefined),
+        backfill = maps:get(backfill, Spec, false),
         created_at = erlang:system_time(millisecond),
         status = stopped,
         processed = 0
     },
-
-    Path = ?LINKS_PATH ++ [StoreId, Name],
-    case khepri:put(StoreId, Path, Link) of
+    case khepri:put(StoreId, link_path(StoreId, Name), Link) of
         ok ->
             emit_telemetry(StoreId, Name, created),
             ok;
@@ -259,14 +261,24 @@ create(StoreId, Spec) ->
             Error
     end.
 
+valid_source(#{type := stream, stream_id := StreamId}, Name)
+  when is_binary(StreamId), StreamId =/= <<>> ->
+    StreamId =/= link_stream_id(Name);
+valid_source(#{type := stream_pattern, pattern := Pattern}, _Name)
+  when is_binary(Pattern), Pattern =/= <<>> ->
+    true;
+valid_source(#{type := all}, _Name) ->
+    true;
+valid_source(_Source, _Name) ->
+    false.
+
 %% @doc Delete a link.
 -spec delete(atom(), binary()) -> ok | {error, term()}.
 delete(StoreId, Name) ->
     %% Stop the link first if running
     stop(StoreId, Name),
 
-    Path = ?LINKS_PATH ++ [StoreId, Name],
-    case khepri:delete(StoreId, Path) of
+    case khepri:delete(StoreId, link_path(StoreId, Name)) of
         ok ->
             emit_telemetry(StoreId, Name, deleted),
             ok;
@@ -277,69 +289,63 @@ delete(StoreId, Name) ->
 %% @doc Get a link by name.
 -spec get(atom(), binary()) -> {ok, link_info()} | {error, not_found}.
 get(StoreId, Name) ->
-    Path = ?LINKS_PATH ++ [StoreId, Name],
-    case khepri:get(StoreId, Path) of
-        {ok, Link} ->
-            {ok, link_to_info(Link)};
-        {error, {khepri, node_not_found, _}} ->
-            {error, not_found};
-        {error, _} = Error ->
-            Error
+    case link_record(StoreId, Name) of
+        {ok, Link} -> {ok, link_to_info(Link)};
+        {error, _} = Error -> Error
     end.
 
 %% @doc List all links.
 -spec list(atom()) -> {ok, [link_info()]} | {error, term()}.
 list(StoreId) ->
-    Path = ?LINKS_PATH ++ [StoreId, ?KHEPRI_WILDCARD_STAR],
-    case khepri:get_many(StoreId, Path) of
+    case khepri:get_many(StoreId, ?LINKS_PATH ++ [StoreId, ?KHEPRI_WILDCARD_STAR]) of
         {ok, Links} when is_map(Links) ->
-            Infos = [link_to_info(L) || {_, L} <- maps:to_list(Links)],
-            {ok, Infos};
+            {ok, [link_to_info(L) || L <- maps:values(Links)]};
         {error, _} = Error ->
             Error
     end.
 
 %% @doc Start processing a link.
 %%
-%% This will:
-%% 1. Subscribe to source stream(s)
-%% 2. Optionally backfill existing events
-%% 3. Apply filter and transform to each event
-%% 4. Write matching events to the link stream
+%% Starts the link's consumer, which subscribes to the source, writes the
+%% backfill if the link asks for it (or, on a later start, what the source
+%% received while the link was stopped), and then follows the source live.
+%% A link that cannot subscribe answers the subscribe error and stays
+%% stopped.
 -spec start(atom(), binary()) -> ok | {error, term()}.
 start(StoreId, Name) ->
-    case get_link(StoreId, Name) of
-        {ok, Link} ->
-            update_status(StoreId, Name, running),
-            maybe_backfill_link(StoreId, Link),
-            start_link_subscription(StoreId, Link),
-            emit_telemetry(StoreId, Name, started),
-            ok;
-        {error, _} = Error ->
-            Error
+    case link_record(StoreId, Name) of
+        {ok, _Link} -> started(reckon_db_links_sup:start_consumer(StoreId, Name), StoreId, Name);
+        {error, _} = Error -> Error
     end.
 
-maybe_backfill_link(StoreId, #link{backfill = true} = Link) ->
-    backfill_link(StoreId, Link);
-maybe_backfill_link(_StoreId, _Link) ->
-    ok.
+started(ok, StoreId, Name) ->
+    ok = set_status(StoreId, Name, running),
+    emit_telemetry(StoreId, Name, started),
+    ok;
+started({error, _} = Error, _StoreId, _Name) ->
+    Error.
 
-%% @doc Stop processing a link.
--spec stop(atom(), binary()) -> ok | {error, term()}.
+%% @doc Stop processing a link: its consumer ends and its subscription is
+%% removed.
+-spec stop(atom(), binary()) -> ok.
 stop(StoreId, Name) ->
-    %% Stop subscription
-    stop_link_subscription(StoreId, Name),
-
-    %% Update status
-    update_status(StoreId, Name, stopped),
-
+    ok = stop_consumer(global:whereis_name(reckon_db_link_consumer:name(StoreId, Name))),
+    _ = reckon_db_subscriptions:unsubscribe(StoreId, stream, <<"$link-sub:", Name/binary>>),
+    _ = set_status(StoreId, Name, stopped),
     emit_telemetry(StoreId, Name, stopped),
     ok.
+
+stop_consumer(undefined) ->
+    ok;
+stop_consumer(Pid) ->
+    try gen_server:stop(Pid)
+    catch exit:noproc -> ok
+    end.
 
 %% @doc Get detailed link info.
 -spec info(atom(), binary()) -> {ok, map()} | {error, not_found}.
 info(StoreId, Name) ->
-    case get_link(StoreId, Name) of
+    case link_record(StoreId, Name) of
         {ok, Link} ->
             LinkStreamId = link_stream_id(Name),
             Version = reckon_db_streams:get_version(StoreId, LinkStreamId),
@@ -359,22 +365,71 @@ info(StoreId, Name) ->
             Error
     end.
 
+%% @doc Start the consumer of every link stored as running. Leader
+%% activation calls this, so running links come back after a restart.
+%% A link that cannot resume is logged and left as it is.
+-spec resume(atom()) -> ok.
+resume(StoreId) ->
+    {ok, Links} = list(StoreId),
+    lists:foreach(fun(#{name := Name}) -> resume(StoreId, Name) end,
+                  [L || #{status := running} = L <- Links]).
+
+resume(StoreId, Name) ->
+    case reckon_db_links_sup:start_consumer(StoreId, Name) of
+        ok -> ok;
+        {error, Reason} ->
+            logger:warning("Link ~s did not resume: ~p (store: ~p)", [Name, Reason, StoreId])
+    end.
+
 %%====================================================================
-%% Internal functions
+%% For reckon_db_link_consumer
 %%====================================================================
 
-%% @private Get raw link record
--spec get_link(atom(), binary()) -> {ok, #link{}} | {error, not_found}.
-get_link(StoreId, Name) ->
-    Path = ?LINKS_PATH ++ [StoreId, Name],
-    case khepri:get(StoreId, Path) of
-        {ok, Link} ->
+%% @doc The stored link record.
+-spec link_record(atom(), binary()) -> {ok, #link{}} | {error, term()}.
+link_record(StoreId, Name) ->
+    case khepri:get(StoreId, link_path(StoreId, Name)) of
+        {ok, #link{} = Link} ->
             {ok, Link};
         {error, {khepri, node_not_found, _}} ->
             {error, not_found};
         {error, _} = Error ->
             Error
     end.
+
+%% @doc The stream a link writes to.
+-spec link_stream_id(binary()) -> binary().
+link_stream_id(Name) ->
+    <<?LINK_STREAM_PREFIX/binary, Name/binary>>.
+
+%% @doc Store the consumer's progress: the positions it has handled up to,
+%% and the events it has just written. One transaction, so a concurrent
+%% start/2 or stop/2 status write is never lost.
+-spec record_progress(atom(), binary(), #{binary() => integer()}, [event()],
+                      binary() | undefined) -> ok.
+record_progress(StoreId, Name, Positions, Written, LastEvent) ->
+    Path = link_path(StoreId, Name),
+    Count = length(Written),
+    {ok, ok} = khepri:transaction(
+                 StoreId,
+                 fun() -> progress_tx(Path, Positions, Count, LastEvent) end),
+    ok.
+
+progress_tx(Path, Positions, Count, LastEvent) ->
+    {ok, Link} = khepri_tx:get(Path),
+    khepri_tx:put(Path, Link#link{positions = Positions,
+                                  processed = Link#link.processed + Count,
+                                  last_event = last_event(LastEvent, Link)}).
+
+last_event(undefined, #link{last_event = Last}) -> Last;
+last_event(LastEvent, _Link) -> LastEvent.
+
+%%====================================================================
+%% Internal functions
+%%====================================================================
+
+link_path(StoreId, Name) ->
+    ?LINKS_PATH ++ [StoreId, Name].
 
 %% @private Convert link record to info map
 -spec link_to_info(#link{}) -> link_info().
@@ -390,205 +445,25 @@ link_to_info(Link) ->
         LastEvent -> Info#{last_event => LastEvent}
     end.
 
-%% @private Update link status
--spec update_status(atom(), binary(), running | stopped | error) -> ok.
-update_status(StoreId, Name, Status) ->
-    Path = ?LINKS_PATH ++ [StoreId, Name],
-    case khepri:get(StoreId, Path) of
-        {ok, Link} ->
-            khepri:put(StoreId, Path, Link#link{status = Status}),
-            ok;
-        _ ->
-            ok
+%% @private Set the link's status; a link that is gone has none to set.
+-spec set_status(atom(), binary(), running | stopped) -> ok | {error, term()}.
+set_status(StoreId, Name, Status) ->
+    Path = link_path(StoreId, Name),
+    Tx = fun() -> status_tx(Path, Status) end,
+    case khepri:transaction(StoreId, Tx) of
+        {ok, ok} -> ok;
+        {ok, {error, _} = Error} -> Error;
+        {error, _} = Error -> Error
     end.
 
-%% @private Get link stream ID
--spec link_stream_id(binary()) -> binary().
-link_stream_id(Name) ->
-    <<?LINK_STREAM_PREFIX/binary, Name/binary>>.
-
-%% @private Backfill link with existing events
--spec backfill_link(atom(), #link{}) -> ok.
-backfill_link(StoreId, Link) ->
-    SourceStreams = get_source_streams(StoreId, Link#link.source),
-
-    lists:foreach(fun(StreamId) -> process_link_stream(StoreId, Link, StreamId) end,
-                  SourceStreams),
-    ok.
-
-%% @private Read one source stream and feed its events into the link.
-process_link_stream(StoreId, Link, StreamId) ->
-    case reckon_db_streams:read(StoreId, StreamId, 0, 10000, forward) of
-        {ok, Events} -> process_events_for_link(StoreId, Link, Events);
-        {error, _} -> ok
+status_tx(Path, Status) ->
+    case khepri_tx:get(Path) of
+        {ok, Link} -> khepri_tx:put(Path, Link#link{status = Status});
+        {error, _} = Error -> Error
     end.
-
-%% @private Get source stream IDs based on source spec
--spec get_source_streams(atom(), source_spec()) -> [binary()].
-get_source_streams(_StoreId, #{type := stream, stream_id := StreamId}) ->
-    [StreamId];
-get_source_streams(StoreId, #{type := stream_pattern, pattern := Pattern}) ->
-    case reckon_db_streams:list_streams(StoreId) of
-        {ok, Streams} ->
-            filter_by_pattern(Streams, Pattern);
-        {error, _} ->
-            []
-    end;
-get_source_streams(StoreId, #{type := all}) ->
-    case reckon_db_streams:list_streams(StoreId) of
-        {ok, Streams} ->
-            %% Exclude link streams
-            [S || S <- Streams, not is_link_stream(S)];
-        {error, _} ->
-            []
-    end.
-
-%% @private Check if stream is a link stream
--spec is_link_stream(binary()) -> boolean().
-is_link_stream(StreamId) ->
-    Prefix = ?LINK_STREAM_PREFIX,
-    PrefixSize = byte_size(Prefix),
-    case StreamId of
-        <<Prefix:PrefixSize/binary, _/binary>> -> true;
-        _ -> false
-    end.
-
-%% @private Filter streams by pattern
--spec filter_by_pattern([binary()], binary()) -> [binary()].
-filter_by_pattern(Streams, Pattern) ->
-    RegexPattern = wildcard_to_regex(Pattern),
-    [S || S <- Streams, re:run(S, RegexPattern) =/= nomatch].
-
-%% @private Convert wildcard to regex
--spec wildcard_to_regex(binary()) -> binary().
-wildcard_to_regex(Pattern) ->
-    Escaped = re:replace(Pattern, <<"[.^$+?{}\\[\\]\\\\|()]">>, <<"\\\\&">>, [global, {return, binary}]),
-    Converted = binary:replace(Escaped, <<"*">>, <<".*">>, [global]),
-    <<"^", Converted/binary, "$">>.
-
-%% @private Process events through link filter/transform
--spec process_events_for_link(atom(), #link{}, [event()]) -> ok.
-process_events_for_link(StoreId, Link, Events) ->
-    Filter = Link#link.filter,
-    Transform = Link#link.transform,
-    LinkStreamId = link_stream_id(Link#link.name),
-
-    ProcessedEvents = lists:filtermap(
-                        fun(Event) -> filter_and_transform(Filter, Transform, Event) end,
-                        Events),
-
-    append_processed_events(StoreId, Link#link.name, LinkStreamId, ProcessedEvents).
-
-%% @private Keep + transform events that pass the link filter.
-filter_and_transform(Filter, Transform, Event) ->
-    case apply_filter(Filter, Event) of
-        true -> {true, apply_transform(Transform, Event)};
-        false -> false
-    end.
-
-append_processed_events(_StoreId, _LinkName, _LinkStreamId, []) ->
-    ok;
-append_processed_events(StoreId, LinkName, LinkStreamId, ProcessedEvents) ->
-    EventMaps = [event_to_map(E) || E <- ProcessedEvents],
-    case reckon_db_streams:append(StoreId, LinkStreamId, -2, EventMaps) of
-        {ok, _} ->
-            update_processed_count(StoreId, LinkName, length(ProcessedEvents)),
-            ok;
-        {error, _} ->
-            ok
-    end.
-
-%% @private Apply filter function
--spec apply_filter(filter_fun() | undefined, event()) -> boolean().
-apply_filter(undefined, _Event) ->
-    true;
-apply_filter(Filter, Event) when is_function(Filter, 1) ->
-    try
-        Filter(Event)
-    catch
-        _:_ -> false
-    end.
-
-%% @private Apply transform function
--spec apply_transform(transform_fun() | undefined, event()) -> event().
-apply_transform(undefined, Event) ->
-    Event;
-apply_transform(Transform, Event) when is_function(Transform, 1) ->
-    try
-        Transform(Event)
-    catch
-        _:_ -> Event
-    end.
-
-%% @private Convert event record to map for appending
--spec event_to_map(event()) ->
-    #{event_id := binary(), event_type := binary(), data := binary() | map(),
-      metadata := #{source_stream := binary(), source_version := non_neg_integer(), _ => _}}.
-event_to_map(Event) ->
-    #{
-        event_id => Event#event.event_id,
-        event_type => Event#event.event_type,
-        data => Event#event.data,
-        metadata => maps:merge(Event#event.metadata, #{
-            source_stream => Event#event.stream_id,
-            source_version => Event#event.version
-        })
-    }.
-
-%% @private Update processed count
--spec update_processed_count(atom(), binary(), pos_integer()) -> ok.
-update_processed_count(StoreId, Name, Count) ->
-    Path = ?LINKS_PATH ++ [StoreId, Name],
-    case khepri:get(StoreId, Path) of
-        {ok, Link} ->
-            khepri:put(StoreId, Path, Link#link{
-                processed = Link#link.processed + Count
-            }),
-            ok;
-        _ ->
-            ok
-    end.
-
-%% @private Start subscription for link
--spec start_link_subscription(atom(), #link{}) -> ok.
-start_link_subscription(StoreId, Link) ->
-    %% Create subscription based on source type
-    SubscriptionName = <<"$link-sub:", (Link#link.name)/binary>>,
-
-    case Link#link.source of
-        #{type := stream, stream_id := StreamId} ->
-            reckon_db_subscriptions:subscribe(
-                StoreId, stream, StreamId, SubscriptionName,
-                #{handler => fun(Events) ->
-                    process_events_for_link(StoreId, Link, Events)
-                end}
-            );
-        #{type := stream_pattern, pattern := Pattern} ->
-            reckon_db_subscriptions:subscribe(
-                StoreId, event_pattern, Pattern, SubscriptionName,
-                #{handler => fun(Events) ->
-                    process_events_for_link(StoreId, Link, Events)
-                end}
-            );
-        #{type := all} ->
-            reckon_db_subscriptions:subscribe(
-                StoreId, all, <<"*">>, SubscriptionName,
-                #{handler => fun(Events) ->
-                    process_events_for_link(StoreId, Link, Events)
-                end}
-            )
-    end,
-    ok.
-
-%% @private Stop subscription for link
--spec stop_link_subscription(atom(), binary()) -> ok.
-stop_link_subscription(StoreId, Name) ->
-    SubscriptionName = <<"$link-sub:", Name/binary>>,
-    reckon_db_subscriptions:unsubscribe(StoreId, SubscriptionName),
-    ok.
 
 %% @private Emit telemetry
--spec emit_telemetry(atom(), binary(), atom()) -> ok.
+-spec emit_telemetry(atom(), binary(), created | deleted | started | stopped) -> ok.
 emit_telemetry(StoreId, LinkName, Operation) ->
     telemetry:execute(
         [reckon_db, link, Operation],

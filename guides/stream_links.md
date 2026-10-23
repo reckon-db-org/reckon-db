@@ -92,6 +92,15 @@ source => #{type => all}
 %% Excludes $link: streams to prevent loops
 ```
 
+A link never follows its own stream. A `stream_pattern` link follows other
+`$link:` streams only when its pattern starts with `$link:`, so a pattern
+such as `*` does not pick up derived streams.
+
+`create/2` refuses a source it cannot follow with
+`{error, {invalid_source, Source}}` and stores nothing: a `stream` source
+needs a non-empty binary `stream_id` (not the link's own stream), a
+`stream_pattern` source a non-empty binary `pattern`.
+
 ## Link Lifecycle
 
 ### Starting a Link
@@ -100,10 +109,18 @@ source => #{type => all}
 ok = reckon_db_links:start(my_store, <<"high-value-orders">>).
 ```
 
-This:
-1. Updates link status to `running`
-2. Performs backfill if `backfill => true`
-3. Subscribes to source stream(s) for new events
+This starts the link's consumer, one process per running link in the
+cluster, which:
+1. Subscribes to the source: the stream itself for a `stream` source,
+   `$all` (with the source match applied per event) for `stream_pattern`
+   and `all`
+2. Writes the backfill if `backfill => true`: every matching stream, read
+   from its start
+3. Follows the source live from there
+4. Sets the link status to `running`
+
+If the link cannot subscribe, `start/2` answers the subscribe error and the
+link stays `stopped`.
 
 ### Stopping a Link
 
@@ -112,8 +129,27 @@ ok = reckon_db_links:stop(my_store, <<"high-value-orders">>).
 ```
 
 This:
-1. Unsubscribes from source streams
+1. Ends the link's consumer and removes its subscription
 2. Updates link status to `stopped`
+
+A later `start/2` continues from where the link stopped, so the link also
+gets the events the source received in between.
+
+### Restarts and Crashes
+
+The consumer stores, with the link, the last version it has handled in each
+source stream. An event at or below it is passed over, and a gap is read
+from the source stream before the next event is taken. So each source event
+that passes the filter is in the link stream once:
+
+- a consumer that crashes is restarted by its supervisor and picks up from
+  the stored positions;
+- a link stored as `running` is resumed when the store's leader activates,
+  after a restart or a leadership change, including what the source
+  received while it was down.
+
+The derived event keeps the source event's id and type, and its metadata
+names where it came from: `source_stream` and `source_version`.
 
 ### Checking Link Status
 
@@ -355,11 +391,20 @@ Transforms run for every matching event. Keep them lightweight.
 
 ### 3. Consider Backfill Costs
 
-For large streams, backfill can be expensive. Consider:
-- Creating link without backfill first
-- Manually backfilling in batches during off-peak
+Backfill reads every matching stream from its start, 500 events per read,
+before the link follows live events (those wait in the consumer's mailbox
+meanwhile). For large sources, consider whether the link needs the history
+at all: without `backfill`, a new link starts at each stream's current
+version.
 
-### 4. Monitor Processed Counts
+### 4. Gateway Clients Do Not See Link Errors
+
+Through the gateway, `create_link`, `start_link`, `stop_link` and
+`delete_link` are casts: a refused source or a failed start is logged on
+the store's node, not returned. Check the link with `get_link` or
+`link_info` afterwards.
+
+### 5. Monitor Processed Counts
 
 ```erlang
 %% Check link is keeping up

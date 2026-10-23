@@ -5,6 +5,7 @@
 %% Responsibilities:
 %% - Save default subscriptions (like $all stream)
 %% - Start emitter pools for active subscriptions
+%% - Resume the consumers of links stored as running
 %% - Coordinate leader-specific tasks
 %%
 %% @author rgfaber
@@ -149,6 +150,7 @@ activate_leadership(StoreId, State) ->
             logger:info("Managing ~p active subscriptions (store: ~p)", [N, StoreId]),
             start_emitters_for_subscriptions(StoreId, Subscriptions)
     end,
+    resume_links(StoreId),
 
     telemetry:execute(
         ?CLUSTER_LEADER_ELECTED,
@@ -221,6 +223,19 @@ get_subscriptions(StoreId) ->
     case reckon_db_subscriptions:list(StoreId) of
         {ok, Subscriptions} -> Subscriptions;
         {error, _} -> []
+    end.
+
+%% @private Start a consumer for every link stored as running. Like an
+%% emitter pool, a link that cannot resume must not crash the leader
+%% worker: it is logged and skipped.
+-spec resume_links(atom()) -> ok.
+resume_links(StoreId) ->
+    try reckon_db_links:resume(StoreId)
+    catch
+        Class:Reason ->
+            logger:warning("Exception resuming links: ~p:~p (store: ~p)",
+                           [Class, Reason, StoreId]),
+            ok
     end.
 
 %% @private Start emitters for all subscriptions

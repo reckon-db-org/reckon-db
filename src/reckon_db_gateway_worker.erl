@@ -643,30 +643,38 @@ dispatch_cast({unregister_schema, _StoreId, EventType}, State) ->
 %% Create link
 dispatch_cast({create_link, _StoreId, LinkSpec}, State) ->
     #state{store_id = StoreId} = State,
-    reckon_db_links:create(StoreId, LinkSpec),
+    ok = link_op_done(create_link, LinkSpec, reckon_db_links:create(StoreId, LinkSpec)),
     {noreply, State};
 
 %% Delete link
 dispatch_cast({delete_link, _StoreId, LinkName}, State) ->
     #state{store_id = StoreId} = State,
-    reckon_db_links:delete(StoreId, LinkName),
+    ok = link_op_done(delete_link, LinkName, reckon_db_links:delete(StoreId, LinkName)),
     {noreply, State};
 
 %% Start link
 dispatch_cast({start_link, _StoreId, LinkName}, State) ->
     #state{store_id = StoreId} = State,
-    reckon_db_links:start(StoreId, LinkName),
+    ok = link_op_done(start_link, LinkName, reckon_db_links:start(StoreId, LinkName)),
     {noreply, State};
 
 %% Stop link
 dispatch_cast({stop_link, _StoreId, LinkName}, State) ->
     #state{store_id = StoreId} = State,
-    reckon_db_links:stop(StoreId, LinkName),
+    ok = link_op_done(stop_link, LinkName, reckon_db_links:stop(StoreId, LinkName)),
     {noreply, State};
 
 %% Unknown cast
 dispatch_cast(_Msg, State) ->
     {noreply, State}.
+
+%% A link operation arrives as a cast, so its caller cannot be told it
+%% failed; it is logged instead of dropped.
+link_op_done(_Op, _Subject, ok) ->
+    ok;
+link_op_done(Op, Subject, {error, Reason}) ->
+    logger:warning("Link ~p failed for ~p: ~p", [Op, Subject, Reason]),
+    ok.
 
 %%====================================================================
 %% Info handlers

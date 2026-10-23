@@ -86,7 +86,7 @@
   <!-- Link Stream Path -->
   <rect x="400" y="320" width="350" height="60" rx="6" fill="white" stroke="#a0aec0" stroke-width="1"/>
   <text x="575" y="345" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="#4a5568">Link Stream Events</text>
-  <text x="575" y="365" text-anchor="middle" font-family="monospace" font-size="9" fill="#718096">[streams, "$link:high-value-orders", Version]</text>
+  <text x="575" y="365" text-anchor="middle" font-family="monospace" font-size="9" fill="#718096">[streams, "$link", "high-value-orders", Version]</text>
 
   <!-- Event Flow Legend -->
   <rect x="570" y="235" width="200" height="35" rx="6" fill="#f0fff4" stroke="#9ae6b4" stroke-width="1"/>

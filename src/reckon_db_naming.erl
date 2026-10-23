@@ -14,6 +14,7 @@
     core_sup_name/1,
     persistence_sup_name/1,
     notification_sup_name/1,
+    links_sup_name/1,
     cluster_sup_name/1,
     gateway_sup_name/1,
     streams_sup_name/1,
@@ -90,6 +91,11 @@ streams_sup_name(StoreId) ->
 -spec emitter_sup_name(atom()) -> atom().
 emitter_sup_name(StoreId) ->
     make_name("reckon_db_emitter_", StoreId).
+
+%% @doc Link consumer supervisor name for a store
+-spec links_sup_name(atom()) -> atom().
+links_sup_name(StoreId) ->
+    make_name("reckon_db_links_", StoreId).
 
 %% @doc Leader supervisor name for a store
 -spec leader_sup_name(atom()) -> atom().
