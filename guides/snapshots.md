@@ -331,6 +331,17 @@ emits `[reckon, db, snapshot, integrity, violation]` with `store_id`,
 whole list on the first that fails: a caller that picks the latest from a list
 is protected as `load/2` is.
 
+A snapshot that fails verification stays refused until it is removed, and it
+refuses the list too, so a caller that prunes or resets from the list (such
+as reckon-evoq's checkpoint store) cannot clear it: the projection replays
+from the start on every restart. The operator removes it by its version,
+which needs no list: `reckon_db_snapshots:delete_at(StoreId, StreamId,
+Version)`, or `reckon_gater_api:delete_snapshot_sync(StoreId, StreamId,
+StreamId, Version)` through the gateway. The version is in the refusal's
+telemetry (`[reckon, db, snapshot, integrity, violation]`). Look at why it
+failed first: a snapshot that fails its check is evidence of a write to the
+store that did not come through it.
+
 ## Snapshot Storage Considerations
 
 ### What to Store
