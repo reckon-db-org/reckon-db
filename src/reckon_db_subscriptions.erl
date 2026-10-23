@@ -77,10 +77,15 @@ subscribe(StoreId, Type, Selector, SubscriptionName) ->
 %% - pool_size: Number of emitter workers (default: 1)
 %% - start_from: Starting position for replay (default: 0)
 %% - subscriber: PID to receive events directly (default: undefined)
--spec subscribe(atom(), subscription_type(), binary() | map(), binary(), subscribe_opts()) ->
+%%
+%% Type and Selector reach this from gateway clients as any term. A type
+%% that is not a subscription_type(), or a selector the type cannot use,
+%% is answered {error, {invalid_filter, Reason}} and nothing is stored.
+-spec subscribe(atom(), subscription_type() | term(), term(), binary(), subscribe_opts()) ->
     {ok, binary()} | {error, term()}.
 subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
     StartTime = erlang:monotonic_time(),
+    Filter = create_filter(Type, Selector),
 
     %% Build a draft with id = <<>>; the key (and final id) is
     %% derived from the draft's content (type + selector +
@@ -98,7 +103,7 @@ subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
         created_at = erlang:system_time(millisecond),
         pool_size = maps:get(pool_size, Opts, 1),
         checkpoint = maps:get(start_from, Opts, undefined),
-        options = Opts
+        options = Opts#{subscriber_boot => this_boot()}
     },
 
     %% Emit start telemetry
@@ -111,8 +116,7 @@ subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
 
     Key = reckon_db_subscriptions_store:key(Draft),
     Subscription = Draft#subscription{id = Key},
-    subscribe_with_filter(create_filter(Type, Selector), StoreId, Key,
-                          Subscription, Opts, StartTime).
+    subscribe_with_filter(Filter, StoreId, Key, Subscription, Opts, StartTime).
 
 %% @private The filter is built before anything is stored. A selector the
 %% store cannot use used to raise after the record was written: the retry
@@ -148,18 +152,34 @@ resubscribe_or_reject(StoreId, Key, SubscriptionName, Opts) ->
     end.
 
 %% @private True only when the subscription carries a subscriber pid that
-%% is currently alive. Local pids are probed directly; a remote pid (the
+%% is currently alive. A local pid counts only when this VM stored it: on a
+%% node that is not distributed every VM has creation 0, so a pid read back
+%% from the Ra log after a restart is the very term some unrelated process
+%% now holds, and probing it alone refused the real subscriber with
+%% already_exists (reckon-db#12). A record stamped by another boot, or by
+%% a release that stamped none, carries a dead pid. A remote pid (the
 %% subscriber lives on another node) is conservatively treated as alive,
 %% since a cheap cross-node liveness probe isn't available here and a live
 %% remote subscriber must not be silently displaced.
 -spec subscriber_alive(subscription() | undefined) -> boolean().
-subscriber_alive(#subscription{subscriber_pid = Pid}) when is_pid(Pid) ->
+subscriber_alive(#subscription{subscriber_pid = Pid, options = Opts}) when is_pid(Pid) ->
     case node(Pid) =:= node() of
-        true  -> is_process_alive(Pid);
+        true  -> stored_by_this_boot(Opts) andalso is_process_alive(Pid);
         false -> true
     end;
 subscriber_alive(_) ->
     false.
+
+stored_by_this_boot(#{subscriber_boot := Boot}) ->
+    Boot =:= this_boot();
+stored_by_this_boot(_) ->
+    false.
+
+%% @private Names this VM's boot: the OS process and the VM's start time
+%% differ from one boot to the next, and need no state to compute.
+-spec this_boot() -> {string(), integer()}.
+this_boot() ->
+    {os:getpid(), erlang:system_info(start_time)}.
 
 %% @private
 store_and_setup(StoreId, Key, Filter, Subscription, StartTime) ->
@@ -294,8 +314,9 @@ update_subscriber_pid(StoreId, Key, Name, Pid) when is_pid(Pid) ->
 
 do_update_pid(undefined, _StoreId, _Key, _Name, _Pid) ->
     ok;
-do_update_pid(Existing, StoreId, _Key, Name, Pid) when is_record(Existing, subscription) ->
-    Updated = Existing#subscription{subscriber_pid = Pid},
+do_update_pid(#subscription{options = Opts} = Existing, StoreId, _Key, Name, Pid) ->
+    Updated = Existing#subscription{subscriber_pid = Pid,
+                                    options = Opts#{subscriber_boot => this_boot()}},
     _ = reckon_db_subscriptions_store:put(StoreId, Updated),
     logger:info("Subscription ~s re-registered with new PID (store: ~p)", [Name, StoreId]),
     ok.
@@ -506,7 +527,10 @@ match_subscription(Type, SubscriptionName, Subscriptions) ->
 %% Supports both evoq-style types (stream, event_type, etc.) and
 %% gater-style types (by_stream, by_event_type, etc.) for compatibility
 %% with the reckon_evoq_adapter translation layer.
--spec create_filter(subscription_type(), binary() | map()) ->
+%%
+%% Type and selector arrive from callers over the gateway as any term, so
+%% an unknown type is refused rather than raised.
+-spec create_filter(term(), term()) ->
     khepri_evf:tree_event_filter() | {error, term()}.
 create_filter(stream, StreamId) ->
     reckon_db_filters:by_stream(StreamId);
@@ -543,7 +567,8 @@ create_filter(Type, _Selector) ->
 %% this node's emitter. The cross-node delivery fix in
 %% reckon_db_emitter:send_to_subscriber/4 absorbs that window by
 %% delivering correctly whichever emitter the broadcast lands on.)
--spec setup_event_notification(atom(), binary(), term(), subscription()) -> ok.
+-spec setup_event_notification(atom(), binary(), khepri_evf:tree_event_filter(),
+                               subscription()) -> ok.
 setup_event_notification(StoreId, SubscriptionKey, Filter,
                          #subscription{pool_size = PoolSize, type = Type,
                                        selector = Selector} = Subscription) ->
@@ -596,7 +621,8 @@ maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription, _SupPid) ->
 %% events. For event_pattern, event_payload and by_tags the filter is
 %% every new event and this check is the whole selection (reckon-db#8,
 %% #11); for stream and event_type it agrees with the filter.
--spec register_trigger(atom(), binary(), term(), {subscription_type(), term()}) ->
+-spec register_trigger(atom(), binary(), khepri_evf:tree_event_filter(),
+                       {subscription_type(), binary() | map() | [binary()]}) ->
     ok | {error, term()}.
 register_trigger(StoreId, SubscriptionKey, Filter, Selects) ->
     Topic = reckon_db_emitter_group:topic(StoreId, SubscriptionKey),
@@ -616,15 +642,13 @@ store_trigger_proc(StoreId, SubscriptionKey, ProcPath, ProcFun) ->
             {error, Reason}
     end.
 
+%% register_trigger/4: the fifth argument of /5 is command options (async,
+%% reply_from, timeout). The tree options this used to pass there
+%% (props_to_return, include_root_props, expect_specific_node) were ignored
+%% by khepri and made dialyzer read every registration as failing.
 activate_trigger(StoreId, SubscriptionKey, Filter, ProcPath) ->
     TriggerId = binary_to_atom(SubscriptionKey, utf8),
-    PropOpts = #{
-        expect_specific_node => false,
-        props_to_return => [payload, payload_version, child_list_version,
-                           child_list_length, child_names],
-        include_root_props => true
-    },
-    case khepri:register_trigger(StoreId, TriggerId, Filter, ProcPath, PropOpts) of
+    case khepri:register_trigger(StoreId, TriggerId, Filter, ProcPath) of
         ok -> ok;
         {error, Reason} ->
             logger:warning("Trigger activation failed for ~s (~p): ~p",

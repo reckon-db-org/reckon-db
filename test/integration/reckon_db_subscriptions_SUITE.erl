@@ -36,6 +36,7 @@
     subscribe_to_event_pattern/1,
     subscribe_with_pool_size/1,
     subscribe_duplicate_is_idempotent/1,
+    subscribe_reclaims_a_subscription_from_a_previous_vm/1,
     unsubscribe_by_key/1,
     unsubscribe_nonexistent/1,
 
@@ -73,6 +74,7 @@ groups() ->
             subscribe_to_event_pattern,
             subscribe_with_pool_size,
             subscribe_duplicate_is_idempotent,
+            subscribe_reclaims_a_subscription_from_a_previous_vm,
             unsubscribe_by_key,
             unsubscribe_nonexistent
         ]},
@@ -299,6 +301,39 @@ subscribe_duplicate_is_idempotent(Config) ->
 
     %% Cleanup
     ok = reckon_db_subscriptions:unsubscribe(StoreId, Key1),
+    ok.
+
+%% @doc A subscription stored by a previous VM is reclaimed by the next
+%% subscriber under its name, even when the stored pid number belongs to a
+%% live, unrelated process in this VM (reckon-db#12). On a node that is
+%% not distributed every VM has creation 0, so a pid read back from the Ra
+%% log after a restart is the same term as whatever process now holds that
+%% number, and the liveness check alone answered already_exists.
+%%
+%% Two records from another VM: one stamped with that VM's boot, and one
+%% from a release that stamped none.
+subscribe_reclaims_a_subscription_from_a_previous_vm(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"testrestartstream-001">>),
+    Stamps = [fun(Opts) -> Opts#{subscriber_boot => {"another-vm", 0}} end,
+              fun(Opts) -> maps:remove(subscriber_boot, Opts) end],
+    lists:foreach(fun(Stamp) -> reclaimed_after_restart(StoreId, StreamId, Stamp) end, Stamps).
+
+reclaimed_after_restart(StoreId, StreamId, Stamp) ->
+    Name = <<"restart_reclaim_test">>,
+    Unrelated = spawn(fun() -> receive stop -> ok end end),
+    {ok, Key} = reckon_db_subscriptions:subscribe(StoreId, stream, StreamId, Name,
+                                                  #{subscriber => Unrelated}),
+    {ok, Stored} = reckon_db_subscriptions:get(StoreId, Key),
+    ok = reckon_db_subscriptions_store:put(
+           StoreId, Stored#subscription{options = Stamp(Stored#subscription.options)}),
+    Subscriber = spawn(fun() -> receive stop -> ok end end),
+    ?assertEqual({ok, Key}, reckon_db_subscriptions:subscribe(StoreId, stream, StreamId, Name,
+                                                              #{subscriber => Subscriber})),
+    {ok, Reclaimed} = reckon_db_subscriptions:get(StoreId, Key),
+    ?assertEqual(Subscriber, Reclaimed#subscription.subscriber_pid),
+    ok = reckon_db_subscriptions:unsubscribe(StoreId, Key),
+    [P ! stop || P <- [Unrelated, Subscriber]],
     ok.
 
 %% @doc Test unsubscribing by key

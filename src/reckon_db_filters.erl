@@ -285,8 +285,5 @@ has_every_key(Want, Have) ->
     maps:fold(fun(K, V, Acc) -> Acc andalso maps:find(K, Have) =:= {ok, V} end, true, Want).
 
 event_field(Field, Event) ->
-    Fields = record_info(fields, event),
-    case string:str(Fields, [Field]) of
-        0 -> error;
-        N -> {ok, element(N + 1, Event)}
-    end.
+    Values = tl(tuple_to_list(Event)),
+    maps:find(Field, maps:from_list(lists:zip(record_info(fields, event), Values))).
