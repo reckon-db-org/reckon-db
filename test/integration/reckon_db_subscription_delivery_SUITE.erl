@@ -30,7 +30,15 @@
     subscribe_then_append_multiple_delivers_all/1,
     subscribe_by_event_type_delivers_matching/1,
     unsubscribe_stops_delivery/1,
-    subscriber_receives_correct_event_data/1
+    subscriber_receives_correct_event_data/1,
+    event_pattern_delivers_only_matching_live/1,
+    event_pattern_catchup_delivers_only_matching/1,
+    event_pattern_on_data_delivers_only_matching_live/1,
+    event_payload_delivers_only_matching_live/1,
+    event_payload_catchup_delivers_only_matching/1,
+    by_tags_delivers_only_tagged_live/1,
+    by_tags_catchup_delivers_only_tagged/1,
+    unusable_selector_is_refused_and_leaves_nothing/1
 ]).
 
 %%====================================================================
@@ -46,7 +54,15 @@ all() ->
         subscribe_then_append_multiple_delivers_all,
         subscribe_by_event_type_delivers_matching,
         unsubscribe_stops_delivery,
-        subscriber_receives_correct_event_data
+        subscriber_receives_correct_event_data,
+        event_pattern_delivers_only_matching_live,
+        event_pattern_catchup_delivers_only_matching,
+        event_pattern_on_data_delivers_only_matching_live,
+        event_payload_delivers_only_matching_live,
+        event_payload_catchup_delivers_only_matching,
+        by_tags_delivers_only_tagged_live,
+        by_tags_catchup_delivers_only_tagged,
+        unusable_selector_is_refused_and_leaves_nothing
     ].
 
 init_per_suite(Config) ->
@@ -342,6 +358,105 @@ subscriber_receives_correct_event_data(Config) ->
     gen_server:stop(EmitterPid),
     reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
     ok.
+
+%%====================================================================
+%% Selector subscriptions: live and catch-up apply one predicate
+%%====================================================================
+%%
+%% An event_pattern or event_payload subscription was accepted and never
+%% fired live (its trigger matched a map against an #event{} record) while
+%% its catch-up delivered the whole log (reckon-db#8). A by_tags trigger had
+%% no tag condition, so live delivery handed over every event (#11). Each
+%% case appends one event the selector wants and one it does not, and only
+%% the wanted one may arrive, whether it was appended before the subscription
+%% (catch-up) or after it (live).
+
+wanted() ->
+    #{event_type => <<"order_placed_v1">>,
+      data => #{<<"total">> => 10000},
+      tags => [<<"order">>, <<"customer:7">>]}.
+
+unwanted() ->
+    #{event_type => <<"user_registered_v1">>,
+      data => #{<<"total">> => 1},
+      tags => [<<"user">>]}.
+
+event_pattern_delivers_only_matching_live(Config) ->
+    only_wanted_arrives_live(Config, event_pattern, #{event_type => <<"order_placed_v1">>}).
+
+event_pattern_catchup_delivers_only_matching(Config) ->
+    only_wanted_arrives_on_catchup(Config, event_pattern, #{event_type => <<"order_placed_v1">>}).
+
+event_pattern_on_data_delivers_only_matching_live(Config) ->
+    only_wanted_arrives_live(Config, event_pattern, #{data => #{<<"total">> => 10000}}).
+
+event_payload_delivers_only_matching_live(Config) ->
+    only_wanted_arrives_live(Config, event_payload, #{<<"total">> => 10000}).
+
+event_payload_catchup_delivers_only_matching(Config) ->
+    only_wanted_arrives_on_catchup(Config, event_payload, #{<<"total">> => 10000}).
+
+by_tags_delivers_only_tagged_live(Config) ->
+    only_wanted_arrives_live(Config, by_tags, [<<"order">>]).
+
+by_tags_catchup_delivers_only_tagged(Config) ->
+    only_wanted_arrives_on_catchup(Config, by_tags, [<<"order">>]).
+
+%% @doc A selector no subscription can use is refused on the first call,
+%% leaves no subscription record behind, and the second call is refused the
+%% same way (reckon-db#9: the first call raised after storing the record, and
+%% the retry was answered already_exists, which the gateway turned into ok).
+unusable_selector_is_refused_and_leaves_nothing(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    Unusable = [{event_pattern, <<"user-*">>}, {event_pattern, #{<<"k">> => 1}},
+                {event_payload, <<"total">>}, {by_tags, <<"order">>},
+                {event_type, <<>>}, {no_such_type, <<"x">>}],
+    lists:foreach(fun(TS) -> refused_twice(StoreId, TS) end, Unusable),
+    {ok, Stored} = reckon_db_subscriptions_store:list(StoreId),
+    ?assertEqual([], Stored).
+
+refused_twice(StoreId, {Type, Selector}) ->
+    Name = <<"unusable_selector_sub">>,
+    Opts = #{subscriber => self()},
+    First = reckon_db_subscriptions:subscribe(StoreId, Type, Selector, Name, Opts),
+    ?assertMatch({error, {invalid_filter, _}}, First),
+    ?assertEqual(First, reckon_db_subscriptions:subscribe(StoreId, Type, Selector, Name, Opts)).
+
+only_wanted_arrives_live(Config, Type, Selector) ->
+    StoreId = proplists:get_value(store_id, Config),
+    {SubKey, Emitter} = subscribe_with_emitter(StoreId, Type, Selector),
+    append_wanted_and_unwanted(StoreId),
+    only_wanted_arrives(),
+    gen_server:stop(Emitter),
+    reckon_db_subscriptions:unsubscribe(StoreId, SubKey).
+
+only_wanted_arrives_on_catchup(Config, Type, Selector) ->
+    StoreId = proplists:get_value(store_id, Config),
+    append_wanted_and_unwanted(StoreId),
+    {SubKey, Emitter} = subscribe_with_emitter(StoreId, Type, Selector),
+    only_wanted_arrives(),
+    gen_server:stop(Emitter),
+    reckon_db_subscriptions:unsubscribe(StoreId, SubKey).
+
+subscribe_with_emitter(StoreId, Type, Selector) ->
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, Type, Selector, <<"selector_sub">>,
+        #{subscriber => self(), start_from => 0}),
+    EmitterName = reckon_db_emitter_group:emitter_name(StoreId, SubKey),
+    {ok, Emitter} = reckon_db_emitter:start_link(StoreId, SubKey, self(), EmitterName),
+    {SubKey, Emitter}.
+
+%% The unwanted event goes first, so a subscription that over-delivers shows
+%% it before the wanted one arrives.
+append_wanted_and_unwanted(StoreId) ->
+    {ok, _} = reckon_db_streams:append(StoreId, reckon_db_test_helpers:sid(<<"useruser-001">>),
+                                       -2, [unwanted()]),
+    {ok, _} = reckon_db_streams:append(StoreId, reckon_db_test_helpers:sid(<<"orderorder-001">>),
+                                       -2, [wanted()]).
+
+only_wanted_arrives() ->
+    Received = collect_events(2, 3000),
+    ?assertEqual([<<"order_placed_v1">>], [E#event.event_type || E <- Received]).
 
 %%====================================================================
 %% Helpers

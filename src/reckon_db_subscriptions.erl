@@ -109,14 +109,27 @@ subscribe(StoreId, Type, Selector, SubscriptionName, Opts) ->
           subscription_name => SubscriptionName}
     ),
 
-    %% Check if subscription already exists
     Key = reckon_db_subscriptions_store:key(Draft),
     Subscription = Draft#subscription{id = Key},
+    subscribe_with_filter(create_filter(Type, Selector), StoreId, Key,
+                          Subscription, Opts, StartTime).
+
+%% @private The filter is built before anything is stored. A selector the
+%% store cannot use used to raise after the record was written: the retry
+%% then found that record, answered already_exists, and the gateway turned
+%% it into ok for a subscription that never delivered (reckon-db#9). A
+%% record already stored under this key carries this same selector, so it
+%% is one of those half-created ones and is removed.
+subscribe_with_filter({error, Reason}, StoreId, Key, _Subscription, _Opts, _StartTime) ->
+    _ = reckon_db_subscriptions_store:delete(StoreId, Key),
+    {error, {invalid_filter, Reason}};
+subscribe_with_filter(Filter, StoreId, Key,
+                      #subscription{subscription_name = Name} = Subscription, Opts, StartTime) ->
     case reckon_db_subscriptions_store:exists(StoreId, Key) of
         true ->
-            resubscribe_or_reject(StoreId, Key, SubscriptionName, Opts);
+            resubscribe_or_reject(StoreId, Key, Name, Opts);
         false ->
-            store_and_setup(StoreId, Key, Type, Selector, Subscription, StartTime)
+            store_and_setup(StoreId, Key, Filter, Subscription, StartTime)
     end.
 
 %% @private An existing subscription with a STILL-LIVE subscriber is an
@@ -149,35 +162,29 @@ subscriber_alive(_) ->
     false.
 
 %% @private
-store_and_setup(StoreId, Key, Type, Selector, Subscription, StartTime) ->
+store_and_setup(StoreId, Key, Filter, Subscription, StartTime) ->
     case reckon_db_subscriptions_store:put(StoreId, Subscription) of
         ok ->
-            finalize_subscription(StoreId, Key, Type, Selector, Subscription, StartTime);
+            finalize_subscription(StoreId, Key, Filter, Subscription, StartTime);
         {error, _} = Error ->
             Error
     end.
 
 %% @private
-finalize_subscription(StoreId, Key, Type, Selector, Subscription, StartTime) ->
-    case create_filter(Type, Selector) of
-        {error, FilterReason} ->
-            _ = reckon_db_subscriptions_store:delete(StoreId, Key),
-            {error, {invalid_filter, FilterReason}};
-        Filter ->
-            setup_event_notification(StoreId, Key, Filter, Subscription),
-            reckon_db_tracker_group:notify_created(StoreId, subscriptions, Subscription),
-            %% Replay historical events to the subscriber (catch-up subscription).
-            %% The trigger handles live events; this fills the gap for events
-            %% that existed before the subscription was created.
-            maybe_start_catchup(StoreId, Subscription),
-            Duration = erlang:monotonic_time() - StartTime,
-            telemetry:execute(
-                ?SUBSCRIPTION_CREATED,
-                #{duration => Duration},
-                #{store_id => StoreId, subscription_key => Key}
-            ),
-            {ok, Key}
-    end.
+finalize_subscription(StoreId, Key, Filter, Subscription, StartTime) ->
+    setup_event_notification(StoreId, Key, Filter, Subscription),
+    reckon_db_tracker_group:notify_created(StoreId, subscriptions, Subscription),
+    %% Replay historical events to the subscriber (catch-up subscription).
+    %% The trigger handles live events; this fills the gap for events
+    %% that existed before the subscription was created.
+    maybe_start_catchup(StoreId, Subscription),
+    Duration = erlang:monotonic_time() - StartTime,
+    telemetry:execute(
+        ?SUBSCRIPTION_CREATED,
+        #{duration => Duration},
+        #{store_id => StoreId, subscription_key => Key}
+    ),
+    {ok, Key}.
 
 %% @private Re-register subscriber PID on an existing subscription.
 %% After a restart, subscriptions persist in Khepri but carry a dead PID
@@ -221,16 +228,17 @@ reregister_subscriber(StoreId, Key, SubscriptionName, Opts) ->
 reregister_trigger(StoreId, Key) ->
     case reckon_db_subscriptions_store:get(StoreId, Key) of
         #subscription{type = Type, selector = Selector, pool_size = PoolSize} ->
-            maybe_register_trigger(create_filter(Type, Selector), StoreId, Key, PoolSize);
+            maybe_register_trigger(create_filter(Type, Selector), StoreId, Key, PoolSize,
+                                   {Type, Selector});
         _ ->
             ok
     end.
 
-maybe_register_trigger({error, _}, _StoreId, _Key, _PoolSize) ->
+maybe_register_trigger({error, _}, _StoreId, _Key, _PoolSize, _Selects) ->
     ok;
-maybe_register_trigger(Filter, StoreId, Key, PoolSize) ->
+maybe_register_trigger(Filter, StoreId, Key, PoolSize, Selects) ->
     _ = reckon_db_emitter_group:persist_emitters(StoreId, Key, PoolSize),
-    ok = register_trigger(StoreId, Key, Filter).
+    ok = register_trigger(StoreId, Key, Filter, Selects).
 
 %% @private Make sure the emitters serving this subscription deliver to
 %% its CURRENT subscriber pid on the reconnect path, and that this node
@@ -517,7 +525,9 @@ create_filter(event_payload, PayloadPattern) ->
 create_filter(by_event_payload, PayloadPattern) ->
     reckon_db_filters:by_event_payload(PayloadPattern);
 create_filter(by_tags, Tags) ->
-    reckon_db_filters:by_tags(Tags).
+    reckon_db_filters:by_tags(Tags);
+create_filter(Type, _Selector) ->
+    {error, {unknown_subscription_type, Type}}.
 
 %% @private Setup event notification mechanism.
 %%
@@ -534,10 +544,12 @@ create_filter(by_tags, Tags) ->
 %% reckon_db_emitter:send_to_subscriber/4 absorbs that window by
 %% delivering correctly whichever emitter the broadcast lands on.)
 -spec setup_event_notification(atom(), binary(), term(), subscription()) -> ok.
-setup_event_notification(StoreId, SubscriptionKey, Filter, #subscription{pool_size = PoolSize} = Subscription) ->
+setup_event_notification(StoreId, SubscriptionKey, Filter,
+                         #subscription{pool_size = PoolSize, type = Type,
+                                       selector = Selector} = Subscription) ->
     _Emitters = reckon_db_emitter_group:persist_emitters(StoreId, SubscriptionKey, PoolSize),
     maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription),
-    case register_trigger(StoreId, SubscriptionKey, Filter) of
+    case register_trigger(StoreId, SubscriptionKey, Filter, {Type, Selector}) of
         ok -> ok;
         {error, Reason} ->
             logger:warning("Trigger registration deferred for ~s (store: ~p): ~p",
@@ -577,11 +589,19 @@ maybe_start_emitter_pool(StoreId, SubscriptionKey, Subscription, _SupPid) ->
 %% May fail if the Khepri store isn't ready yet (noproc during leader
 %% activation race). Returns {error, _} instead of crashing — trigger
 %% registration will be retried on next leader activation.
--spec register_trigger(atom(), binary(), term()) -> ok | {error, term()}.
-register_trigger(StoreId, SubscriptionKey, Filter) ->
+%%
+%% Selects is the subscription's {Type, Selector}. The trigger proc applies
+%% reckon_db_filters:matches/3 to every event the filter hands it, the
+%% predicate catch-up applies, so live and catch-up deliver the same
+%% events. For event_pattern, event_payload and by_tags the filter is
+%% every new event and this check is the whole selection (reckon-db#8,
+%% #11); for stream and event_type it agrees with the filter.
+-spec register_trigger(atom(), binary(), term(), {subscription_type(), term()}) ->
+    ok | {error, term()}.
+register_trigger(StoreId, SubscriptionKey, Filter, Selects) ->
     Topic = reckon_db_emitter_group:topic(StoreId, SubscriptionKey),
     ProcPath = [procs, on_new_event, Topic],
-    ProcFun = make_trigger_proc(StoreId, SubscriptionKey),
+    ProcFun = make_trigger_proc(StoreId, SubscriptionKey, Selects),
     case store_trigger_proc(StoreId, SubscriptionKey, ProcPath, ProcFun) of
         ok -> activate_trigger(StoreId, SubscriptionKey, Filter, ProcPath);
         {error, _} = Error -> Error
@@ -612,25 +632,31 @@ activate_trigger(StoreId, SubscriptionKey, Filter, ProcPath) ->
             {error, Reason}
     end.
 
-make_trigger_proc(StoreId, SubscriptionKey) ->
+make_trigger_proc(StoreId, SubscriptionKey, Selects) ->
     fun(Props) ->
-        trigger_on_path(maps:get(path, Props, undefined), StoreId, SubscriptionKey)
+        trigger_on_path(maps:get(path, Props, undefined), StoreId, SubscriptionKey, Selects)
     end.
 
-trigger_on_path(undefined, _StoreId, _SubscriptionKey) ->
+trigger_on_path(undefined, _StoreId, _SubscriptionKey, _Selects) ->
     ok;
-trigger_on_path(Path, StoreId, SubscriptionKey) ->
-    broadcast_event_at_path(StoreId, SubscriptionKey, Path).
+trigger_on_path(Path, StoreId, SubscriptionKey, Selects) ->
+    broadcast_event_at_path(StoreId, SubscriptionKey, Path, Selects).
 
-broadcast_event_at_path(StoreId, SubscriptionKey, Path) ->
+broadcast_event_at_path(StoreId, SubscriptionKey, Path, {Type, Selector}) ->
     case get_event_from_path(StoreId, Path) of
         {ok, Event} ->
-            reckon_db_emitter_group:broadcast(StoreId, SubscriptionKey, Event),
-            ok;
+            broadcast_if_selected(reckon_db_filters:matches(Type, Selector, Event),
+                                  StoreId, SubscriptionKey, Event);
         {error, Reason} ->
             logger:warning("Broadcasting failed for path ~p: ~p", [Path, Reason]),
             ok
     end.
+
+broadcast_if_selected(true, StoreId, SubscriptionKey, Event) ->
+    reckon_db_emitter_group:broadcast(StoreId, SubscriptionKey, Event),
+    ok;
+broadcast_if_selected(false, _StoreId, _SubscriptionKey, _Event) ->
+    ok.
 
 %% @private Unregister a Khepri trigger
 -spec unregister_trigger(atom(), binary()) -> ok.

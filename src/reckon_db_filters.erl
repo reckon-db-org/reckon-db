@@ -105,7 +105,12 @@ by_stream(Stream) ->
 %% @doc Create a filter for events of a specific type
 %%
 %% Uses #event{} record pattern matching since events are stored as records.
--spec by_event_type(binary()) -> khepri_evf:tree_event_filter().
+%% Returns `{error, empty_selector}' for an empty binary and
+%% `{error, {not_a_binary, Selector}}' for anything else that is not one.
+-spec by_event_type(term()) ->
+    khepri_evf:tree_event_filter() | {error, empty_selector | {not_a_binary, term()}}.
+by_event_type(<<>>) ->
+    {error, empty_selector};
 by_event_type(EventType) when is_binary(EventType) ->
     khepri_evf:tree(
         [streams,
@@ -117,7 +122,9 @@ by_event_type(EventType) when is_binary(EventType) ->
              #if_data_matches{pattern = event_type_pattern(EventType)}
          ]}],
         #{on_actions => [create]}
-    ).
+    );
+by_event_type(Other) ->
+    {error, {not_a_binary, Other}}.
 
 %% @doc A Khepri data-match pattern for a stored `#event{}' of this type:
 %% the record's tag, the type, and `'_'' in every other field.
@@ -130,50 +137,71 @@ event_type_pattern(EventType) ->
     Wild = erlang:make_tuple(record_info(size, event), '_', [{1, event}]),
     setelement(#event.event_type, Wild, EventType).
 
-%% @doc Create a filter matching events with a specific pattern in their metadata
+%% @doc Create a filter for an `event_pattern' subscription.
 %%
-%% The pattern is a map that must be a subset of the event record.
--spec by_event_pattern(map()) -> khepri_evf:tree_event_filter().
-by_event_pattern(EventPattern) when is_map(EventPattern) ->
-    khepri_evf:tree(
-        [streams,
-         #if_path_matches{regex = any},
-         #if_path_matches{regex = any},
-         #if_all{conditions = [
-             #if_path_matches{regex = any},
-             #if_has_data{has_data = true},
-             #if_data_matches{pattern = EventPattern}
-         ]}],
-        #{on_actions => [create]}
-    ).
+%% The selector is a map whose keys are `#event{}' field names
+%% (`event_type', `stream_id', `version', `data', `metadata', `tags', ...).
+%% An event matches when every field given matches: a map-valued field
+%% (`data', `metadata') matches when every key given has that value, any
+%% other field when it is equal. See {@link matches/3}.
+%%
+%% Khepri's data-match condition cannot express that over the stored
+%% `#event{}' record (a map pattern never matches a tuple), so the trigger
+%% fires for every new event and the subscription's trigger proc applies
+%% {@link matches/3} before delivering, the same predicate catch-up uses.
+%%
+%% Refused: a selector that is not a map, an empty map, and a map with a
+%% key that is not an `#event{}' field.
+-spec by_event_pattern(term()) ->
+    khepri_evf:tree_event_filter()
+    | {error, empty_selector | {not_a_map, term()} | {unknown_event_fields, [term()]}}.
+by_event_pattern(Pattern) when Pattern =:= #{} ->
+    {error, empty_selector};
+by_event_pattern(Pattern) when is_map(Pattern) ->
+    case [K || K <- maps:keys(Pattern), not lists:member(K, record_info(fields, event))] of
+        [] -> every_new_event();
+        Unknown -> {error, {unknown_event_fields, Unknown}}
+    end;
+by_event_pattern(Other) ->
+    {error, {not_a_map, Other}}.
 
-%% @doc Create a filter matching events with a specific pattern in their payload
+%% @doc Create a filter for an `event_payload' subscription.
 %%
-%% The pattern is checked against the data field of the event.
--spec by_event_payload(map()) -> khepri_evf:tree_event_filter().
-by_event_payload(PayloadPattern) when is_map(PayloadPattern) ->
-    khepri_evf:tree(
-        [streams,
-         #if_path_matches{regex = any},
-         #if_path_matches{regex = any},
-         #if_all{conditions = [
-             #if_path_matches{regex = any},
-             #if_has_data{has_data = true},
-             #if_data_matches{pattern = #{data => PayloadPattern}}
-         ]}],
-        #{on_actions => [create]}
-    ).
+%% The selector is a map over the event's data: an event matches when every
+%% key given has that value in its data. Like {@link by_event_pattern/1},
+%% the trigger fires for every new event and {@link matches/3} decides.
+%% Refused: a selector that is not a map, and an empty map.
+-spec by_event_payload(term()) ->
+    khepri_evf:tree_event_filter() | {error, empty_selector | {not_a_map, term()}}.
+by_event_payload(Pattern) when Pattern =:= #{} ->
+    {error, empty_selector};
+by_event_payload(Pattern) when is_map(Pattern) ->
+    every_new_event();
+by_event_payload(Other) ->
+    {error, {not_a_map, Other}}.
 
-%% @doc Create a filter matching events with specific tags
+%% @doc Create a filter for a `by_tags' subscription.
 %%
-%% Note: Khepri's pattern matching doesn't natively support list membership,
-%% so this creates a broad filter that matches all events with tags.
-%% The actual tag filtering must be done by the subscription consumer.
-%% For efficient tag-based queries, use {@link reckon_db_streams:read_by_tags/4}.
--spec by_tags([binary()]) -> khepri_evf:tree_event_filter().
+%% An event matches when it carries every tag given. Khepri's pattern
+%% matching has no list membership, so the trigger fires for every new event
+%% and {@link matches/3} decides, live as on catch-up. For queries rather
+%% than subscriptions, use {@link reckon_db_streams:read_by_tags/4}.
+%% Refused: anything but a non-empty list of binaries.
+-spec by_tags(term()) ->
+    khepri_evf:tree_event_filter() | {error, empty_selector | {not_a_tag_list, term()}}.
+by_tags([]) ->
+    {error, empty_selector};
 by_tags(Tags) when is_list(Tags) ->
-    %% Create a filter that matches events with any tags field
-    %% The consumer must filter for specific tag membership
+    case lists:all(fun is_binary/1, Tags) of
+        true -> every_new_event();
+        false -> {error, {not_a_tag_list, Tags}}
+    end;
+by_tags(Other) ->
+    {error, {not_a_tag_list, Other}}.
+
+%% Every event created in every stream; the selector is applied by
+%% matches/3 on delivery.
+every_new_event() ->
     khepri_evf:tree(
         [streams,
          #if_path_matches{regex = any},
@@ -197,8 +225,12 @@ by_tags(Tags) when is_list(Tags) ->
 %% catch-up batch before sending.
 %%
 %% Tag membership uses set inclusion: the event must carry ALL of
-%% the requested tags (consistent with `read_by_tags' default match
-%% semantics).
+%% the requested tags (the `all' match of `read_by_tags/4'). `event_pattern' and `event_payload' are described at
+%% {@link by_event_pattern/1} and {@link by_event_payload/1}.
+%%
+%% The live path applies this too: the trigger proc of every
+%% subscription checks it before broadcasting, so the two paths agree
+%% by construction (reckon-db#8, #11).
 -spec matches(subscription_type(), binary() | map() | [binary()], event()) ->
     boolean().
 matches(by_stream, <<"$all">>, _Event) ->
@@ -228,16 +260,33 @@ matches(tags, RequestedTags, Event) ->
     matches(by_tags, RequestedTags, Event);
 matches(by_tags, _Other, _Event) ->
     false;
-%% by_event_pattern / by_event_payload — for now, deliver all (catch-up
-%% replays the full log and the live trigger handles real filtering).
-%% Tightening these is a separate task that needs map-pattern eval here.
-matches(by_event_pattern, _Pattern, _Event) ->
-    true;
-matches(event_pattern, _Pattern, _Event) ->
-    true;
-matches(by_event_payload, _Pattern, _Event) ->
-    true;
-matches(event_payload, _Pattern, _Event) ->
-    true;
+matches(by_event_pattern, Pattern, Event) when is_map(Pattern) ->
+    maps:fold(fun(Field, Want, Acc) -> Acc andalso field_matches(Want, event_field(Field, Event)) end,
+              true, Pattern);
+matches(event_pattern, Pattern, Event) ->
+    matches(by_event_pattern, Pattern, Event);
+matches(by_event_payload, Pattern, #event{data = Data}) when is_map(Pattern), is_map(Data) ->
+    has_every_key(Pattern, Data);
+matches(event_payload, Pattern, Event) ->
+    matches(by_event_payload, Pattern, Event);
 matches(_Type, _Selector, _Event) ->
     false.
+
+%% A map-valued field matches when every key given has that value; any
+%% other field when it is equal.
+field_matches(Want, {ok, Have}) when is_map(Want), is_map(Have) ->
+    has_every_key(Want, Have);
+field_matches(Want, {ok, Have}) ->
+    Want =:= Have;
+field_matches(_Want, error) ->
+    false.
+
+has_every_key(Want, Have) ->
+    maps:fold(fun(K, V, Acc) -> Acc andalso maps:find(K, Have) =:= {ok, V} end, true, Want).
+
+event_field(Field, Event) ->
+    Fields = record_info(fields, event),
+    case string:str(Fields, [Field]) of
+        0 -> error;
+        N -> {ok, element(N + 1, Event)}
+    end.
