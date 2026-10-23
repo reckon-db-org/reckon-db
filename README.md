@@ -311,9 +311,9 @@ rebar3 cover           # Coverage report
 ## Testing
 
 Test counts:
-- **Unit tests**: 446 tests (including NIF modules with enterprise/community equivalence tests)
-- **Integration tests**: 53 tests (streams, subscriptions, snapshots, cluster)
-- **End-to-end tests**: 24 tests (full gater integration)
+- **Unit tests**: 684 tests (including NIF modules with enterprise/community equivalence tests)
+- **Integration tests**: 213 tests (streams, subscriptions, snapshots, integrity, cluster)
+- **End-to-end tests**: 29 tests (25 through the gater, 4 over the mesh)
 
 ```bash
 rebar3 eunit --dir=test/unit              # All unit tests
