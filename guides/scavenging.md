@@ -39,13 +39,13 @@ By default, scavenging requires a snapshot to exist:
 
 ```erlang
 %% This will fail if no snapshot exists
-{error, {no_snapshot, <<"orders-123">>}} =
-    reckon_db_scavenge:scavenge(my_store, <<"orders-123">>, #{
+{error, {no_snapshot, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>}} =
+    reckon_db_scavenge:scavenge(my_store, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>, #{
         before_version => 100
     }).
 
 %% Override the safety check (use with caution)
-{ok, _} = reckon_db_scavenge:scavenge(my_store, <<"orders-123">>, #{
+{ok, _} = reckon_db_scavenge:scavenge(my_store, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>, #{
     before_version => 100,
     require_snapshot => false
 }).
@@ -59,7 +59,7 @@ Always keep a minimum number of recent versions:
 
 ```erlang
 %% Keep at least the last 10 versions, regardless of timestamp
-{ok, Result} = reckon_db_scavenge:scavenge(my_store, <<"orders-123">>, #{
+{ok, Result} = reckon_db_scavenge:scavenge(my_store, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>, #{
     before => OneYearAgo,
     keep_versions => 10
 }).
@@ -70,12 +70,12 @@ Always keep a minimum number of recent versions:
 Preview what would be deleted before actually deleting:
 
 ```erlang
-{ok, Preview} = reckon_db_scavenge:dry_run(my_store, <<"orders-123">>, #{
+{ok, Preview} = reckon_db_scavenge:dry_run(my_store, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>, #{
     before => RetentionCutoff
 }),
 %% Preview contains:
 %% #{
-%%     stream_id => <<"orders-123">>,
+%%     stream_id => <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>,
 %%     deleted_count => 500,
 %%     deleted_versions => {0, 499},
 %%     archived => false,
@@ -100,7 +100,7 @@ Preview what would be deleted before actually deleting:
 ```erlang
 %% Delete events older than 1 year
 OneYearAgo = erlang:system_time(microsecond) - (365 * 24 * 60 * 60 * 1000000),
-{ok, Result} = reckon_db_scavenge:scavenge(my_store, <<"orders-123">>, #{
+{ok, Result} = reckon_db_scavenge:scavenge(my_store, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>, #{
     before => OneYearAgo
 }).
 ```
@@ -109,7 +109,7 @@ OneYearAgo = erlang:system_time(microsecond) - (365 * 24 * 60 * 60 * 1000000),
 
 ```erlang
 %% Delete events before version 1000
-{ok, Result} = reckon_db_scavenge:scavenge(my_store, <<"orders-123">>, #{
+{ok, Result} = reckon_db_scavenge:scavenge(my_store, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>, #{
     before_version => 1000
 }).
 ```
@@ -125,7 +125,7 @@ delete_event_versions(StoreId, StreamId, FromVersion, ToVersion) ->
     lists:foreach(
         fun(Version) ->
             PaddedVersion = pad_version(Version, ?VERSION_PADDING),
-            Path = ?STREAMS_PATH ++ [StreamId, PaddedVersion],
+            Path = ?STREAMS_PATH ++ [Type, Id, PaddedVersion],
             khepri:delete(StoreId, Path)
         end,
         lists:seq(FromVersion, ToVersion)
@@ -134,11 +134,11 @@ delete_event_versions(StoreId, StreamId, FromVersion, ToVersion) ->
 
 **Storage path structure:**
 ```
-[streams, <<"orders-123">>, <<"000000000000">>] -> Deleted
-[streams, <<"orders-123">>, <<"000000000001">>] -> Deleted
+[streams, <<"orders">>, <<"018f6a7b8c9d4e5f60718293a4b5c6db">>, <<"000000000000">>] -> Deleted
+[streams, <<"orders">>, <<"018f6a7b8c9d4e5f60718293a4b5c6db">>, <<"000000000001">>] -> Deleted
 ...
-[streams, <<"orders-123">>, <<"000000000499">>] -> Deleted
-[streams, <<"orders-123">>, <<"000000000500">>] -> Kept (after cutoff)
+[streams, <<"orders">>, <<"018f6a7b8c9d4e5f60718293a4b5c6db">>, <<"000000000499">>] -> Deleted
+[streams, <<"orders">>, <<"018f6a7b8c9d4e5f60718293a4b5c6db">>, <<"000000000500">>] -> Kept (after cutoff)
 ```
 
 ### Cluster Behavior
@@ -168,14 +168,14 @@ Use `archive_and_scavenge/4` to preserve events before removal:
 %% Archive then scavenge
 {ok, Result} = reckon_db_scavenge:archive_and_scavenge(
     my_store,
-    <<"orders-123">>,
+    <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>,
     {reckon_db_archive_file, BackendState},
     #{before => RetentionCutoff}
 ),
 
 %% Result includes archive key
 %% #{
-%%     stream_id => <<"orders-123">>,
+%%     stream_id => <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>,
 %%     deleted_count => 500,
 %%     deleted_versions => {0, 499},
 %%     archived => true,

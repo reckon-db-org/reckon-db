@@ -34,7 +34,7 @@ In event sourcing, current state is derived by replaying all events. Snapshots d
 %% Save a snapshot of aggregate state
 ok = reckon_db_snapshots:save(
     my_store,                    %% Store ID
-    <<"account-123">>,           %% Stream ID
+    <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>,           %% Stream ID
     150,                         %% Version (event number this snapshot is at)
     AccountState,                %% The state to snapshot (any term)
     #{                           %% Metadata
@@ -55,7 +55,7 @@ The snapshot stores:
 
 ```erlang
 %% Load the latest snapshot
-case reckon_db_snapshots:load(my_store, <<"account-123">>) of
+case reckon_db_snapshots:load(my_store, <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>) of
     {ok, Snapshot} ->
         Version = Snapshot#snapshot.version,
         State = Snapshot#snapshot.data,
@@ -67,20 +67,20 @@ case reckon_db_snapshots:load(my_store, <<"account-123">>) of
 end.
 
 %% Load snapshot at a specific version
-{ok, Snapshot} = reckon_db_snapshots:load_at(my_store, <<"account-123">>, 100).
+{ok, Snapshot} = reckon_db_snapshots:load_at(my_store, <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>, 100).
 ```
 
 ### Listing Snapshots
 
 ```erlang
 %% List all snapshots for a stream
-{ok, Snapshots} = reckon_db_snapshots:list(my_store, <<"account-123">>).
+{ok, Snapshots} = reckon_db_snapshots:list(my_store, <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>).
 
 %% Returns list of snapshots sorted by version (newest first)
 [
-    #snapshot{stream_id = <<"account-123">>, version = 150, ...},
-    #snapshot{stream_id = <<"account-123">>, version = 100, ...},
-    #snapshot{stream_id = <<"account-123">>, version = 50, ...}
+    #snapshot{stream_id = <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>, version = 150, ...},
+    #snapshot{stream_id = <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>, version = 100, ...},
+    #snapshot{stream_id = <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>, version = 50, ...}
 ]
 ```
 
@@ -88,10 +88,10 @@ end.
 
 ```erlang
 %% Delete a specific snapshot
-ok = reckon_db_snapshots:delete_at(my_store, <<"account-123">>, 50).
+ok = reckon_db_snapshots:delete_at(my_store, <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>, 50).
 
 %% Delete old snapshots (keep only recent ones)
-{ok, Snapshots} = reckon_db_snapshots:list(my_store, <<"account-123">>),
+{ok, Snapshots} = reckon_db_snapshots:list(my_store, <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>),
 OldSnapshots = lists:nthtail(3, Snapshots),  %% Keep 3 most recent
 [reckon_db_snapshots:delete_at(my_store, S#snapshot.stream_id, S#snapshot.version)
  || S <- OldSnapshots].
@@ -217,7 +217,7 @@ The `reckon_db_aggregator` module provides the `aggregate/3` function for snapsh
 
 ```erlang
 %% Load snapshot and replay events manually
-StreamId = <<"account-123">>,
+StreamId = <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>,
 
 %% Try to load snapshot
 {Snapshot, StartVersion} = case reckon_db_snapshots:load(my_store, StreamId) of

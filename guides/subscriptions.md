@@ -25,7 +25,7 @@ Subscribe to all events in a specific stream:
 {ok, SubKey} = reckon_db_subscriptions:subscribe(
     my_store,
     stream,                          %% subscription type
-    <<"order-123">>,                 %% stream ID
+    <<"order-018f6a7b8c9d4e5f60718293a4b5c6d9">>,                 %% stream ID
     <<"order_123_handler">>          %% subscription name
 ).
 ```
@@ -356,7 +356,7 @@ handle_event(Event) ->
 Within a single stream, events are ordered. Across streams, ordering is not guaranteed:
 
 ```erlang
-%% Events from stream "order-123" arrive in order:
+%% Events from stream "order-018f6a7b8c9d4e5f60718293a4b5c6d9" arrive in order:
 %% OrderPlaced -> ItemAdded -> OrderShipped
 
 %% But events from different streams may interleave:

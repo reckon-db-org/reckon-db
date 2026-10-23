@@ -25,7 +25,7 @@ Every event stored in reckon-db includes an `epoch_us` field - microseconds sinc
 ```erlang
 #event{
     event_id = <<"evt-123">>,
-    stream_id = <<"orders-456">>,
+    stream_id = <<"orders-018f6a7b8c9d4e5f60718293a4b5c6dc">>,
     version = 5,
     epoch_us = 1735689600000000,  %% Jan 1, 2025 00:00:00 UTC
     event_type = <<"OrderPlaced">>,
@@ -68,9 +68,9 @@ Events are stored at:
 The 12-character zero-padded version enables lexicographic ordering:
 
 ```
-[streams, <<"orders-123">>, <<"000000000000">>] -> Event v0
-[streams, <<"orders-123">>, <<"000000000001">>] -> Event v1
-[streams, <<"orders-123">>, <<"000000000002">>] -> Event v2
+[streams, <<"orders">>, <<"018f6a7b8c9d4e5f60718293a4b5c6db">>, <<"000000000000">>] -> Event v0
+[streams, <<"orders">>, <<"018f6a7b8c9d4e5f60718293a4b5c6db">>, <<"000000000001">>] -> Event v1
+[streams, <<"orders">>, <<"018f6a7b8c9d4e5f60718293a4b5c6db">>, <<"000000000002">>] -> Event v2
 ```
 
 ## Cluster Behavior
@@ -143,7 +143,7 @@ Future versions could add:
 ```erlang
 %% Reconstruct order state as it was on Dec 31, 2024
 Timestamp = 1735603200000000,  %% Dec 31, 2024 00:00:00 UTC
-{ok, Events} = reckon_db_temporal:read_until(my_store, <<"order-123">>, Timestamp),
+{ok, Events} = reckon_db_temporal:read_until(my_store, <<"order-018f6a7b8c9d4e5f60718293a4b5c6d9">>, Timestamp),
 State = lists:foldl(fun apply_event/2, initial_state(), Events).
 ```
 

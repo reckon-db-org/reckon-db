@@ -35,7 +35,7 @@ You can reconstruct the state at any point in time:
 
 ```erlang
 %% Get account balance as of last month
-{ok, Events} = reckon_db_streams:read(my_store, <<"account-123">>, 0, 1000, forward),
+{ok, Events} = reckon_db_streams:read(my_store, <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>, 0, 1000, forward),
 PastEvents = [E || E <- Events, E#event.timestamp < LastMonthTimestamp],
 Balance = lists:foldl(fun apply_event/2, 0, PastEvents).
 ```
@@ -44,8 +44,9 @@ Balance = lists:foldl(fun apply_event/2, 0, PastEvents).
 Rebuild read models, fix bugs in projections, or create new views of historical data:
 
 ```erlang
-%% Rebuild a projection from scratch
-{ok, Events} = reckon_db_streams:read(my_store, <<"orders-*">>, 0, infinity, forward),
+%% Rebuild a projection from scratch: page through the whole store's log.
+%% read/5 reads one stream by its exact id; there is no wildcard id.
+{ok, Events} = reckon_db_streams:read_all_global(my_store, 0, 1000),
 lists:foreach(fun(E) -> update_projection(E) end, Events).
 ```
 
@@ -58,10 +59,7 @@ Events can be consumed by multiple subscribers independently:
 
 ### Streams
 
-A **stream** is an ordered sequence of events sharing a common identifier (the stream ID). Streams typically represent:
-- An aggregate (e.g., `order-123`, `user-456`)
-- A category (e.g., `orders`, `users`)
-- A partition (e.g., `orders-region-eu`)
+A **stream** is an ordered sequence of events sharing a common identifier (the stream ID). A stream usually holds one aggregate, such as one order or one user. Its id is `<prefix>-<32 hex>`, for example `order-018f6a7b8c9d4e5f60718293a4b5c6d9`, and the store refuses any other shape; [Stream Ids](https://hexdocs.pm/reckon_gater/stream_ids.html) in reckon-gater states the rule and how to make one.
 
 ```erlang
 %% Append events to a stream
@@ -72,7 +70,7 @@ Events = [
         metadata => #{user_id => <<"user-456">>, correlation_id => <<"req-789">>}
     }
 ],
-{ok, Version} = reckon_db_streams:append(my_store, <<"order-ord-123">>, -1, Events).
+{ok, Version} = reckon_db_streams:append(my_store, <<"order-018f6a7b8c9d4e5f60718293a4b5c6d9">>, -1, Events).
 ```
 
 ### Events
@@ -148,10 +146,10 @@ reckon-db uses optimistic concurrency control to prevent conflicting writes:
 %% N >= 0: Stream version must equal N
 
 %% First write to a new stream
-{ok, 0} = reckon_db_streams:append(Store, <<"order-123">>, -1, [Event1]).
+{ok, 0} = reckon_db_streams:append(Store, <<"order-018f6a7b8c9d4e5f60718293a4b5c6d9">>, -1, [Event1]).
 
 %% Subsequent writes must specify expected version
-{ok, 1} = reckon_db_streams:append(Store, <<"order-123">>, 0, [Event2]).
+{ok, 1} = reckon_db_streams:append(Store, <<"order-018f6a7b8c9d4e5f60718293a4b5c6d9">>, 0, [Event2]).
 
 %% Concurrent writes will fail with version mismatch
 %% Process A reads version 1

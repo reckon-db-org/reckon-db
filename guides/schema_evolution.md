@@ -96,7 +96,7 @@ When reading events, upcasting transforms old versions to the current schema:
 
 ```erlang
 %% Read events (may contain multiple versions)
-{ok, Events} = reckon_db_streams:read(my_store, <<"orders-123">>, 0, 100, forward),
+{ok, Events} = reckon_db_streams:read(my_store, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>, 0, 100, forward),
 
 %% Upcast all events to current schema versions
 UpcastedEvents = reckon_db_schema:upcast(my_store, Events).

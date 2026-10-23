@@ -64,7 +64,9 @@ depend on `evoq` or `reckon_evoq` (see [Reckon stack](#reckon-stack)).
 %% Start the application
 application:ensure_all_started(reckon_db).
 
-%% Append events to a stream
+%% Append events to a stream. A stream id is <prefix>-<32 hex>; anything
+%% else is refused, and reckon_gater_stream_id:new(user) makes one. The rule:
+%% https://hexdocs.pm/reckon_gater/stream_ids.html
 Events = [
     #{
         event_type => <<"user_registered_v1">>,
@@ -72,16 +74,16 @@ Events = [
         metadata => #{correlation_id => <<"req-123">>}
     }
 ],
-{ok, Version} = reckon_db_streams:append(my_store, <<"user-123">>, -1, Events).
+{ok, Version} = reckon_db_streams:append(my_store, <<"user-018f6a7b8c9d4e5f60718293a4b5c6d7">>, -1, Events).
 
 %% Read events from a stream
-{ok, ReadEvents} = reckon_db_streams:read(my_store, <<"user-123">>, 0, 100, forward).
+{ok, ReadEvents} = reckon_db_streams:read(my_store, <<"user-018f6a7b8c9d4e5f60718293a4b5c6d7">>, 0, 100, forward).
 
 %% Subscribe to events
 {ok, SubKey} = reckon_db_subscriptions:subscribe(
     my_store,
     stream,                    %% Type: stream | event_type | event_pattern | event_payload
-    <<"user-123">>,            %% Selector
+    <<"user-018f6a7b8c9d4e5f60718293a4b5c6d7">>,            %% Selector
     <<"user_projection">>      %% Subscription name
 ).
 
@@ -216,13 +218,13 @@ Example usage:
 
 ```erlang
 %% Load events and aggregate
-{ok, Events} = reckon_db_streams:read(my_store, <<"account-123">>, 0, 10000, forward),
+{ok, Events} = reckon_db_streams:read(my_store, <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>, 0, 10000, forward),
 TaggedState = reckon_db_aggregator:foldl(Events, #{balance => {sum, 0}}),
 FinalState = reckon_db_aggregator:finalize(TaggedState).
 
 %% Or use aggregate/3 with snapshot support
-{ok, Snapshot} = reckon_db_snapshots:load(my_store, <<"account-123">>),
-{ok, NewEvents} = reckon_db_streams:read(my_store, <<"account-123">>, Snapshot#snapshot.version + 1, 10000, forward),
+{ok, Snapshot} = reckon_db_snapshots:load(my_store, <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>),
+{ok, NewEvents} = reckon_db_streams:read(my_store, <<"account-018f6a7b8c9d4e5f60718293a4b5c6d8">>, Snapshot#snapshot.version + 1, 10000, forward),
 State = reckon_db_aggregator:aggregate(NewEvents, Snapshot, #{}).
 ```
 

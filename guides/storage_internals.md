@@ -44,8 +44,8 @@ All data is organized under hierarchical paths:
 ### Path Format
 
 ```erlang
-?STREAMS_PATH ++ [StreamId, PaddedVersion]
-%% Example: [streams, <<"orders-123">>, <<"000000000042">>]
+?STREAMS_PATH ++ [Type, Id, PaddedVersion]
+%% Example: [streams, <<"orders">>, <<"018f6a7b8c9d4e5f60718293a4b5c6db">>, <<"000000000042">>]
 ```
 
 ### Version Padding
@@ -102,7 +102,7 @@ khepri:get_many(StoreId, Pattern).
 
 ```erlang
 ?SNAPSHOTS_PATH ++ [StreamId, PaddedVersion]
-%% Example: [snapshots, <<"orders-123">>, <<"000000000100">>]
+%% Example: [snapshots, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>, <<"000000000100">>]
 ```
 
 ### Snapshot Record
@@ -330,10 +330,10 @@ Configure via Ra settings:
 
 ```erlang
 %% All events for a stream
-[streams, <<"orders-123">>, ?KHEPRI_WILDCARD_STAR]
+[streams, <<"orders">>, <<"018f6a7b8c9d4e5f60718293a4b5c6db">>, ?KHEPRI_WILDCARD_STAR]
 
 %% All snapshots for a stream
-[snapshots, <<"orders-123">>, ?KHEPRI_WILDCARD_STAR]
+[snapshots, <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>, ?KHEPRI_WILDCARD_STAR]
 ```
 
 ### Existence Checks

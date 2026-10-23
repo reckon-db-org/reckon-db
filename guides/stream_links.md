@@ -75,7 +75,7 @@ ok = reckon_db_links:create(my_store, #{
 ### Single Stream
 
 ```erlang
-source => #{type => stream, stream_id => <<"orders-123">>}
+source => #{type => stream, stream_id => <<"orders-018f6a7b8c9d4e5f60718293a4b5c6db">>}
 ```
 
 ### Stream Pattern (Wildcard)
@@ -235,9 +235,12 @@ wildcard_to_regex(Pattern) ->
 ```
 
 Examples:
-- `orders-*` matches `orders-123`, `orders-456`
-- `*-completed` matches `order-completed`, `payment-completed`
-- `user-*-events` matches `user-123-events`
+- `orders-*` matches every `orders` stream, such as `orders-018f6a7b8c9d4e5f60718293a4b5c6db`
+- `order*` matches both the `order` and the `orders` streams
+- `*-018f*` matches streams of any prefix whose id starts with `018f`
+
+A pattern is matched against whole stream ids, which always have the shape
+`<prefix>-<32 hex>` (see [Stream Ids](https://hexdocs.pm/reckon_gater/stream_ids.html)).
 
 ## Use Cases
 

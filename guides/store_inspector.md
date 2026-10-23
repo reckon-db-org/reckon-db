@@ -29,8 +29,8 @@ Returns snapshot summaries across all streams, sorted newest first. Data payload
 
 ```erlang
 {ok, Snapshots} = reckon_db_store_inspector:list_all_snapshots(my_store).
-%% [#{stream_id => <<"user-123">>, version => 50, timestamp => 1710000000000, metadata => #{}},
-%%  #{stream_id => <<"order-456">>, version => 20, timestamp => 1709000000000, metadata => #{}}]
+%% [#{stream_id => <<"user-018f6a7b8c9d4e5f60718293a4b5c6d7">>, version => 50, timestamp => 1710000000000, metadata => #{}},
+%%  #{stream_id => <<"order-018f6a7b8c9d4e5f60718293a4b5c6da">>, version => 20, timestamp => 1709000000000, metadata => #{}}]
 ```
 
 ### List Subscriptions
@@ -76,8 +76,8 @@ Census of which event types appear and how many of each. Can be expensive for la
 Detailed information about a single stream, including snapshot coverage.
 
 ```erlang
-{ok, Info} = reckon_db_store_inspector:stream_info(my_store, <<"user-123">>).
-%% #{stream_id => <<"user-123">>,
+{ok, Info} = reckon_db_store_inspector:stream_info(my_store, <<"user-018f6a7b8c9d4e5f60718293a4b5c6d7">>).
+%% #{stream_id => <<"user-018f6a7b8c9d4e5f60718293a4b5c6d7">>,
 %%   version => 50,
 %%   event_count => 51,
 %%   first_event_at => 1700000000000,
