@@ -228,7 +228,7 @@ emit_save_telemetry({error, Reason}, _StartTime, StoreId, StreamId, Version, _Da
 %% anchor (reckon-db#25).
 -spec apply_snapshot_integrity(
     atom(), binary(), non_neg_integer(), snapshot()
-) -> {ok, snapshot()} | {error, term()}.
+) -> {ok, snapshot()} | {error, {snapshot_anchor_unavailable, map()}}.
 apply_snapshot_integrity(StoreId, StreamId, Version, Snapshot) ->
     seal(snapshot_kind(StoreId, StreamId), StoreId, StreamId, Version, Snapshot).
 
