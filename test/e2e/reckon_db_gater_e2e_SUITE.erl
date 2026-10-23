@@ -521,7 +521,8 @@ gater_wrong_version_test(Config) ->
 gater_invalid_stream_id_test(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
-    Expected = {error, {invalid_stream_id, malformed_user_id, BadId}},
+    Expected = {error, {invalid_stream_id, malformed_user_id, BadId,
+        reckon_gater_stream_id:explain(malformed_user_id)}},
 
     Worker = start_gateway_worker(StoreId, Config),
     timer:sleep(200),

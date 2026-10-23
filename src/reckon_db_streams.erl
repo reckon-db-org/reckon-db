@@ -158,11 +158,11 @@ append(StoreId, StreamId, ExpectedVersion, Events, _Opts) ->
     %% See reckon_gater_stream_id for the format rules (moved out
     %% of reckon-db in 3.0.0 — protocol contract belongs in the
     %% gateway layer, shared with reckon-evoq).
-    case reckon_gater_stream_id:validate(StreamId) of
+    case reckon_db_stream_path:validate(StreamId) of
         ok ->
             do_append_with_telemetry(StoreId, StreamId, ExpectedVersion, Events);
-        {error, Reason} ->
-            {error, {invalid_stream_id, Reason, StreamId}}
+        {error, _} = Invalid ->
+            Invalid
     end.
 
 %% @private validation-gated wrapper around do_append that also

@@ -381,10 +381,13 @@ read_from_nonexistent_stream(Config) ->
 read_rejects_invalid_stream_id(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
-    Expected = {error, {invalid_stream_id, malformed_user_id, BadId}},
+    Expected = {error, {invalid_stream_id, malformed_user_id, BadId,
+        reckon_gater_stream_id:explain(malformed_user_id)}},
 
     ?assertEqual(Expected, reckon_db_streams:read(StoreId, BadId, 0, 10, forward)),
     ?assertEqual(Expected, reckon_db_streams:read_all(StoreId, BadId, 10, forward)),
+    ?assertEqual(Expected, reckon_db_streams:append(StoreId, BadId, -1,
+        [#{event_type => <<"rejected_v1">>, data => #{}}])),
     ?assertEqual(Expected,
         reckon_db_streams:read(StoreId, BadId, 0, 10, forward, #{verify => strict})),
     ok.
@@ -514,7 +517,9 @@ worker_answers_invalid_stream_id(Config) ->
     BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
     State = {state, StoreId, undefined},
 
-    ?assertEqual({reply, {error, {invalid_stream_id, malformed_user_id, BadId}}, State},
+    ?assertEqual({reply, {error, {invalid_stream_id, malformed_user_id, BadId,
+
+        reckon_gater_stream_id:explain(malformed_user_id)}}, State},
         reckon_db_gateway_worker:handle_call({get_version, StoreId, BadId}, self(), State)),
     ok.
 
@@ -540,7 +545,9 @@ invalid_stream_id_is_not_retried(Config) ->
     %% in the default 100ms-to-30s ladder.
     RetryConfig = #retry_config{base_delay_ms = 1, max_delay_ms = 1, max_retries = 3},
 
-    ?assertEqual({error, {invalid_stream_id, malformed_user_id, BadId}},
+    ?assertEqual({error, {invalid_stream_id, malformed_user_id, BadId,
+
+        reckon_gater_stream_id:explain(malformed_user_id)}},
         reckon_gater_retry:with_retry(StoreId, Attempt, RetryConfig)),
     ?assertEqual(1, counters:get(Counter, 1)),
     ok.
@@ -550,7 +557,9 @@ delete_rejects_invalid_stream_id(Config) ->
     StoreId = proplists:get_value(store_id, Config),
     BadId = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
 
-    ?assertEqual({error, {invalid_stream_id, malformed_user_id, BadId}},
+    ?assertEqual({error, {invalid_stream_id, malformed_user_id, BadId,
+
+        reckon_gater_stream_id:explain(malformed_user_id)}},
         reckon_db_streams:delete(StoreId, BadId)),
     ok.
 

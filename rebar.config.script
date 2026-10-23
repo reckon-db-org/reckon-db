@@ -1,0 +1,21 @@
+%% Refuse an Erlang/OTP release reckon-db does not run on, before the build
+%% reaches the dependency that would fail with a stack trace instead.
+%%
+%% Supported: OTP 28, the release CI builds and tests on. On OTP 29 the
+%% pinned khepri 0.17 does not compile (warnings_as_errors on a deprecation)
+%% and, past that, horus 0.3 cannot extract OTP 29 code, so the first write
+%% crashes. rebar3 evaluates this file when reckon_db is fetched as a
+%% dependency too, so the message reaches the application's build.
+Release = list_to_integer(erlang:system_info(otp_release)),
+Supported = 28,
+Unsupported = Release > Supported,
+Unsupported andalso begin
+    io:format(standard_error,
+        "~nreckon_db supports Erlang/OTP ~b; this is OTP ~b.~n"
+        "On OTP ~b its storage layer (khepri 0.17, horus 0.3) does not build or write.~n"
+        "Build with OTP ~b (for example the erlang:~b image).~n"
+        "See https://github.com/reckon-db-org/reckon-db#versions~n~n",
+        [Supported, Release, Release, Supported, Supported]),
+    erlang:halt(1)
+end,
+CONFIG.

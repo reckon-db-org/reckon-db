@@ -49,11 +49,16 @@ warning and uses the pure-Erlang fallbacks, so it works everywhere.
 | Component | Version |
 |---|---|
 | `reckon_db` (this repo) | 5.11.13 |
-| `reckon_gater` (dep) | ~> 3.10 |
+| `reckon_gater` (dep) | ~> 3.14 |
 | `khepri` (dep) | 0.17.2 |
 | `ra` (transitive, via khepri) | 2.16.x |
 | `telemetry` (dep) | 1.3.0 |
 | Erlang/OTP | 28 (built and tested on 28.4.3: CI and `.tool-versions`) |
+
+OTP 28 is the supported release. OTP 29 is not: the pinned khepri 0.17 does
+not compile there, and past that horus 0.3 cannot extract OTP 29 code, so the
+first write crashes. A build on a newer OTP stops at once with a message
+saying so (`rebar.config.script`), also when reckon_db is a dependency.
 
 reckon-db depends on `reckon_gater`, `khepri`, and `ra` only. It does **not**
 depend on `evoq` or `reckon_evoq` (see [Reckon stack](#reckon-stack)).
@@ -79,17 +84,19 @@ Events = [
 %% Read events from a stream
 {ok, ReadEvents} = reckon_db_streams:read(my_store, <<"user-018f6a7b8c9d4e5f60718293a4b5c6d7">>, 0, 100, forward).
 
-%% Subscribe to events
+%% Subscribe to events. The subscriber is the process the events are sent to.
 {ok, SubKey} = reckon_db_subscriptions:subscribe(
     my_store,
     stream,                    %% Type: stream | event_type | event_pattern | event_payload
     <<"user-018f6a7b8c9d4e5f60718293a4b5c6d7">>,            %% Selector
-    <<"user_projection">>      %% Subscription name
+    <<"user_projection">>,     %% Subscription name
+    #{subscriber => self()}
 ).
 
-%% Receive events
+%% Receive events: they arrive in batches of #event{} records
+%% (include_lib "reckon_gater/include/reckon_gater_types.hrl")
 receive
-    {event, Event} -> io:format("Received: ~p~n", [Event])
+    {events, Events} -> io:format("Received: ~p~n", [Events])
 end.
 ```
 

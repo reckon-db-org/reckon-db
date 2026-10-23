@@ -81,15 +81,20 @@ validate_rejects_with_the_reason_and_the_id_test() ->
     %% The 40-hex suffix gater 2.2.0 stopped accepting, as a consumer
     %% that has not moved yet would send it.
     Old = <<"post-1d17cea1aa1a700d3bcaf8e402ec42920a98e146">>,
-    ?assertEqual({error, {invalid_stream_id, malformed_user_id, Old}},
+    ?assertEqual({error, {invalid_stream_id, malformed_user_id, Old,
+        reckon_gater_stream_id:explain(malformed_user_id)}},
         reckon_db_stream_path:validate(Old)),
-    ?assertEqual({error, {invalid_stream_id, malformed_user_id, <<"nope">>}},
+    ?assertEqual({error, {invalid_stream_id, malformed_user_id, <<"nope">>,
+        reckon_gater_stream_id:explain(malformed_user_id)}},
         reckon_db_stream_path:validate(<<"nope">>)),
-    ?assertEqual({error, {invalid_stream_id, malformed_system_id, <<"$a b">>}},
+    ?assertEqual({error, {invalid_stream_id, malformed_system_id, <<"$a b">>,
+        reckon_gater_stream_id:explain(malformed_system_id)}},
         reckon_db_stream_path:validate(<<"$a b">>)),
-    ?assertEqual({error, {invalid_stream_id, empty, <<>>}},
+    ?assertEqual({error, {invalid_stream_id, empty, <<>>,
+        reckon_gater_stream_id:explain(empty)}},
         reckon_db_stream_path:validate(<<>>)),
-    ?assertEqual({error, {invalid_stream_id, not_binary, 42}},
+    ?assertEqual({error, {invalid_stream_id, not_binary, 42,
+        reckon_gater_stream_id:explain(not_binary)}},
         reckon_db_stream_path:validate(42)).
 
 roundtrip_user_test() ->
