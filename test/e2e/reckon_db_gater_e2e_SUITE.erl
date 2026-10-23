@@ -69,7 +69,9 @@
     gater_record_snapshot_test/1,
     gater_read_snapshot_test/1,
     gater_list_snapshots_test/1,
-    gater_delete_snapshot_test/1
+    gater_delete_snapshot_test/1,
+    gater_read_snapshot_zero_is_latest_test/1,
+    gater_snapshot_version_not_an_integer_test/1
 ]).
 
 %% Test cases - Load balancing and health
@@ -127,7 +129,9 @@ groups() ->
             gater_record_snapshot_test,
             gater_read_snapshot_test,
             gater_list_snapshots_test,
-            gater_delete_snapshot_test
+            gater_delete_snapshot_test,
+            gater_read_snapshot_zero_is_latest_test,
+            gater_snapshot_version_not_an_integer_test
         ]},
         {load_balancing, [sequence], [
             gater_load_balance_test,
@@ -717,6 +721,72 @@ gater_delete_snapshot_test(Config) ->
 
     gen_server:stop(Worker),
     ok.
+
+%% @doc Through the gateway, version 0 reads the latest snapshot
+%% (reckon-db#15). A snapshot recorded at version 0, which an aggregate
+%% snapshotted after its first event has, is listed and can be read with
+%% reckon_db_snapshots:load_at/3; through read_snapshot it cannot be read
+%% by version once a later one exists.
+gater_read_snapshot_zero_is_latest_test(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    SourceId = generate_uuid(),
+    StreamId = generate_stream_id(),
+    Worker = start_gateway_worker(StoreId, Config),
+    timer:sleep(200),
+    ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, 0, #{data => #{v => 0}}),
+    ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, 5, #{data => #{v => 5}}),
+    timer:sleep(100),
+    {ok, Latest} = reckon_gater_api:read_snapshot(StoreId, SourceId, StreamId, 0),
+    ?assertEqual(5, snapshot_version(Latest)),
+    {ok, Listed} = reckon_gater_api:list_snapshots(StoreId, SourceId, StreamId),
+    ?assertEqual([0, 5], lists:sort([snapshot_version(S) || S <- Listed])),
+    {ok, AtZero} = reckon_db_snapshots:load_at(StoreId, StreamId, 0),
+    ?assertEqual(0, snapshot_version(AtZero)),
+    gen_server:stop(Worker),
+    ok.
+
+%% @doc A snapshot version that is not a non-negative integer is answered
+%% {error, {invalid_version, V}} and the gateway worker serving every other
+%% caller stays up (reckon-db#14). `latest' is what the reckon-gater guides
+%% used to show; it raised badarg in the padding of load_at/3 and killed
+%% the worker. The casts take the same version and are dropped.
+gater_snapshot_version_not_an_integer_test(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    SourceId = generate_uuid(),
+    StreamId = generate_stream_id(),
+    Worker = start_gateway_worker(StoreId, Config),
+    timer:sleep(200),
+    ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, 3, #{data => #{v => 3}}),
+    timer:sleep(100),
+    lists:foreach(
+      fun(Bad) ->
+          ?assert(invalid_version(Bad, reckon_gater_api:read_snapshot(StoreId, SourceId,
+                                                                      StreamId, Bad))),
+          ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, Bad, #{data => #{}}),
+          ok = reckon_gater_api:delete_snapshot(StoreId, SourceId, StreamId, Bad),
+          ?assertEqual({error, {invalid_version, Bad}},
+                       reckon_db_snapshots:save(StoreId, StreamId, Bad, #{})),
+          ?assertEqual({error, {invalid_version, Bad}},
+                       reckon_db_snapshots:load_at(StoreId, StreamId, Bad)),
+          ?assertEqual({error, {invalid_version, Bad}},
+                       reckon_db_snapshots:delete_at(StoreId, StreamId, Bad))
+      end, [latest, -1, 1.0, <<"3">>]),
+    timer:sleep(100),
+    ?assert(is_process_alive(Worker)),
+    {ok, Snapshot} = reckon_gater_api:read_snapshot(StoreId, SourceId, StreamId, 3),
+    ?assertEqual(3, snapshot_version(Snapshot)),
+    gen_server:stop(Worker),
+    ok.
+
+%% The worker answers {error, {invalid_version, V}}. reckon-gater up to
+%% 3.15 retries that reason and hands it back as retries_exhausted
+%% (reckon-gater#7); either way the caller is told and the worker stays up.
+invalid_version(V, {error, {invalid_version, V}}) -> true;
+invalid_version(V, {error, {retries_exhausted, {invalid_version, V}}}) -> true;
+invalid_version(_V, _Other) -> false.
+
+snapshot_version(#snapshot{version = V}) -> V;
+snapshot_version(#{version := V}) -> V.
 
 %%====================================================================
 %% Load Balancing and Health Tests
