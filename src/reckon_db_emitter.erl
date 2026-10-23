@@ -114,13 +114,11 @@ handle_cast(_Msg, State) ->
 
 %% Handle broadcast messages (from remote emitters)
 handle_info({broadcast, Topic, Event}, State) ->
-    handle_event_delivery(Topic, Event, State),
-    {noreply, State};
+    {noreply, handle_event_delivery(Topic, Event, State)};
 
 %% Handle forward_to_local messages (from local emitters)
 handle_info({forward_to_local, Topic, Event}, State) ->
-    handle_event_delivery(Topic, Event, State),
-    {noreply, State};
+    {noreply, handle_event_delivery(Topic, Event, State)};
 
 %% Handle direct events message
 handle_info({events, Events}, #state{subscriber = Subscriber} = State) when is_list(Events) ->
@@ -166,21 +164,22 @@ persisted_subscriber(#subscription{subscriber_pid = Pid}, _Fallback) when is_pid
 persisted_subscriber(_Subscription, Fallback) ->
     Fallback.
 
-%% @private Handle event delivery to subscriber
--spec handle_event_delivery(binary(), event(), #state{}) -> ok.
-handle_event_delivery(_Topic, _Event, #state{active = false}) ->
-    ok;
+%% @private Handle event delivery to subscriber. The state comes back
+%% holding the subscriber the event was delivered to.
+-spec handle_event_delivery(binary(), event(), #state{}) -> #state{}.
+handle_event_delivery(_Topic, _Event, #state{active = false} = State) ->
+    State;
 handle_event_delivery(Topic, Event, #state{
     store_id = StoreId,
     subscription_key = SubscriptionKey,
     subscriber = Subscriber
-}) ->
+} = State) ->
     telemetry:execute(
         ?SUBSCRIPTION_EVENT_DELIVERED,
         #{count => 1},
         #{store_id => StoreId, subscription_key => SubscriptionKey, topic => Topic}
     ),
-    deliver_event(Subscriber, Event, StoreId, SubscriptionKey, Topic).
+    State#state{subscriber = deliver_event(Subscriber, Event, StoreId, SubscriptionKey, Topic)}.
 
 maybe_forward_events(undefined, _Events) ->
     ok;
@@ -198,7 +197,8 @@ maybe_forward_events(Pid, Events) when is_pid(Pid) ->
     ok.
 
 deliver_event(undefined, Event, StoreId, _SubscriptionKey, Topic) ->
-    broadcast_to_topic(StoreId, Topic, Event);
+    ok = broadcast_to_topic(StoreId, Topic, Event),
+    undefined;
 deliver_event(Pid, Event, StoreId, SubscriptionKey, _Topic) when is_pid(Pid) ->
     send_to_subscriber(Pid, Event, StoreId, SubscriptionKey).
 
@@ -229,24 +229,39 @@ broadcast_to_topic(StoreId, Topic, Event) ->
 %% the trigger fired on a node other than the subscriber's node
 %% (i.e. virtually always, for subscribers attached to a non-leader
 %% gateway).
--spec send_to_subscriber(pid(), event(), atom(), binary()) -> ok.
+%%
+%% Answers the subscriber the event went to.
+-spec send_to_subscriber(pid(), event(), atom(), binary()) -> pid().
 send_to_subscriber(Pid, Event, StoreId, SubscriptionKey) when node(Pid) =:= node() ->
-    case erlang:is_process_alive(Pid) of
-        true ->
-            Pid ! {events, [Event]},
-            ok;
-        false ->
-            logger:warning("Subscriber ~p is dead for subscription ~s in store ~p, "
-                           "stopping emitter pool",
-                          [Pid, SubscriptionKey, StoreId]),
-            stop_pool_async(StoreId, SubscriptionKey)
-    end;
+    delivered(erlang:is_process_alive(Pid), Pid, Event, StoreId, SubscriptionKey);
 send_to_subscriber(Pid, Event, _StoreId, _SubscriptionKey) when is_pid(Pid) ->
     Pid ! {events, [Event]},
-    ok.
+    Pid.
+
+delivered(true, Pid, Event, _StoreId, _SubscriptionKey) ->
+    Pid ! {events, [Event]},
+    Pid;
+delivered(false, Dead, Event, StoreId, SubscriptionKey) ->
+    resubscribed(current_subscriber(StoreId, SubscriptionKey, Dead), Dead, Event, StoreId, SubscriptionKey).
+
+%% @private A dead subscriber may already have been replaced: its
+%% restarted process re-subscribed and the store names the new pid, while
+%% the re-point cast (reckon_db_subscriptions:ensure_emitter_pool/2) has
+%% not reached this emitter yet. The event then goes to the new pid.
+%% Only a subscriber the store still names is cleaned up, by stopping the
+%% pool (reckon-db#24).
+resubscribed(Dead, Dead, _Event, StoreId, SubscriptionKey) ->
+    logger:warning("Subscriber ~p is dead for subscription ~s in store ~p, "
+                   "stopping emitter pool",
+                  [Dead, SubscriptionKey, StoreId]),
+    ok = stop_pool_async(StoreId, SubscriptionKey, Dead),
+    Dead;
+resubscribed(Current, _Dead, Event, StoreId, SubscriptionKey) ->
+    send_to_subscriber(Current, Event, StoreId, SubscriptionKey).
 
 %% @private Stop the emitter pool asynchronously so event delivery isn't
-%% blocked during the (rare) dead-subscriber cleanup.
-stop_pool_async(StoreId, SubscriptionKey) ->
-    spawn(fun() -> reckon_db_emitter_pool:stop(StoreId, SubscriptionKey) end),
+%% blocked during the (rare) dead-subscriber cleanup. The stop is
+%% conditional on the dead pid, see reckon_db_emitter_pool:stop_for_dead/3.
+stop_pool_async(StoreId, SubscriptionKey, Dead) ->
+    _ = spawn(fun() -> reckon_db_emitter_pool:stop_for_dead(StoreId, SubscriptionKey, Dead) end),
     ok.

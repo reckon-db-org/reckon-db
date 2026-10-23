@@ -57,6 +57,7 @@
     late_subscribe_starts_pool_immediately/1,
     resubscribe_after_pool_loss_starts_pool_immediately/1,
     resubscribe_with_running_pool_repoints_emitter/1,
+    resubscribe_racing_a_dead_delivery_keeps_the_pool/1,
     emitter_restart_after_repoint_delivers_to_current_subscriber/1,
     notification_subtree_restart_reactivates_leader/1,
     core_subtree_restart_reactivates_leader/1,
@@ -88,6 +89,7 @@ all() ->
         late_subscribe_starts_pool_immediately,
         resubscribe_after_pool_loss_starts_pool_immediately,
         resubscribe_with_running_pool_repoints_emitter,
+        resubscribe_racing_a_dead_delivery_keeps_the_pool,
         emitter_restart_after_repoint_delivers_to_current_subscriber,
         notification_subtree_restart_reactivates_leader,
         core_subtree_restart_reactivates_leader,
@@ -768,6 +770,62 @@ resubscribe_with_running_pool_repoints_emitter(Config) ->
 
     %% The delivery went to a live pid, so the pool was not torn down.
     ?assertNotEqual(undefined, whereis(PoolName)),
+
+    reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
+    ok.
+
+%% @doc GIVEN a subscription whose subscriber died, re-subscribed by its
+%%      restarted process: the store already names the new pid, but the
+%%      re-point cast has not reached the running emitter yet
+%%      WHEN an event reaches that emitter in between
+%%      THEN the event goes to the new subscriber and the pool stays up
+%%
+%%      The emitter found its dead pid and stopped the pool by key,
+%%      asynchronously. The re-subscribe had already seen the pool running
+%%      and started none, so the stop took the NEW subscriber's pool and
+%%      every later event was dropped with "No emitters" (reckon-db#24,
+%%      reckon_db_links_SUITE lost an event across a consumer crash).
+resubscribe_racing_a_dead_delivery_keeps_the_pool(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"testresubrace-001">>),
+    SubName = <<"resub_race_test">>,
+
+    ok = wait_for_leader(StoreId, 10000),
+
+    Old = spawn(fun() -> receive die -> ok end end),
+    {ok, SubKey} = reckon_db_subscriptions:subscribe(
+        StoreId, stream, StreamId, SubName,
+        #{subscriber => Old}
+    ),
+    PoolName = reckon_db_emitter_pool:name(StoreId, SubKey),
+    ?assertNotEqual(undefined, whereis(PoolName)),
+    Old ! die,
+    ok = wait_until_dead(Old),
+
+    %% The re-subscribe's write, without its re-point: the window in which
+    %% the emitter still holds the dead pid.
+    Sub = reckon_db_subscriptions_store:get(StoreId, SubKey),
+    _ = reckon_db_subscriptions_store:put(StoreId, Sub#subscription{subscriber_pid = self()}),
+
+    Event = #{event_type => <<"resub_race_event_v1">>, data => #{<<"n">> => 1}},
+    {ok, _} = reckon_db_streams:append(StoreId, StreamId, -2, [Event]),
+    receive
+        {events, [First]} ->
+            ?assertEqual(<<"resub_race_event_v1">>, First#event.event_type)
+    after 5000 ->
+        ct:fail("the event in the re-point window did not reach the new subscriber")
+    end,
+
+    %% The pool a dead delivery would have stopped is still there, and
+    %% the next event arrives through it.
+    timer:sleep(500),
+    ?assertNotEqual(undefined, whereis(PoolName)),
+    {ok, _} = reckon_db_streams:append(StoreId, StreamId, -2, [Event]),
+    receive
+        {events, [_Second]} -> ok
+    after 5000 ->
+        ct:fail("the event after the re-point window was dropped: the pool was stopped")
+    end,
 
     reckon_db_subscriptions:unsubscribe(StoreId, SubKey),
     ok.

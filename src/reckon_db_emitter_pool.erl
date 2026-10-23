@@ -18,6 +18,8 @@
     stop_emitter/2,
     update_emitter/2,
     stop/2,
+    stop_for_dead/3,
+    serialized/3,
     name/2
 ]).
 
@@ -77,6 +79,40 @@ restart_emitter(StoreId, Subscription) ->
         {ok, _Pid} -> ok;
         Error -> Error
     end.
+
+%% @doc Stop the pool of a subscription whose subscriber `Dead' died,
+%% unless the subscription names another subscriber by now.
+%%
+%% The emitter that found `Dead' asks for this asynchronously, so a
+%% re-subscribe by the restarted subscriber can come first. It wrote the
+%% new pid and saw this pool running, so it started none: stopping the pool
+%% then left the new subscriber with no emitters (reckon-db#24). The check
+%% and the stop run under serialized/3, the same section as the
+%% re-subscribe's write and its pool check, so one of the two always sees
+%% what the other did.
+-spec stop_for_dead(atom(), binary(), pid()) -> ok | {error, term()}.
+stop_for_dead(StoreId, SubscriptionKey, Dead) ->
+    serialized(StoreId, SubscriptionKey,
+               fun() -> stop_unless_replaced(named_subscriber(StoreId, SubscriptionKey), Dead,
+                                             StoreId, SubscriptionKey) end).
+
+%% @doc Run `Fun' in the section a subscription's pool is stopped or
+%% re-pointed in, on this node. The pools stopped here are this node's,
+%% and a subscriber that re-subscribes does so on its own node.
+-spec serialized(atom(), binary(), fun(() -> Result)) -> Result.
+serialized(StoreId, SubscriptionKey, Fun) ->
+    global:trans({{?MODULE, StoreId, SubscriptionKey}, self()}, Fun, [node()]).
+
+named_subscriber(StoreId, SubscriptionKey) ->
+    subscriber_of(reckon_db_subscriptions_store:get(StoreId, SubscriptionKey)).
+
+subscriber_of(#subscription{subscriber_pid = Pid}) -> Pid;
+subscriber_of(_NotFound) -> undefined.
+
+stop_unless_replaced(Other, Dead, _StoreId, _SubscriptionKey) when is_pid(Other), Other =/= Dead ->
+    ok;
+stop_unless_replaced(_Same, _Dead, StoreId, SubscriptionKey) ->
+    stop(StoreId, SubscriptionKey).
 
 %% @doc Stop an emitter pool by key (deprecated, use stop_emitter/2)
 -spec stop(atom(), binary()) -> ok | {error, term()}.

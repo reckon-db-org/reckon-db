@@ -256,8 +256,13 @@ finalize_subscription(StoreId, Key, Filter, Subscription, StartTime) ->
     {ok, binary()}.
 reregister_subscriber(StoreId, Key, SubscriptionName, Opts) ->
     NewPid = maps:get(subscriber, Opts, undefined),
-    ok = update_subscriber_pid(StoreId, Key, SubscriptionName, NewPid),
-    ok = ensure_emitter_pool(StoreId, Key),
+    %% The write and the pool check are one section with a dead
+    %% subscriber's pool stop (reckon_db_emitter_pool:stop_for_dead/3),
+    %% so that stop cannot land after this has counted on the pool.
+    ok = reckon_db_emitter_pool:serialized(StoreId, Key, fun() ->
+             ok = update_subscriber_pid(StoreId, Key, SubscriptionName, NewPid),
+             ensure_emitter_pool(StoreId, Key)
+         end),
     %% Re-register the Khepri trigger and emitter names.
     %% The trigger's stored proc (an Erlang fun) may be stale after restart.
     ok = reregister_trigger(StoreId, Key),

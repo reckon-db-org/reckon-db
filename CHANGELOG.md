@@ -32,6 +32,21 @@ under the store's `reckon_db_links_sup`) that follows its source live, and:
 Links stored by an earlier version are a shorter `#link{}` record and
 cannot be read by this one: recreate them (`delete/2`, `create/2`).
 
+### Fixed: a re-subscribe racing a dead delivery lost every later event (reckon-db#24)
+
+A subscriber that died and re-subscribed at once (a supervised consumer,
+such as a link's) could lose its subscription's pool. An event that reached
+a running emitter before the re-subscribe's re-point found the old, dead pid,
+and the emitter stopped the pool by key. The re-subscribe had already seen
+that pool running and started none, so every later event was dropped with
+"No emitters". Now:
+
+- an emitter that finds its subscriber dead first asks the store, and
+  delivers to the subscriber the store names when that is another pid;
+- the pool is stopped only while the store still names the dead pid, and
+  that check and the re-subscribe's write share one section per
+  subscription (`reckon_db_emitter_pool:serialized/3`).
+
 ### Added: paged DCB reads by type, tag and payload (evoq#6, part two)
 
 The limit-only DCB reads return the first Limit matching events and cannot
