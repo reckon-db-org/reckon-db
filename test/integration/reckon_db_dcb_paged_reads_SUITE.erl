@@ -210,7 +210,10 @@ a_sync_snapshot_write_is_acknowledged(Config) ->
 %% The cast drops that refusal with a log line; the call tells the caller.
 an_integrity_refusal_reaches_the_caller(Config) ->
     StoreId = ?config(store_id, Config),
-    Stream = <<"$evoq-checkpoint:order_summary">>,
+    %% A user stream with no event at version 41: nothing to anchor to, so
+    %% the save is refused (a "$" stream with no events is sealed instead,
+    %% reckon-db#25).
+    Stream = <<"order-018f6a7b8c9d4e5f60718293a4b5c6d7">>,
     enable_integrity(StoreId),
     try
         ?assertMatch({error, _},
