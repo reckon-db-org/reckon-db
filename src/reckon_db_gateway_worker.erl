@@ -266,8 +266,7 @@ stream_append_op(Request, From, State) ->
 %% does not decompose comes back as the boundary's invalid_stream_id.
 snapshot_op({record_snapshot_sync, _StoreId, _SourceUuid, StreamUuid, Version, SnapshotRecord},
             _From, #state{store_id = StoreId} = State) ->
-    Data = maps:get(data, SnapshotRecord, SnapshotRecord),
-    Metadata = maps:get(metadata, SnapshotRecord, #{}),
+    {Data, Metadata} = snapshot_parts(SnapshotRecord),
     {reply, reckon_db_snapshots:save(StoreId, StreamUuid, Version, Data, Metadata), State};
 
 %% Delete a snapshot and answer once it is gone (5.11.14+).
@@ -611,12 +610,7 @@ handle_cast(Msg, State) ->
 %% Record snapshot
 dispatch_cast({record_snapshot, _StoreId, _SourceUuid, StreamUuid, Version, SnapshotRecord}, State) ->
     #state{store_id = StoreId} = State,
-    %% The gateway wraps the payload as #{data, metadata, version}. Unwrap it so
-    %% data and metadata land in their own snapshot fields (save/5) instead of
-    %% the whole envelope being stored as `data` with metadata dropped. The
-    %% fallback keeps older callers that pass a bare data term working.
-    Data = maps:get(data, SnapshotRecord, SnapshotRecord),
-    Metadata = maps:get(metadata, SnapshotRecord, #{}),
+    {Data, Metadata} = snapshot_parts(SnapshotRecord),
     reckon_db_snapshots:save(StoreId, StreamUuid, Version, Data, Metadata),
     {noreply, State};
 
@@ -700,6 +694,20 @@ terminate(_Reason, #state{store_id = StoreId}) ->
 -spec msg_tag(term()) -> term().
 msg_tag(Msg) when is_tuple(Msg), tuple_size(Msg) > 0 -> element(1, Msg);
 msg_tag(Msg) -> Msg.
+
+%% @private The data and metadata of a snapshot record sent through the
+%% gateway, for record_snapshot and record_snapshot_sync alike. The gateway
+%% wraps the payload as #{data, metadata, version}: unwrapped, data and
+%% metadata land in their own snapshot fields (save/5) instead of the whole
+%% envelope being stored as data with metadata dropped. A map with no data
+%% key is the data itself. Any other term is the data, with no metadata: any
+%% caller can send one, and maps:get on it raised badmap and took the worker
+%% down with every call in flight on it.
+-spec snapshot_parts(term()) -> {term(), map()}.
+snapshot_parts(#{} = Record) ->
+    {maps:get(data, Record, Record), maps:get(metadata, Record, #{})};
+snapshot_parts(Data) ->
+    {Data, #{}}.
 
 %% @private Find subscription by name across all types
 -spec find_subscription_by_name(atom(), binary()) -> {ok, map()} | {error, not_found}.

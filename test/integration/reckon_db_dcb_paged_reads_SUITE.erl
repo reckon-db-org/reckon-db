@@ -32,7 +32,9 @@
          a_bad_request_is_refused/1,
          an_empty_read_is_done/1,
          a_sync_snapshot_write_is_acknowledged/1,
-         an_integrity_refusal_reaches_the_caller/1]).
+         an_integrity_refusal_reaches_the_caller/1,
+         a_bare_snapshot_record_is_saved/1,
+         a_bare_snapshot_record_cast_is_saved/1]).
 
 all() ->
     [pages_by_event_type_in_sequence_order,
@@ -44,7 +46,9 @@ all() ->
      a_bad_request_is_refused,
      an_empty_read_is_done,
      a_sync_snapshot_write_is_acknowledged,
-     an_integrity_refusal_reaches_the_caller].
+     an_integrity_refusal_reaches_the_caller,
+     a_bare_snapshot_record_is_saved,
+     a_bare_snapshot_record_cast_is_saved].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(crypto),
@@ -224,6 +228,28 @@ an_integrity_refusal_reaches_the_caller(Config) ->
         persistent_term:erase({reckon_db, integrity_enabled, StoreId}),
         persistent_term:erase({reckon_db, integrity_key, StoreId})
     end.
+
+%% Any gateway caller can send a record that is not a map. maps:get on it
+%% raised badmap and took the worker down with every call in flight on it
+%% (the reckon-db#4 class). A bare term is the snapshot's data.
+a_bare_snapshot_record_is_saved(Config) ->
+    StoreId = ?config(store_id, Config),
+    Stream = <<"$evoq-checkpoint:order_summary">>,
+    ?assertEqual(ok, call(StoreId, {record_snapshot_sync, StoreId, Stream, Stream, 3,
+                                    <<"bare state">>})),
+    ?assertMatch({ok, #snapshot{data = <<"bare state">>, metadata = #{}}},
+                 reckon_db_snapshots:load(StoreId, Stream)).
+
+%% The cast twin unwraps the record the same way.
+a_bare_snapshot_record_cast_is_saved(Config) ->
+    StoreId = ?config(store_id, Config),
+    Stream = <<"$evoq-checkpoint:order_summary">>,
+    State = {state, StoreId, undefined},
+    ?assertMatch({noreply, _},
+                 reckon_db_gateway_worker:handle_cast(
+                   {record_snapshot, StoreId, Stream, Stream, 3, <<"bare state">>}, State)),
+    ?assertMatch({ok, #snapshot{data = <<"bare state">>}},
+                 reckon_db_snapshots:load(StoreId, Stream)).
 
 enable_integrity(StoreId) ->
     persistent_term:put({reckon_db, integrity_enabled, StoreId}, true),

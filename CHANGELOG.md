@@ -90,6 +90,17 @@ and stores with integrity off are unchanged.
 Seen red first: `reckon_db_unanchored_snapshots_SUITE` (7 of 10 failed
 before).
 
+### Fixed: a snapshot record that is not a map took the gateway worker down
+
+`record_snapshot` read the record with `maps:get/3`, which raises `badmap`
+on any other term, and any gateway caller can send one: the worker died
+with every call in flight on it. A record that is not a map is now the
+snapshot's data, with no metadata, for `record_snapshot` and
+`record_snapshot_sync` alike.
+
+Seen red first: `a_bare_snapshot_record_is_saved` and
+`a_bare_snapshot_record_cast_is_saved` (both `badmap` before).
+
 ## [5.11.13] - 2026-10-21
 
 ### Fixed: two concurrent appends to one stream silently lost events
