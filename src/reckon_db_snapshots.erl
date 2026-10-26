@@ -68,9 +68,11 @@ save(StoreId, StreamId, Version, Data) ->
 
 %% @doc Save a snapshot with metadata
 %%
-%% A version that is not a non-negative integer is answered
-%% {error, {invalid_version, Version}}, as by load_at/3 and delete_at/3:
-%% it reaches them from gateway clients as any term (reckon-db#14).
+%% A version this store cannot key — not a non-negative integer, or one
+%% wider than the ten digits the key pads to — is answered
+%% {error, {invalid_version, Version}}, as by load_at/3, delete_at/3 and
+%% exists_at/3: it reaches them from gateway clients as any term
+%% (reckon-db#14).
 -spec save(atom(), binary(), non_neg_integer() | term(), snapshot_data(), snapshot_metadata()) ->
     ok | {error, term()}.
 save(_StoreId, _StreamId, Version, _Data, _Metadata) when not ?IS_SNAPSHOT_VERSION(Version) ->
