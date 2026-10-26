@@ -25,6 +25,23 @@
 -define(SUBSCRIPTIONS_PATH, [subscriptions]).
 -define(METADATA_PATH, [metadata]).
 
+%%====================================================================
+%% Snapshot versions
+%%====================================================================
+
+%% A snapshot version is the event version the snapshot was taken at, and it
+%% is part of the snapshot's KEY: `[snapshots, StreamId, PaddedVersion]',
+%% padded to ?SNAPSHOT_VERSION_WIDTH digits so the keys sort by version
+%% (reckon_db_snapshots_store:pad_version/1). The width therefore bounds the
+%% accepted range — a wider version cannot be keyed at all, and padding it
+%% counted backwards into lists:duplicate/2, which killed the worker that
+%% asked instead of answering it (reckon-db#14). Both live here so the key
+%% layout and the guard cannot drift apart.
+-define(SNAPSHOT_VERSION_WIDTH, 10).
+-define(MAX_SNAPSHOT_VERSION, 9999999999).
+-define(IS_SNAPSHOT_VERSION(V),
+        (is_integer(V) andalso V >= 0 andalso V =< ?MAX_SNAPSHOT_VERSION)).
+
 %% Monotonic global event counter — a single node bumped by every append
 %% batch inside its Khepri transaction (mirrors ?DCB_SEQ_COUNTER_PATH), so
 %% the total event count is an O(1) read instead of a full store scan.

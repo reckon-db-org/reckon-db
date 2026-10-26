@@ -39,6 +39,7 @@
     save_multiple_versions/1,
     load_specific_version/1,
     load_latest_version/1,
+    version_key_width/1,
 
     %% List and delete tests
     list_snapshots/1,
@@ -77,7 +78,8 @@ groups() ->
         {version_tests, [sequence], [
             save_multiple_versions,
             load_specific_version,
-            load_latest_version
+            load_latest_version,
+            version_key_width
         ]},
         {delete_tests, [sequence], [
             list_snapshots,
@@ -260,6 +262,38 @@ load_latest_version(Config) ->
     ?assertEqual(15, Snapshot#snapshot.version),
     ok.
 
+%% @doc The key's padded width is the accepted range: the widest version that
+%% still makes ten digits round-trips, and one past it is refused by every
+%% entry point instead of killing the caller in pad_version/1 (reckon-db#14).
+%%
+%% The version is the snapshot's key (`[snapshots, StreamId, PaddedVersion]'),
+%% so a wider one has nowhere to go. It reached lists:duplicate/2 with a
+%% negative count, which is a function_clause, not an error tuple.
+version_key_width(Config) ->
+    StoreId = proplists:get_value(store_id, Config),
+    StreamId = reckon_db_test_helpers:sid(<<"testversionwidth-001">>),
+    %% Spelled out, not read from the macro: the number IS the key's width,
+    %% and a test that reads the bound cannot notice it moving.
+    Max = 9999999999,
+    Past = Max + 1,
+
+    ok = reckon_db_snapshots:save(StoreId, StreamId, Max, #{v => max}),
+    ?assertEqual(true, reckon_db_snapshots:exists_at(StoreId, StreamId, Max)),
+    {ok, Snapshot} = reckon_db_snapshots:load_at(StoreId, StreamId, Max),
+    ?assertEqual(Max, Snapshot#snapshot.version),
+    {ok, Listed} = reckon_db_snapshots:list(StoreId, StreamId),
+    ?assertEqual([Max], [S#snapshot.version || S <- Listed]),
+
+    ?assertEqual({error, {invalid_version, Past}},
+                 reckon_db_snapshots:save(StoreId, StreamId, Past, #{v => past})),
+    ?assertEqual({error, {invalid_version, Past}},
+                 reckon_db_snapshots:load_at(StoreId, StreamId, Past)),
+    ?assertEqual({error, {invalid_version, Past}},
+                 reckon_db_snapshots:delete_at(StoreId, StreamId, Past)),
+    ?assertEqual({error, {invalid_version, Past}},
+                 reckon_db_snapshots:exists_at(StoreId, StreamId, Past)),
+    ok.
+
 %%====================================================================
 %% Delete Tests
 %%====================================================================
@@ -322,6 +356,13 @@ exists_check(Config) ->
     ?assertEqual(true, reckon_db_snapshots:exists(StoreId, StreamId)),
     ?assertEqual(true, reckon_db_snapshots:exists_at(StoreId, StreamId, 5)),
     ?assertEqual(false, reckon_db_snapshots:exists_at(StoreId, StreamId, 10)),
+
+    %% A version that cannot be keyed is REFUSED here too, not answered
+    %% false and not raised in the caller's process (reckon-db#14).
+    ?assertEqual({error, {invalid_version, latest}},
+                 reckon_db_snapshots:exists_at(StoreId, StreamId, latest)),
+    ?assertEqual({error, {invalid_version, 10000000000}},
+                 reckon_db_snapshots:exists_at(StoreId, StreamId, 10000000000)),
     ok.
 
 %%====================================================================

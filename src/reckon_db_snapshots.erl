@@ -44,8 +44,9 @@
 
 -export_type([snapshot_data/0, snapshot_metadata/0]).
 
-%% A snapshot version: the version of the event it was taken at.
--define(IS_VERSION(V), (is_integer(V) andalso V >= 0)).
+%% A snapshot version is guarded by ?IS_SNAPSHOT_VERSION (reckon_db.hrl):
+%% the bound is the store key's padded width, so a version that cannot be
+%% keyed is refused here rather than killing the worker in pad_version/1.
 
 %%====================================================================
 %% API
@@ -72,7 +73,7 @@ save(StoreId, StreamId, Version, Data) ->
 %% it reaches them from gateway clients as any term (reckon-db#14).
 -spec save(atom(), binary(), non_neg_integer() | term(), snapshot_data(), snapshot_metadata()) ->
     ok | {error, term()}.
-save(_StoreId, _StreamId, Version, _Data, _Metadata) when not ?IS_VERSION(Version) ->
+save(_StoreId, _StreamId, Version, _Data, _Metadata) when not ?IS_SNAPSHOT_VERSION(Version) ->
     {error, {invalid_version, Version}};
 save(StoreId, StreamId, Version, Data, Metadata) ->
     StartTime = erlang:monotonic_time(),
@@ -147,7 +148,7 @@ load(StoreId, StreamId) ->
 -spec load_at(atom(), binary(), non_neg_integer() | term()) ->
     {ok, snapshot()} | {error, not_found | {invalid_version, term()}
                               | store_integrity_violation() | {snapshot_anchor_unavailable, map()}}.
-load_at(_StoreId, _StreamId, Version) when not ?IS_VERSION(Version) ->
+load_at(_StoreId, _StreamId, Version) when not ?IS_SNAPSHOT_VERSION(Version) ->
     {error, {invalid_version, Version}};
 load_at(StoreId, StreamId, Version) ->
     case reckon_db_snapshots_store:get(StoreId, StreamId, Version) of
@@ -191,7 +192,7 @@ delete(StoreId, StreamId) ->
 
 %% @doc Delete a specific snapshot version
 -spec delete_at(atom(), binary(), non_neg_integer() | term()) -> ok | {error, term()}.
-delete_at(_StoreId, _StreamId, Version) when not ?IS_VERSION(Version) ->
+delete_at(_StoreId, _StreamId, Version) when not ?IS_SNAPSHOT_VERSION(Version) ->
     {error, {invalid_version, Version}};
 delete_at(StoreId, StreamId, Version) ->
     reckon_db_snapshots_store:delete(StoreId, StreamId, Version).
@@ -202,7 +203,16 @@ exists(StoreId, StreamId) ->
     reckon_db_snapshots_store:exists(StoreId, StreamId).
 
 %% @doc Check if a specific snapshot version exists
--spec exists_at(atom(), binary(), non_neg_integer()) -> boolean().
+%%
+%% A version that cannot be keyed is refused with
+%% {error, {invalid_version, Version}} rather than answered false: `latest'
+%% and every other non-version used to reach the padding and raise badarg in
+%% the caller's process (reckon-db#14). It is the one predicate here that
+%% takes a version, so it is the only one whose answer is not a bare boolean.
+-spec exists_at(atom(), binary(), non_neg_integer() | term()) ->
+    boolean() | {error, {invalid_version, term()}}.
+exists_at(_StoreId, _StreamId, Version) when not ?IS_SNAPSHOT_VERSION(Version) ->
+    {error, {invalid_version, Version}};
 exists_at(StoreId, StreamId, Version) ->
     reckon_db_snapshots_store:exists(StoreId, StreamId, Version).
 

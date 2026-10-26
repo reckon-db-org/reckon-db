@@ -745,11 +745,13 @@ gater_read_snapshot_zero_is_latest_test(Config) ->
     gen_server:stop(Worker),
     ok.
 
-%% @doc A snapshot version that is not a non-negative integer is answered
+%% @doc A snapshot version that is not one this store can key is answered
 %% {error, {invalid_version, V}} and the gateway worker serving every other
 %% caller stays up (reckon-db#14). `latest' is what the reckon-gater guides
 %% used to show; it raised badarg in the padding of load_at/3 and killed
-%% the worker. The casts take the same version and are dropped.
+%% the worker. So did 10000000000: a non-negative integer, but wider than
+%% the ten digits the snapshot key is padded to. The casts take the same
+%% version and are dropped.
 %%
 %% The retry budget is held at zero for this case: whether that reason is
 %% retried is reckon-gater's own answer, and it retried it for the whole
@@ -778,8 +780,10 @@ gater_snapshot_version_not_an_integer_test(Config) ->
                 ?assertEqual({error, {invalid_version, Bad}},
                              reckon_db_snapshots:load_at(StoreId, StreamId, Bad)),
                 ?assertEqual({error, {invalid_version, Bad}},
-                             reckon_db_snapshots:delete_at(StoreId, StreamId, Bad))
-            end, [latest, -1, 1.0, <<"3">>]),
+                             reckon_db_snapshots:delete_at(StoreId, StreamId, Bad)),
+                ?assertEqual({error, {invalid_version, Bad}},
+                             reckon_db_snapshots:exists_at(StoreId, StreamId, Bad))
+            end, [latest, -1, 1.0, <<"3">>, 10000000000]),
           timer:sleep(100),
           ?assert(is_process_alive(Worker)),
           {ok, Snapshot} = reckon_gater_api:read_snapshot(StoreId, SourceId, StreamId, 3),

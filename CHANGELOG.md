@@ -7,16 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [5.11.15] - unreleased
 
-### Fixed: a snapshot version that is not a non-negative integer is refused, not a dead worker (reckon-db#14)
+### Fixed: a snapshot version this store cannot key is refused, not a dead worker (reckon-db#14)
 
-A gateway call with a version that is not a non-negative integer — `latest`,
-which the reckon-gater guides showed until their round 13, is the shape a
-reader arrives with — reached `reckon_db_snapshots:load_at/3`, where
-`integer_to_list/1` raised `badarg` and killed the gateway worker serving every
-other caller on it. `save/5`, `load_at/3` and `delete_at/3` now answer
-`{error, {invalid_version, V}}` for it, so the caller is told and the worker
-stays up. reckon-gater 3.15.2 is that reason's other half: it no longer retries
-it, so the caller is not handed `retries_exhausted` after the backoff.
+A gateway call with a version that cannot be keyed — `latest`, which the
+reckon-gater guides showed until their round 13, is the shape a reader arrives
+with — reached `reckon_db_snapshots:load_at/3`, where `integer_to_list/1`
+raised `badarg` and killed the gateway worker serving every other caller on it.
+So did `10000000000`: a non-negative integer, but one digit wider than the
+snapshot key's padded width, which sent a negative count to
+`lists:duplicate/2` in the padding and raised `function_clause` there. The
+width is now `?SNAPSHOT_VERSION_WIDTH` in `reckon_db.hrl`, beside the
+`?MAX_SNAPSHOT_VERSION` bound it implies, so the key layout and the guard
+cannot drift apart.
+
+`save/5`, `load_at/3` and `delete_at/3` answer `{error, {invalid_version, V}}`
+for both shapes, and the caller stays up with the worker. `exists_at/3` is the
+fourth versioned call and the only one that returns a bare boolean, so it
+answers `{error, {invalid_version, V}}` in place of `false` for a version it
+cannot key — an answer of `false` would say "no snapshot there" about a
+question that has no answer. No caller can be relying on the old behaviour:
+it raised.
+
+reckon-gater 3.15.2 is that reason's other half: it no longer retries it, so
+the caller is not handed `retries_exhausted` after the backoff.
 
 ### Changed: version 0 reads "latest", and the comment says so plainly (reckon-db#15)
 

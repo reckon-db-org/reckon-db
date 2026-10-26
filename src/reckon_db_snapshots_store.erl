@@ -138,11 +138,15 @@ exists(StoreId, StreamId, Version) ->
 %% Internal functions
 %%====================================================================
 
-%% @private Pad version number to 10 digits for proper string sorting
+%% @private Pad version number for proper string sorting.
+%%
+%% The width is the key's, not this function's: it is ?SNAPSHOT_VERSION_WIDTH,
+%% beside the guard that refuses a version too wide to key
+%% (reckon_db_snapshots:?IS_SNAPSHOT_VERSION, reckon-db#14).
 -spec pad_version(non_neg_integer()) -> binary().
 pad_version(Version) ->
     VersionStr = integer_to_list(Version),
-    Padding = 10 - length(VersionStr),
+    Padding = ?SNAPSHOT_VERSION_WIDTH - length(VersionStr),
     PaddedStr = lists:duplicate(Padding, $0) ++ VersionStr,
     list_to_binary(PaddedStr).
 
