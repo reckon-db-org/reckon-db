@@ -6,6 +6,8 @@
 # own unmerged CI branch; they apply here for the same reasons:
 #
 #   1. NEVER CACHE `_build', only the hex package cache and dialyzer's PLTs.
+#      Within the rebar3 cache, the hex REGISTRY INDEX is not cached either
+#      (#30): see the cache step.
 #   2. rebar3 BY DIRECT DOWNLOAD, checked against the sha256 GitHub publishes,
 #      because setup-beam's own rebar3 lookup has failed on the GitHub releases
 #      pagination cap.
@@ -106,12 +108,29 @@ jobs:
       # ratchet passed on main while a fresh PLT reported 8 findings outside
       # the baseline (#20). OTP's own base PLT lives in ~/.cache/rebar3 and is
       # keyed by the OTP version below.
-      - name: Cache hex packages and OTP's base PLT
+      #
+      # ONLY the OTP base PLT and the downloaded tarballs are cached, NEVER
+      # `~/.cache/rebar3/hex/packages.idx'. That file is the hex REGISTRY, and
+      # it is the only input to resolution: with it cached, the dependency set
+      # CI resolved was whatever the cache had seen. rebar.lock is not
+      # committed, so the dependencies float, but the index did not, and CI
+      # went on fetching reckon_gater 3.15.0 after 3.15.2 was on hex.pm -- so
+      # a test that depends on the newest release was graded against an old
+      # one, and `gater_snapshot_version_not_an_integer_test' spent its 300s
+      # timetrap in 3.15.0's retry loop (#30). The tarballs beside the index
+      # (`hex/hexpm/packages/<name>-<vsn>.tar') are keyed by version and are
+      # read only AFTER resolution picks one, so caching them cannot skew it.
+      # `-freshdeps' IN THE KEY IS LOAD-BEARING: a restore brings back the
+      # archive's files wherever the path list now points, so the entries saved
+      # before this change would carry their packages.idx back in. The suffix
+      # abandons them instead.
+      - name: Cache hex tarballs and OTP's base PLT
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/rebar3
-          key: ${{ runner.os }}-otp-${{ steps.beam.outputs.otp-version }}-${{ hashFiles('rebar.config') }}
+            ~/.cache/rebar3/rebar3_*_plt
+            ~/.cache/rebar3/hex/hexpm/packages
+          key: ${{ runner.os }}-otp-${{ steps.beam.outputs.otp-version }}-freshdeps-${{ hashFiles('rebar.config') }}
 
       # Runs BEFORE the compile, and without needing it: it catches a
       # build-nifs.sh that cannot find cargo's artefact at all (#10: with
