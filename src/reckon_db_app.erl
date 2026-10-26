@@ -46,7 +46,7 @@ start(_StartType, _StartArgs) ->
     %% Start top-level supervisor
     case reckon_db_sup:start_link() of
         {ok, Pid} ->
-            logger:info("reckon-db v~s started", [?RECKON_DB_VERSION]),
+            logger:info("reckon-db v~s started", [release_version()]),
             {ok, Pid};
         {error, Reason} = Error ->
             logger:error("Failed to start reckon-db: ~p", [Reason]),
@@ -63,6 +63,16 @@ stop(_State) ->
 %% Internal functions
 %%====================================================================
 
+
+%% @private The version this VM is running, asked of the application rather
+%% than kept in a second place. ?RECKON_DB_VERSION in reckon_db.hrl was a
+%% hand-kept copy of src/reckon_db.app.src, and it drifted: the startup line
+%% named 5.11.13 while the release was 5.11.14 (reckon-db#31). The app is
+%% always loaded when its own start callback runs, so the match cannot miss.
+-spec release_version() -> string().
+release_version() ->
+    {ok, Vsn} = application:get_key(reckon_db, vsn),
+    Vsn.
 
 %% @private
 -spec start_telemetry_handlers() -> ok.

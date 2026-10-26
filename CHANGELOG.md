@@ -5,7 +5,7 @@ All notable changes to reckon-db will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.11.15] - unreleased
+## [5.11.15] - 2026-10-26
 
 ### Fixed: a snapshot version this store cannot key is refused, not a dead worker (reckon-db#14)
 
@@ -40,6 +40,13 @@ and it can be listed and read by version through
 "latest", which a version-0 snapshot cannot be read by once a later one exists;
 the comment now says that instead of denying the snapshot exists, and an e2e
 case pins both halves.
+
+### Fixed: the startup line names the version this VM is running (reckon-db#31)
+
+`?RECKON_DB_VERSION` was a hand-kept copy of `src/reckon_db.app.src`, and it
+drifted: a 5.11.14 release logged `reckon-db v5.11.13 started`. The copy is
+gone. `src/reckon_db_app.erl` asks the application for its own version instead,
+so there is one place a version is written and the log cannot disagree with it.
 
 ## [5.11.14] - 2026-10-23
 
