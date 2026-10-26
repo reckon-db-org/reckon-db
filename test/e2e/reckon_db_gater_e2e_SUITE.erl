@@ -750,33 +750,42 @@ gater_read_snapshot_zero_is_latest_test(Config) ->
 %% caller stays up (reckon-db#14). `latest' is what the reckon-gater guides
 %% used to show; it raised badarg in the padding of load_at/3 and killed
 %% the worker. The casts take the same version and are dropped.
+%%
+%% The retry budget is held at zero for this case: whether that reason is
+%% retried is reckon-gater's own answer, and it retried it for the whole
+%% 110ms..30s backoff until 3.15.2 (reckon-gater#7), which outlasts this
+%% case's timetrap and says nothing about the worker under test.
 gater_snapshot_version_not_an_integer_test(Config) ->
-    StoreId = proplists:get_value(store_id, Config),
-    SourceId = generate_uuid(),
-    StreamId = generate_stream_id(),
-    Worker = start_gateway_worker(StoreId, Config),
-    timer:sleep(200),
-    ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, 3, #{data => #{v => 3}}),
-    timer:sleep(100),
-    lists:foreach(
-      fun(Bad) ->
-          ?assert(invalid_version(Bad, reckon_gater_api:read_snapshot(StoreId, SourceId,
-                                                                      StreamId, Bad))),
-          ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, Bad, #{data => #{}}),
-          ok = reckon_gater_api:delete_snapshot(StoreId, SourceId, StreamId, Bad),
-          ?assertEqual({error, {invalid_version, Bad}},
-                       reckon_db_snapshots:save(StoreId, StreamId, Bad, #{})),
-          ?assertEqual({error, {invalid_version, Bad}},
-                       reckon_db_snapshots:load_at(StoreId, StreamId, Bad)),
-          ?assertEqual({error, {invalid_version, Bad}},
-                       reckon_db_snapshots:delete_at(StoreId, StreamId, Bad))
-      end, [latest, -1, 1.0, <<"3">>]),
-    timer:sleep(100),
-    ?assert(is_process_alive(Worker)),
-    {ok, Snapshot} = reckon_gater_api:read_snapshot(StoreId, SourceId, StreamId, 3),
-    ?assertEqual(3, snapshot_version(Snapshot)),
-    gen_server:stop(Worker),
-    ok.
+    without_retries(
+      fun() ->
+          StoreId = proplists:get_value(store_id, Config),
+          SourceId = generate_uuid(),
+          StreamId = generate_stream_id(),
+          Worker = start_gateway_worker(StoreId, Config),
+          timer:sleep(200),
+          ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, 3,
+                                                #{data => #{v => 3}}),
+          timer:sleep(100),
+          lists:foreach(
+            fun(Bad) ->
+                ?assert(invalid_version(Bad, reckon_gater_api:read_snapshot(
+                                                   StoreId, SourceId, StreamId, Bad))),
+                ok = reckon_gater_api:record_snapshot(StoreId, SourceId, StreamId, Bad,
+                                                      #{data => #{}}),
+                ok = reckon_gater_api:delete_snapshot(StoreId, SourceId, StreamId, Bad),
+                ?assertEqual({error, {invalid_version, Bad}},
+                             reckon_db_snapshots:save(StoreId, StreamId, Bad, #{})),
+                ?assertEqual({error, {invalid_version, Bad}},
+                             reckon_db_snapshots:load_at(StoreId, StreamId, Bad)),
+                ?assertEqual({error, {invalid_version, Bad}},
+                             reckon_db_snapshots:delete_at(StoreId, StreamId, Bad))
+            end, [latest, -1, 1.0, <<"3">>]),
+          timer:sleep(100),
+          ?assert(is_process_alive(Worker)),
+          {ok, Snapshot} = reckon_gater_api:read_snapshot(StoreId, SourceId, StreamId, 3),
+          ?assertEqual(3, snapshot_version(Snapshot)),
+          gen_server:stop(Worker)
+      end).
 
 %% The worker answers {error, {invalid_version, V}}. reckon-gater up to
 %% 3.15 retries that reason and hands it back as retries_exhausted
@@ -784,6 +793,19 @@ gater_snapshot_version_not_an_integer_test(Config) ->
 invalid_version(V, {error, {invalid_version, V}}) -> true;
 invalid_version(V, {error, {retries_exhausted, {invalid_version, V}}}) -> true;
 invalid_version(_V, _Other) -> false.
+
+%% Run Fun with reckon-gater's retry budget at zero, restoring what the
+%% application had afterwards.
+without_retries(Fun) ->
+    Prev = application:get_env(reckon_gater, retry),
+    ok = application:set_env(reckon_gater, retry, [{max_retries, 0}]),
+    try Fun()
+    after
+        case Prev of
+            {ok, Retry} -> application:set_env(reckon_gater, retry, Retry);
+            undefined -> application:unset_env(reckon_gater, retry)
+        end
+    end.
 
 snapshot_version(#snapshot{version = V}) -> V;
 snapshot_version(#{version := V}) -> V.
