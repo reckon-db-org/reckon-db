@@ -51,7 +51,7 @@ A throwaway Common Test suite (`dcb_transaction_spike_SUITE`, since deleted) ran
 3. **DCB-shape conditional append** — read `/by_tag/{tag}/*` subtree, filter seqs by cutoff, either `khepri_tx:abort({context_changed, MaxSeq})` or `khepri_tx:put` event + tag-index entries. Both branches behave correctly.
 4. **BIF whitelist** — `sets:{from_list,intersection,to_list}`, `lists:{flatmap,foldl,foreach,max}`, `maps:keys`, `binary_to_integer`, `io_lib:format`, `iolist_to_binary`, list comprehensions, `case` expressions, anonymous functions all permitted inside a transaction body.
 
-**Concrete return shapes (Khepri 0.17.2, NOT Mnesia-style):**
+**Concrete return shapes (Khepri 0.17.x, NOT Mnesia-style):**
 
 | Function | Success | Failure |
 |----------|---------|---------|

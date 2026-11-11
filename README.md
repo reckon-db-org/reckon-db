@@ -50,15 +50,14 @@ warning and uses the pure-Erlang fallbacks, so it works everywhere.
 |---|---|
 | `reckon_db` (this repo) | 5.11.13 |
 | `reckon_gater` (dep) | ~> 3.14 |
-| `khepri` (dep) | 0.17.2 |
-| `ra` (transitive, via khepri) | 2.16.x |
+| `khepri` (dep) | 0.17.11 |
+| `ra` (transitive, via khepri) | 2.16.13 |
 | `telemetry` (dep) | 1.3.0 |
 | Erlang/OTP | 28 (built and tested on 28.4.3: CI and `.tool-versions`) |
 
-OTP 28 is the supported release. OTP 29 is not: the pinned khepri 0.17 does
-not compile there, and past that horus 0.3 cannot extract OTP 29 code, so the
-first write crashes. A build on a newer OTP stops at once with a message
-saying so (`rebar.config.script`), also when reckon_db is a dependency.
+OTP 28 is the supported release, and the only one anything here is built and
+tested on. A build on a newer OTP stops at once with a message saying so
+(`rebar.config.script`), also when reckon_db is a dependency.
 
 reckon-db depends on `reckon_gater`, `khepri`, and `ra` only. It does **not**
 depend on `evoq` or `reckon_evoq` (see [Reckon stack](#reckon-stack)).

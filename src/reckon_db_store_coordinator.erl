@@ -416,13 +416,14 @@ local_store_up(undefined) -> failed;
 local_store_up(_Pid) -> ok.
 
 do_join_with_timeout(StoreId, TargetNode) ->
-    %% khepri_cluster:join/3 exists in the source but is NOT exported
-    %% in the installed khepri version (0.17.2 exports only join/1
-    %% and join/2). The 2-arg form internally calls
-    %% khepri_app:get_default_timeout/0, which defaults to `infinity'
-    %% — so a stuck join hangs forever. Setting that app-wide env
-    %% would also affect every other khepri operation, so we wrap
-    %% the call in a side process and kill it on timeout.
+    %% The 2-arg form internally calls khepri_app:get_default_timeout/0,
+    %% which defaults to `infinity' — so a stuck join hangs forever, and
+    %% setting that app-wide env would also affect every other khepri
+    %% operation. The installed khepri (0.17.11) exports
+    %% khepri_cluster:join/3, which takes the timeout itself, so this call
+    %% can become one bounded join; that is a behaviour change of its own
+    %% and stays in reckon-db#33. Until then we wrap the call in a side
+    %% process and kill it on timeout.
     Parent = self(),
     Ref = make_ref(),
     Joiner = spawn(fun() ->
